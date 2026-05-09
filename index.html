@@ -293,7 +293,38 @@
 <script>
 // ─── ESTADO ───────────────────────────────────────────────────
 let history = JSON.parse(localStorage.getItem("ai_history") || "[]");
-let portfolio = JSON.parse(localStorage.getItem("ai_portfolio") || "[]");
+let portfolio = [];
+
+// Carrega carteira da nuvem ao iniciar
+async function loadPortfolio() {
+  try {
+    const r = await fetch("/api/portfolio");
+    if (r.ok) {
+      const d = await r.json();
+      portfolio = d.portfolio || [];
+      renderPortfolio();
+    }
+  } catch(e) {
+    portfolio = JSON.parse(localStorage.getItem("ai_portfolio") || "[]");
+    renderPortfolio();
+  }
+}
+
+// Salva carteira na nuvem
+async function savePortfolio() {
+  try {
+    await fetch("/api/portfolio", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ portfolio })
+    });
+    localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
+  } catch(e) {
+    localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
+  }
+}
+
+loadPortfolio();
 
 // ─── TICKER STRIP ─────────────────────────────────────────────
 (function(){
@@ -651,16 +682,18 @@ function addPosition() {
   const ticker = document.getElementById("pTicker").value.trim().toUpperCase();
   const qty = parseFloat(document.getElementById("pQty").value);
   const price = parseFloat(document.getElementById("pPrice").value);
+  const stop = document.getElementById("pStop").value ? "R$"+parseFloat(document.getElementById("pStop").value).toFixed(2) : "";
+  const target = document.getElementById("pTarget").value ? "R$"+parseFloat(document.getElementById("pTarget").value).toFixed(2) : "";
   const market = document.getElementById("pMarket").value;
   if (!ticker||!qty||!price) return;
-  portfolio.push({id:Date.now(),ticker,qty,price,market,date:new Date().toLocaleDateString("pt-BR")});
-  localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
-  ["pTicker","pQty","pPrice"].forEach(id => document.getElementById(id).value = "");
+  portfolio.push({id:Date.now(),ticker,qty,price,market,stop,target,date:new Date().toLocaleDateString("pt-BR")});
+  savePortfolio();
+  ["pTicker","pQty","pPrice","pStop","pTarget"].forEach(id => document.getElementById(id).value = "");
   renderPortfolio();
 }
 function removePosition(id) {
   portfolio = portfolio.filter(p=>p.id!==id);
-  localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
+  savePortfolio();
   renderPortfolio();
 }
 function renderPortfolio() {
