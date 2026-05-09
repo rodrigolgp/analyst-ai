@@ -158,6 +158,7 @@
   <div class="tabs">
     <button class="tab active" onclick="showTab('analisar')">📊 ANALISAR ATIVO</button>
     <button class="tab" onclick="showTab('radar')">🔍 RADAR</button>
+    <button class="tab" onclick="showTab('guru')">🧠 GURU INVESTIDOR</button>
     <button class="tab" onclick="showTab('portfolio')">💼 CARTEIRA</button>
   </div>
 
@@ -214,6 +215,63 @@
     <div id="emptyRadar" class="empty">CLIQUE EM "ESCANEAR MERCADO" PARA IDENTIFICAR AS MELHORES OPORTUNIDADES AGORA</div>
   </div>
 
+  <!-- GURU -->
+  <div id="tab-guru" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div style="background:var(--card);border:1px solid var(--hi);padding:22px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:6px;">🧠 GURU INVESTIDOR</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--dim);line-height:1.8;margin-bottom:16px;">
+          Seu gestor pessoal de carteira.<br>
+          Ele decide o que comprar, quanto, quando vender e o que fazer com o dinheiro.
+        </div>
+        <div style="margin-bottom:12px;">
+          <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">SEU CAPITAL</div>
+          <input type="number" id="guruCapital" value="5000" step="100"
+            style="width:100%;background:var(--bg);border:1px solid var(--hi);color:var(--green);
+            padding:10px 14px;font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;outline:none;"/>
+        </div>
+        <button class="btn" id="btnGuruMontar" onclick="guruMontar()" style="width:100%;margin-bottom:8px;">
+          🧠 MONTAR MINHA CARTEIRA
+        </button>
+        <button class="btn" id="btnGuruBriefing" onclick="guruBriefing()"
+          style="width:100%;background:transparent;color:var(--cyan);border:1px solid var(--cyan);">
+          📋 BRIEFING DO DIA
+        </button>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);padding:22px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">COMO FUNCIONA</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--sub);line-height:2.2;">
+          <div>1. Informe seu capital disponivel</div>
+          <div>2. Clique em MONTAR MINHA CARTEIRA</div>
+          <div>3. O Guru varra o mercado e monta o plano</div>
+          <div>4. Execute as ordens no BTG Pactual</div>
+          <div>5. Todo dia, clique em BRIEFING DO DIA</div>
+          <div>6. O Guru avisa quando agir</div>
+        </div>
+        <div style="margin-top:16px;padding:12px;background:rgba(255,204,0,.06);border:1px solid rgba(255,204,0,.2);">
+          <div style="font-family:monospace;font-size:8px;color:var(--yellow);letter-spacing:1px;margin-bottom:4px;">REGRAS DO GURU</div>
+          <div style="font-family:monospace;font-size:9px;color:var(--sub);line-height:1.8;">
+            Max 6 ativos · 20% sempre em caixa<br>
+            Max 25% por ativo · Score minimo 75<br>
+            Stop loss obrigatorio em tudo
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="loadingGuru" style="display:none;" class="loading">
+      <div class="spinner"></div>
+      <div class="load-steps" id="guruSteps"></div>
+    </div>
+    <div id="errorGuru" class="error-box" style="display:none;"></div>
+    <div id="resultGuru" style="display:none;"></div>
+    <div id="emptyGuru" class="empty">
+      INFORME SEU CAPITAL E CLIQUE EM "MONTAR MINHA CARTEIRA"<br>
+      <span style="font-size:9px;margin-top:8px;display:block;color:var(--green)">
+        O Guru varre o mercado, analisa e monta seu plano completo de investimento
+      </span>
+    </div>
+  </div>
+
   <!-- PORTFOLIO -->
   <div id="tab-portfolio" style="display:none;">
     <div class="sec"><span class="sec-label">Cadastrar Posição</span><div class="sec-line"></div></div>
@@ -246,11 +304,11 @@ let portfolio = JSON.parse(localStorage.getItem("ai_portfolio") || "[]");
 
 // ─── TABS ─────────────────────────────────────────────────────
 function showTab(name) {
-  ["analisar","radar","portfolio"].forEach(t => {
+  ["analisar","radar","guru","portfolio"].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t===name ? "" : "none";
   });
   document.querySelectorAll(".tab").forEach((el,i) => {
-    el.classList.toggle("active", ["analisar","radar","portfolio"][i]===name);
+    el.classList.toggle("active", ["analisar","radar","guru","portfolio"][i]===name);
   });
 }
 
@@ -635,6 +693,361 @@ function renderPortfolio() {
     </table>`;
 }
 renderPortfolio();
+
+// ─── GURU INVESTIDOR ──────────────────────────────────────────
+const GURU_TICKERS = [
+  "PETR4","VALE3","ITUB4","BBDC4","WEGE3","RENT3","BBAS3","ABEV3","ELET3",
+  "SUZB3","CSAN3","PRIO3","VBBR3","BRFS3","JBSS3","CMIG4","CPFE3","EGIE3",
+  "ENGI11","TAEE11","TIMS3","VIVT3","AZUL4","EMBR3","RADL3","HAPV3","RDOR3",
+  "HYPE3","LREN3","MGLU3","EQTL3","BPAC11","ITSA4","SANB11","KLBN11",
+  "CYRE3","MRVE3","PETZ3","BLAU3","INTER3","CRFB3",
+  "KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","KNCR11",
+  "AAPL","MSFT","GOOGL","AMZN","META","NVDA","JPM","V","MA","AVGO",
+  "MRK","ABBV","AMD","ADBE","CRM","MCD","BAC","DDOG","NET","CRWD","UBER","SPY","QQQ",
+];
+
+const GURU_STEPS_MONTAR = [
+  "Analisando o mercado hoje...",
+  "Varrendo ativos da B3...",
+  "Varrendo NYSE e NASDAQ...",
+  "Selecionando os melhores momentos...",
+  "Calculando alocacao ideal...",
+  "Definindo stops e alvos...",
+  "Montando seu plano de investimento...",
+];
+
+const GURU_STEPS_BRIEFING = [
+  "Verificando suas posicoes...",
+  "Analisando mercado de hoje...",
+  "Checando stops e alvos...",
+  "Identificando oportunidades...",
+  "Preparando briefing...",
+];
+
+function buildGuruPrompt(quotes, carteira, capital) {
+  const tickerInfo = Object.entries(quotes).slice(0,60)
+    .map(([t,q]) => `${t}:${q.currency}${q.price}(${q.change}%hoje)`)
+    .join(",");
+  const carteiraInfo = carteira.length > 0
+    ? carteira.map(p => `${p.ticker}:comprado@R$${p.price},stop:${p.stop||"sem stop"},alvo:${p.target||"sem alvo"}`).join("; ")
+    : "Carteira vazia - primeira alocacao";
+  const capitalDisp = (capital * 0.80).toFixed(2);
+  const reserva = (capital * 0.20).toFixed(2);
+
+  return `Voce e o GURU INVESTIDOR, gestor pessoal de carteira de elite para investidor iniciante, perfil moderado, curto prazo, B3 e NYSE/NASDAQ.
+
+CAPITAL TOTAL: R$${capital.toFixed(2)}
+CAPITAL PARA INVESTIR (80%): R$${capitalDisp}
+RESERVA OBRIGATORIA EM CAIXA (20%): R$${reserva}
+CARTEIRA ATUAL: ${carteiraInfo}
+MERCADO HOJE COM PRECOS REAIS: ${tickerInfo}
+
+REGRAS DO GURU:
+- Maximo 6 ativos simultaneos, minimo 5
+- 20% sempre em caixa = R$${reserva} intocavel
+- Maximo 25% do capital por ativo = R$${(capital*0.25).toFixed(2)}
+- Minimo 15% por ativo = R$${(capital*0.15).toFixed(2)}
+- So recomenda ativos com score acima de 75
+- Risco/retorno minimo de 1:2 em tudo
+- Stop loss obrigatorio em toda posicao
+- Linguagem simples, como explicar para um amigo
+
+MISSAO: Monte o plano completo de carteira para AGORA. Use os precos reais. Calcule valores exatos em reais.
+
+Retorne APENAS JSON valido sem texto extra:
+{"data_analise":"hoje","resumo_mercado":"situacao do mercado em 2 frases simples","humor_mercado":"FAVORAVEL","capital_total":${capital},"capital_para_investir":${capitalDisp},"reserva_caixa":${reserva},"acoes_imediatas":[{"prioridade":1,"acao":"COMPRAR","ticker":"","nome":"","motivo":"explicacao simples","valor_recomendado":0,"percentual_carteira":"0%","preco_entrada":"","stop_loss":"","alvo_30d":"","upside":"","risco_retorno":"1:2","urgencia":"ALTA"}],"alocacao_ideal":[{"ticker":"","nome":"","setor":"","valor":0,"percentual":"0%","motivo":"por que agora"}],"nao_fazer_agora":["o que evitar"],"proxima_revisao":"quando revisar","mensagem_guru":"mensagem motivadora e simples"}`;
+}
+
+function buildBriefingPrompt(quotes, carteira, capital) {
+  const hoje = Object.entries(quotes).slice(0,30)
+    .map(([t,q]) => `${t}:${q.change}%`).join(",");
+
+  const posicoes = carteira.length > 0
+    ? carteira.map(p => {
+        const q = quotes[p.ticker];
+        const atual = q ? q.price : null;
+        const var_ = atual ? (((atual - p.price) / p.price) * 100).toFixed(2) : "?";
+        const stopNum = p.stop ? parseFloat(String(p.stop).replace("R$","").replace(",",".")) : null;
+        const alvoNum = p.target ? parseFloat(String(p.target).replace("R$","").replace(",",".")) : null;
+        const stopAting = atual && stopNum && atual <= stopNum;
+        const alvoAting = atual && alvoNum && atual >= alvoNum;
+        return `${p.ticker}:entrada=${p.price},atual=${atual||"?"},var=${var_}%,stop=${p.stop||"?"},alvo=${p.target||"?"},STOP_ATINGIDO=${stopAting},ALVO_ATINGIDO=${alvoAting}`;
+      }).join(" | ")
+    : "Sem posicoes abertas ainda";
+
+  return `Voce e o GURU INVESTIDOR. Faca o briefing diario em linguagem simples para iniciante.
+
+CARTEIRA: ${posicoes}
+CAPITAL: R$${capital.toFixed(2)}
+MERCADO HOJE: ${hoje}
+
+Analise cada posicao e o mercado agora. Seja direto. Use linguagem de amigo experiente.
+
+Retorne APENAS JSON valido:
+{"data":"hoje","situacao_carteira":"VERDE","resumo":"como esta tudo em 1 frase","alertas":[{"tipo":"INFO","ticker":"","mensagem":"o que aconteceu","acao_recomendada":"o que fazer agora"}],"posicoes":[{"ticker":"","status":"LUCRO","variacao_hoje":"0%","variacao_desde_entrada":"0%","distancia_stop":"X% acima","distancia_alvo":"X% do alvo","recomendacao":"MANTER"}],"oportunidade_do_dia":{"ticker":"","motivo":"por que hoje","acao":"o que fazer"},"mensagem_guru":"mensagem do dia curta e direta"}`;
+}
+
+function renderGuruResult(d) {
+  const humorColor = d.humor_mercado === "FAVORAVEL" ? "var(--green)" : d.humor_mercado === "NEUTRO" ? "var(--yellow)" : "var(--red)";
+
+  const headerHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;animation:fadeUp .4s ease">
+      <div style="background:var(--card);border:1px solid var(--hi);padding:18px;">
+        <div style="font-family:monospace;font-size:8px;color:var(--dim);letterSpacing:1px;margin-bottom:6px;">HUMOR DO MERCADO HOJE</div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:${humorColor}">${d.humor_mercado||"NEUTRO"}</div>
+        <div style="font-size:11px;color:var(--sub);line-height:1.6;margin-top:8px">${d.resumo_mercado||""}</div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--hi);padding:18px;">
+        <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">CAPITAL PARA INVESTIR</div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;color:var(--green)">R$ ${Number(d.capital_para_investir||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</div>
+        <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-top:4px">RESERVA CAIXA: R$ ${Number(d.reserva_caixa||0).toLocaleString("pt-BR",{minimumFractionDigits:2})}</div>
+      </div>
+      <div style="background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.3);padding:18px;">
+        <div style="font-family:monospace;font-size:8px;color:var(--green);letter-spacing:1px;margin-bottom:8px;">MENSAGEM DO GURU</div>
+        <div style="font-size:12px;color:var(--sub);line-height:1.7;font-style:italic">"${d.mensagem_guru||""}"</div>
+      </div>
+    </div>`;
+
+  const acoesHtml = d.acoes_imediatas && d.acoes_imediatas.length ? `
+    <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+      ACOES IMEDIATAS - O QUE FAZER AGORA
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+      ${d.acoes_imediatas.map(a => {
+        const ac = a.acao === "COMPRAR" ? "var(--green)" : a.acao === "VENDER" ? "var(--red)" : "var(--yellow)";
+        return `<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ${ac};padding:16px 20px;display:grid;grid-template-columns:80px 60px 180px 1fr 120px 120px 100px;align-items:center;gap:14px;">
+          <div style="text-align:center">
+            <div style="font-family:monospace;font-size:8px;color:var(--dim)">PRIORIDADE</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:${a.urgencia==="ALTA"?"var(--red)":a.urgencia==="MEDIA"?"var(--yellow)":"var(--dim)"}">#${a.prioridade}</div>
+          </div>
+          <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;color:${ac}">${a.acao}</div>
+          <div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;color:var(--txt)">${a.ticker}</div>
+            <div style="font-family:monospace;font-size:9px;color:var(--dim)">${a.nome||""}</div>
+          </div>
+          <div style="font-size:11px;color:var(--sub);line-height:1.5">${a.motivo}</div>
+          <div style="display:flex;flex-direction:column;gap:3px;font-size:11px">
+            <div><span style="font-family:monospace;font-size:8px;color:var(--blue)">VALOR </span>R$ ${Number(a.valor_recomendado||0).toFixed(2)}</div>
+            <div><span style="font-family:monospace;font-size:8px;color:var(--dim)">ENTRA </span>${a.preco_entrada||"--"}</div>
+            <div><span style="font-family:monospace;font-size:8px;color:var(--green)">ALVO </span>${a.alvo_30d||"--"}</div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px;font-size:11px">
+            <div><span style="font-family:monospace;font-size:8px;color:var(--red)">STOP </span>${a.stop_loss||"--"}</div>
+            <div><span style="font-family:monospace;font-size:8px;color:var(--green)">UPSIDE </span>${a.upside||"--"}</div>
+            <div><span style="font-family:monospace;font-size:8px;color:var(--yellow)">R/R </span>${a.risco_retorno||"--"}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-family:monospace;font-size:8px;color:${a.urgencia==="ALTA"?"var(--red)":a.urgencia==="MEDIA"?"var(--yellow)":"var(--dim)"};letter-spacing:1px">${a.urgencia||"BAIXA"}</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:13px;color:var(--sub)">${a.percentual_carteira||""}</div>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>` : "";
+
+  const alocacaoHtml = d.alocacao_ideal && d.alocacao_ideal.length ? `
+    <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+      ALOCACAO IDEAL DA CARTEIRA
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">
+      ${d.alocacao_ideal.map((a,i) => `
+        <div style="background:var(--card);border:1px solid var(--border);padding:16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;color:var(--green)">${a.ticker}</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--blue)">${a.percentual}</div>
+          </div>
+          <div style="font-size:11px;color:var(--dim);margin-bottom:6px">${a.nome||""}</div>
+          <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:600;color:var(--txt);margin-bottom:8px">R$ ${Number(a.valor||0).toFixed(2)}</div>
+          <div style="font-size:10px;color:var(--sub);line-height:1.5">${a.motivo||""}</div>
+        </div>`).join("")}
+      <div style="background:rgba(255,204,0,.05);border:1px solid rgba(255,204,0,.2);padding:16px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;color:var(--yellow)">CAIXA</div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--yellow)">20%</div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:600;color:var(--txt);margin:8px 0">R$ ${Number(d.reserva_caixa||0).toFixed(2)}</div>
+        <div style="font-size:10px;color:var(--sub)">Reserva obrigatoria para oportunidades e emergencias</div>
+      </div>
+    </div>` : "";
+
+  const naoFazerHtml = d.nao_fazer_agora && d.nao_fazer_agora.length ? `
+    <div style="background:rgba(255,51,85,.04);border:1px solid rgba(255,51,85,.2);padding:18px;margin-bottom:16px;">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--red);margin-bottom:10px;">NAO FAZER AGORA</div>
+      ${d.nao_fazer_agora.map(x => `<div style="font-family:monospace;font-size:10px;color:var(--sub);display:flex;gap:8px;margin-bottom:6px;"><span style="color:var(--red)">x</span>${x}</div>`).join("")}
+    </div>` : "";
+
+  const revisaoHtml = `
+    <div style="font-family:monospace;font-size:10px;color:var(--dim);text-align:center;margin-bottom:20px;">
+      PROXIMA REVISAO RECOMENDADA: <span style="color:var(--cyan)">${d.proxima_revisao||"amanha antes da abertura"}</span>
+    </div>`;
+
+  return headerHtml + acoesHtml + alocacaoHtml + naoFazerHtml + revisaoHtml;
+}
+
+function renderBriefingResult(d) {
+  const statusColor = d.situacao_carteira === "VERDE" ? "var(--green)" : d.situacao_carteira === "AMARELO" ? "var(--yellow)" : "var(--red)";
+  const statusEmoji = d.situacao_carteira === "VERDE" ? "[V]" : d.situacao_carteira === "AMARELO" ? "[!]" : "[X]";
+
+  const headerHtml = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;animation:fadeUp .4s ease">
+      <div style="background:var(--card);border:1px solid var(--hi);padding:18px;">
+        <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">SITUACAO DA CARTEIRA</div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:${statusColor}">${statusEmoji} ${d.situacao_carteira||"NEUTRO"}</div>
+        <div style="font-size:12px;color:var(--sub);margin-top:8px;line-height:1.6">${d.resumo||""}</div>
+      </div>
+      <div style="background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.3);padding:18px;">
+        <div style="font-family:monospace;font-size:8px;color:var(--green);letter-spacing:1px;margin-bottom:8px;">GURU DIZ</div>
+        <div style="font-size:13px;color:var(--sub);line-height:1.7;font-style:italic">"${d.mensagem_guru||""}"</div>
+      </div>
+    </div>`;
+
+  const alertasHtml = d.alertas && d.alertas.length ? `
+    <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+      ALERTAS
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+      ${d.alertas.map(a => {
+        const tc = a.tipo === "STOP_ATINGIDO" ? "var(--red)" : a.tipo === "ALVO_ATINGIDO" ? "var(--green)" : a.tipo === "ATENCAO" ? "var(--yellow)" : "var(--blue)";
+        const ti = a.tipo === "STOP_ATINGIDO" ? "STOP ATINGIDO" : a.tipo === "ALVO_ATINGIDO" ? "ALVO ATINGIDO" : a.tipo === "ATENCAO" ? "ATENCAO" : "INFO";
+        return `<div style="background:var(--card);border:1px solid ${tc}44;border-left:3px solid ${tc};padding:14px 18px;display:grid;grid-template-columns:120px 1fr 1fr;gap:14px;align-items:center;">
+          <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;color:${tc}">${ti}</div>
+          <div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--txt)">${a.ticker||""}</div>
+            <div style="font-size:11px;color:var(--sub);margin-top:4px">${a.mensagem||""}</div>
+          </div>
+          <div style="font-size:11px;color:${tc};font-weight:600">${a.acao_recomendada||""}</div>
+        </div>`;
+      }).join("")}
+    </div>` : "";
+
+  const posicoesHtml = d.posicoes && d.posicoes.length ? `
+    <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+      SUAS POSICOES HOJE
+      <div style="flex:1;height:1px;background:var(--border)"></div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">
+      ${d.posicoes.map(p => {
+        const sc = p.status === "LUCRO" ? "var(--green)" : p.status === "PREJUIZO" ? "var(--red)" : "var(--yellow)";
+        const rc = p.recomendacao === "MANTER" ? "var(--green)" : p.recomendacao === "VENDER" ? "var(--red)" : "var(--blue)";
+        return `<div style="background:var(--card);border:1px solid var(--border);padding:14px 18px;display:grid;grid-template-columns:100px 80px 120px 120px 1fr 100px;align-items:center;gap:14px;">
+          <div style="font-family:'Rajdhani',sans-serif;font-size:17px;font-weight:700;color:var(--txt)">${p.ticker}</div>
+          <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${sc}">${p.status}</div>
+          <div style="font-family:monospace;font-size:11px;color:var(--sub)">HOJE: ${p.variacao_hoje||"--"}</div>
+          <div style="font-family:monospace;font-size:11px;color:${sc}">ENTRADA: ${p.variacao_desde_entrada||"--"}</div>
+          <div style="font-size:11px;color:var(--dim)">
+            Stop: ${p.distancia_stop||"--"} &nbsp;|&nbsp; Alvo: ${p.distancia_alvo||"--"}
+          </div>
+          <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;color:${rc};text-align:center">${p.recomendacao||"MANTER"}</div>
+        </div>`;
+      }).join("")}
+    </div>` : "";
+
+  const oportunidadeHtml = d.oportunidade_do_dia && d.oportunidade_do_dia.ticker && d.oportunidade_do_dia.ticker !== "NENHUMA" ? `
+    <div style="background:rgba(0,170,255,.06);border:1px solid rgba(0,170,255,.3);padding:18px;margin-bottom:16px;">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--blue);margin-bottom:8px;">OPORTUNIDADE DO DIA</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--green);margin-bottom:6px;">${d.oportunidade_do_dia.ticker}</div>
+      <div style="font-size:11px;color:var(--sub);margin-bottom:8px">${d.oportunidade_do_dia.motivo||""}</div>
+      <div style="font-family:monospace;font-size:10px;color:var(--cyan)">${d.oportunidade_do_dia.acao||""}</div>
+    </div>` : "";
+
+  return headerHtml + alertasHtml + posicoesHtml + oportunidadeHtml;
+}
+
+async function guruMontar() {
+  const capital = parseFloat(document.getElementById("guruCapital").value) || 5000;
+  document.getElementById("emptyGuru").style.display = "none";
+  document.getElementById("errorGuru").style.display = "none";
+  document.getElementById("resultGuru").style.display = "none";
+  document.getElementById("loadingGuru").style.display = "flex";
+  document.getElementById("btnGuruMontar").disabled = true;
+  document.getElementById("btnGuruBriefing").disabled = true;
+
+  let si = 0;
+  const renderSteps = () => {
+    document.getElementById("guruSteps").innerHTML = GURU_STEPS_MONTAR.map((s,i)=>
+      `<div style="color:${i<si?"var(--dim)":i===si?"var(--green)":"var(--border)"};font-family:monospace;font-size:10px;letter-spacing:1px">${i<si?"v":i===si?">":"."} ${s}</div>`
+    ).join("");
+  };
+  renderSteps();
+
+  try {
+    const quotes = {};
+    const BATCH = 8;
+    for (let i = 0; i < GURU_TICKERS.length; i += BATCH) {
+      si = i < 20 ? 1 : 2; renderSteps();
+      await Promise.all(GURU_TICKERS.slice(i, i+BATCH).map(async t => {
+        const q = await fetchQuote(t);
+        if (q) quotes[t] = q;
+      }));
+    }
+    si = 3; renderSteps();
+    await new Promise(r => setTimeout(r, 300));
+    si = 4; renderSteps();
+    await new Promise(r => setTimeout(r, 300));
+    si = 5; renderSteps();
+
+    const data = await callClaude(buildGuruPrompt(quotes, portfolio, capital));
+    si = 6; renderSteps();
+
+    document.getElementById("loadingGuru").style.display = "none";
+    document.getElementById("resultGuru").innerHTML = renderGuruResult(data);
+    document.getElementById("resultGuru").style.display = "block";
+  } catch(e) {
+    document.getElementById("loadingGuru").style.display = "none";
+    document.getElementById("errorGuru").textContent = "ERRO: " + e.message;
+    document.getElementById("errorGuru").style.display = "block";
+  }
+  document.getElementById("btnGuruMontar").disabled = false;
+  document.getElementById("btnGuruBriefing").disabled = false;
+}
+
+async function guruBriefing() {
+  const capital = parseFloat(document.getElementById("guruCapital").value) || 5000;
+  document.getElementById("emptyGuru").style.display = "none";
+  document.getElementById("errorGuru").style.display = "none";
+  document.getElementById("resultGuru").style.display = "none";
+  document.getElementById("loadingGuru").style.display = "flex";
+  document.getElementById("btnGuruMontar").disabled = true;
+  document.getElementById("btnGuruBriefing").disabled = true;
+
+  let si = 0;
+  const renderSteps = () => {
+    document.getElementById("guruSteps").innerHTML = GURU_STEPS_BRIEFING.map((s,i)=>
+      `<div style="color:${i<si?"var(--dim)":i===si?"var(--green)":"var(--border)"};font-family:monospace;font-size:10px;letter-spacing:1px">${i<si?"v":i===si?">":"."} ${s}</div>`
+    ).join("");
+  };
+  renderSteps();
+
+  try {
+    const quotes = {};
+    const tickers = portfolio.length > 0
+      ? [...new Set([...portfolio.map(p => p.ticker), ...GURU_TICKERS.slice(0,20)])]
+      : GURU_TICKERS.slice(0,30);
+
+    for (const t of tickers) {
+      si = 1; renderSteps();
+      const q = await fetchQuote(t);
+      if (q) quotes[t] = q;
+    }
+    si = 2; renderSteps();
+    await new Promise(r => setTimeout(r, 300));
+    si = 3; renderSteps();
+
+    const data = await callClaude(buildBriefingPrompt(quotes, portfolio, capital));
+    si = 4; renderSteps();
+
+    document.getElementById("loadingGuru").style.display = "none";
+    document.getElementById("resultGuru").innerHTML = renderBriefingResult(data);
+    document.getElementById("resultGuru").style.display = "block";
+  } catch(e) {
+    document.getElementById("loadingGuru").style.display = "none";
+    document.getElementById("errorGuru").textContent = "ERRO: " + e.message;
+    document.getElementById("errorGuru").style.display = "block";
+  }
+  document.getElementById("btnGuruMontar").disabled = false;
+  document.getElementById("btnGuruBriefing").disabled = false;
+}
+
 </script>
 </body>
 </html>
