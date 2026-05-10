@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Database not configured" });
   }
 
-  const KEY = "portfolio_v2";
+  const KEY = "portfolio_v3";
 
   async function redisGet() {
     const r = await fetch(`${REDIS_URL}/get/${KEY}`, {
@@ -19,21 +19,21 @@ export default async function handler(req, res) {
     });
     const d = await r.json();
     if (!d.result) return [];
+    // d.result é a string JSON direta
     try { return JSON.parse(d.result); } catch(e) { return []; }
   }
 
   async function redisSet(data) {
-    const value = JSON.stringify(data);
+    // Salva o JSON direto como string no Redis
     const r = await fetch(`${REDIS_URL}/set/${KEY}`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${REDIS_TOKEN}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify({ value })
+      body: JSON.stringify(["SET", KEY, JSON.stringify(data)])
     });
-    const d = await r.json();
-    return d;
+    return r.ok;
   }
 
   if (req.method === "GET") {
@@ -51,8 +51,8 @@ export default async function handler(req, res) {
       if (!Array.isArray(portfolio)) {
         return res.status(400).json({ error: "portfolio must be an array" });
       }
-      const result = await redisSet(portfolio);
-      return res.status(200).json({ ok: true, result });
+      await redisSet(portfolio);
+      return res.status(200).json({ ok: true });
     } catch(e) {
       return res.status(500).json({ error: e.message });
     }
