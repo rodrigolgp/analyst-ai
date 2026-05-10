@@ -195,7 +195,13 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
 
   <!-- CARTEIRA -->
   <div id="tab-portfolio" style="display:none;">
-    <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);margin-bottom:12px;">CADASTRAR POSICAO</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);">CADASTRAR POSICAO</div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="verificarAlertas()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:6px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;">VERIFICAR ALERTAS</button>
+        <button onclick="testarTelegram()" style="background:rgba(0,255,136,.15);color:var(--green);border:1px solid rgba(0,255,136,.3);padding:6px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;letter-spacing:1px;">TESTAR TELEGRAM</button>
+      </div>
+    </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px;align-items:end;">
       <div class="form-field"><label>TICKER</label><input type="text" id="pTicker" placeholder="PETR4"/></div>
       <div class="form-field"><label>QTDE</label><input type="number" id="pQty" placeholder="100"/></div>
@@ -333,6 +339,49 @@ async function dbSet(key, data) {
   } catch(e) {
     console.log("dbSet erro ("+key+"):", e.message);
     return false;
+  }
+}
+
+// ─── TELEGRAM ────────────────────────────────────────────────
+async function sendTelegram(type, data) {
+  try {
+    await fetch("/api/telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, data }),
+    });
+  } catch(e) {
+    console.log("Telegram erro:", e.message);
+  }
+}
+
+async function testarTelegram() {
+  await sendTelegram("TESTE", {});
+}
+
+// Verifica stops e alvos e notifica via Telegram
+async function verificarAlertas() {
+  if (!portfolio.length) return;
+  for (const p of portfolio) {
+    const quote = await fetchQuote(p.ticker);
+    if (!quote) continue;
+    const atual = quote.price;
+    const stopNum = p.stop ? parseFloat(String(p.stop).replace("R$","").replace(",",".")) : null;
+    const alvoNum = p.target ? parseFloat(String(p.target).replace("R$","").replace(",",".")) : null;
+    if (stopNum && atual <= stopNum) {
+      await sendTelegram("STOP_ATINGIDO", {
+        ticker: p.ticker,
+        preco: quote.currency + atual.toFixed(2),
+        stop: p.stop,
+      });
+    } else if (alvoNum && atual >= alvoNum) {
+      await sendTelegram("ALVO_ATINGIDO", {
+        ticker: p.ticker,
+        preco: quote.currency + atual.toFixed(2),
+        alvo: p.target,
+        lucro: "+" + (((atual - p.price) / p.price) * 100).toFixed(2) + "%",
+      });
+    }
   }
 }
 
@@ -817,6 +866,12 @@ async function guruBriefing() {
     document.getElementById("loadG").style.display = "none";
     document.getElementById("resG").innerHTML = renderBriefing(data);
     document.getElementById("resG").style.display = "block";
+    // Envia briefing via Telegram automaticamente
+    sendTelegram("BRIEFING", {
+      situacao: data.situacao_carteira || "NEUTRO",
+      resumo: data.resumo || "",
+      mensagem: data.mensagem_guru || "",
+    });
   } catch(e) {
     document.getElementById("loadG").style.display = "none";
     document.getElementById("errG").textContent = "ERRO: "+e.message;
