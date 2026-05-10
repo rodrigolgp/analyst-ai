@@ -268,7 +268,11 @@ function showTab(name) {
     el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico"][i]===name);
   });
   if (name === "historico") renderHistorico();
-  if (name === "portfolio") renderPortfolio();
+  if (name === "portfolio") {
+    renderPortfolio();
+    // Recarrega da nuvem ao abrir a aba
+    loadPortfolio();
+  }
 }
 
 // ─── API ──────────────────────────────────────────────────────
