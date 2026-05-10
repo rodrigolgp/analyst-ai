@@ -18,17 +18,22 @@ export default async function handler(req, res) {
       headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
     });
     const d = await r.json();
-    return d.result ? JSON.parse(d.result) : [];
+    if (d.result === null || d.result === undefined) return [];
+    try { return JSON.parse(d.result); } catch(e) { return []; }
   }
 
   async function redisSet(data) {
-    // Formato correto do Upstash REST API
-    const encoded = encodeURIComponent(JSON.stringify(data));
-    const r = await fetch(`${REDIS_URL}/set/${KEY}/${encoded}`, {
-      method: "GET",
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+    const value = JSON.stringify(data);
+    const r = await fetch(`${REDIS_URL}/set/${KEY}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify([KEY, value])
     });
-    return r.ok;
+    const result = await r.json();
+    return result;
   }
 
   if (req.method === "GET") {
@@ -43,8 +48,8 @@ export default async function handler(req, res) {
   if (req.method === "POST") {
     try {
       const { portfolio } = req.body;
-      await redisSet(portfolio);
-      return res.status(200).json({ ok: true });
+      const result = await redisSet(portfolio);
+      return res.status(200).json({ ok: true, redis: result });
     } catch(e) {
       return res.status(500).json({ error: e.message });
     }
