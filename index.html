@@ -300,39 +300,64 @@ async function callClaude(prompt) {
 async function dbGet(key) {
   try {
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 8000);
-    const r = await fetch("/api/"+key, { signal: controller.signal });
+    const timer = setTimeout(() => controller.abort(), 10000);
+    const r = await fetch("/api/"+key, {
+      signal: controller.signal,
+      headers: { "Accept": "application/json", "Cache-Control": "no-cache" }
+    });
+    clearTimeout(timer);
     if (!r.ok) return null;
     const d = await r.json();
     return d[key] || d.portfolio || d.historico || [];
-  } catch(e) { return null; }
+  } catch(e) {
+    console.log("dbGet erro ("+key+"):", e.message);
+    return null;
+  }
 }
 
 async function dbSet(key, data) {
+  localStorage.setItem("ai_"+key, JSON.stringify(data));
   try {
     const controller = new AbortController();
-    setTimeout(() => controller.abort(), 8000);
+    const timer = setTimeout(() => controller.abort(), 10000);
     const body = {};
     body[key] = data;
-    await fetch("/api/"+key, {
+    const r = await fetch("/api/"+key, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
       signal: controller.signal
     });
-  } catch(e) {}
-  localStorage.setItem("ai_"+key, JSON.stringify(data));
+    clearTimeout(timer);
+    return r.ok;
+  } catch(e) {
+    console.log("dbSet erro ("+key+"):", e.message);
+    return false;
+  }
 }
 
 async function loadPortfolio() {
+  // 1. Mostra local imediatamente
   const local = JSON.parse(localStorage.getItem("ai_portfolio") || "[]");
-  if (local.length > 0) { portfolio = local; renderPortfolio(); }
-  const cloud = await dbGet("portfolio");
-  if (cloud && cloud.length >= portfolio.length) {
-    portfolio = cloud;
-    localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
+  if (local.length > 0) {
+    portfolio = local;
     renderPortfolio();
   }
+  // 2. Tenta nuvem com retry
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const cloud = await dbGet("portfolio");
+    if (cloud !== null) {
+      if (cloud.length >= portfolio.length) {
+        portfolio = cloud;
+        localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
+        renderPortfolio();
+      }
+      return;
+    }
+    // Aguarda antes de tentar novamente
+    if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
+  }
+  console.log("Portfolio: usando dados locais apos 3 tentativas");
 }
 
 async function savePortfolio() {
@@ -343,10 +368,16 @@ async function savePortfolio() {
 async function loadHistorico() {
   const local = JSON.parse(localStorage.getItem("ai_historico") || "[]");
   if (local.length > 0) { historico = local; }
-  const cloud = await dbGet("historico");
-  if (cloud && cloud.length >= historico.length) {
-    historico = cloud;
-    localStorage.setItem("ai_historico", JSON.stringify(historico));
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const cloud = await dbGet("historico");
+    if (cloud !== null) {
+      if (cloud.length >= historico.length) {
+        historico = cloud;
+        localStorage.setItem("ai_historico", JSON.stringify(historico));
+      }
+      return;
+    }
+    if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
   }
 }
 
