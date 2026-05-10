@@ -11,34 +11,25 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Database not configured" });
   }
 
-  const KEY = "portfolio_v3";
+  const KEY = "portfolio_v4";
 
-  async function redisGet() {
-    const r = await fetch(`${REDIS_URL}/get/${KEY}`, {
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
-    });
-    const d = await r.json();
-    if (!d.result) return [];
-    // d.result é a string JSON direta
-    try { return JSON.parse(d.result); } catch(e) { return []; }
-  }
-
-  async function redisSet(data) {
-    // Salva o JSON direto como string no Redis
-    const r = await fetch(`${REDIS_URL}/set/${KEY}`, {
+  async function redisCall(command, ...args) {
+    const r = await fetch(`${REDIS_URL}/pipeline`, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${REDIS_TOKEN}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify(["SET", KEY, JSON.stringify(data)])
+      body: JSON.stringify([[command, ...args]])
     });
-    return r.ok;
+    const d = await r.json();
+    return d?.[0]?.result;
   }
 
   if (req.method === "GET") {
     try {
-      const portfolio = await redisGet();
+      const result = await redisCall("GET", KEY);
+      const portfolio = result ? JSON.parse(result) : [];
       return res.status(200).json({ portfolio });
     } catch(e) {
       return res.status(500).json({ error: e.message });
@@ -51,7 +42,7 @@ export default async function handler(req, res) {
       if (!Array.isArray(portfolio)) {
         return res.status(400).json({ error: "portfolio must be an array" });
       }
-      await redisSet(portfolio);
+      await redisCall("SET", KEY, JSON.stringify(portfolio));
       return res.status(200).json({ ok: true });
     } catch(e) {
       return res.status(500).json({ error: e.message });
