@@ -11,14 +11,14 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Database not configured" });
   }
 
-  const KEY = "analyst_ai_portfolio";
+  const KEY = "portfolio_v2";
 
   async function redisGet() {
     const r = await fetch(`${REDIS_URL}/get/${KEY}`, {
       headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
     });
     const d = await r.json();
-    if (d.result === null || d.result === undefined) return [];
+    if (!d.result) return [];
     try { return JSON.parse(d.result); } catch(e) { return []; }
   }
 
@@ -30,10 +30,10 @@ export default async function handler(req, res) {
         Authorization: `Bearer ${REDIS_TOKEN}`,
         "Content-Type": "application/json"
       },
-      body: JSON.stringify([KEY, value])
+      body: JSON.stringify({ value })
     });
-    const result = await r.json();
-    return result;
+    const d = await r.json();
+    return d;
   }
 
   if (req.method === "GET") {
@@ -48,8 +48,11 @@ export default async function handler(req, res) {
   if (req.method === "POST") {
     try {
       const { portfolio } = req.body;
+      if (!Array.isArray(portfolio)) {
+        return res.status(400).json({ error: "portfolio must be an array" });
+      }
       const result = await redisSet(portfolio);
-      return res.status(200).json({ ok: true, redis: result });
+      return res.status(200).json({ ok: true, result });
     } catch(e) {
       return res.status(500).json({ error: e.message });
     }
