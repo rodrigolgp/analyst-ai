@@ -909,13 +909,12 @@ function removePosition(id) {
 function renderPortfolio() {
   const el = document.getElementById("portfolioContent");
   if (!el) return;
-  // Debug info
-  el.innerHTML = '<div style="font-family:monospace;font-size:10px;color:var(--green);padding:10px;">Carregando... portfolio.length=' + portfolio.length + '</div>';
   if (!portfolio.length) {
     el.innerHTML = '<div class="empty">CARTEIRA VAZIA - ADICIONE SUAS POSICOES ACIMA</div>';
     return;
   }
-  const total = portfolio.reduce((a,p)=>a+p.qty*p.price,0);
+  try {
+    const total = portfolio.reduce((a,p)=>a+p.qty*(parseFloat(p.price)||0),0);
   el.innerHTML = '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">'
     +[["POSICOES",portfolio.length],["CAPITAL","R$ "+total.toLocaleString("pt-BR",{minimumFractionDigits:2})]].map(([k,v])=>'<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:3px">'+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+v+'</div></div>').join("")
     +'</div>'
@@ -935,6 +934,9 @@ function renderPortfolio() {
         +'<td><button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);" onclick="removePosition('+p.id+')">DEL</button></td></tr>';
     }).join("")
     +'</tbody></table></div>';
+  } catch(e) {
+    el.innerHTML = '<div class="error-box">Erro ao renderizar carteira: ' + e.message + '</div>';
+  }
 }
 
 // ─── HISTORICO ─────────────────────────────────────────────────
