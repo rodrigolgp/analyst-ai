@@ -1,5 +1,14 @@
 {
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/monitor",
+      "schedule": "*/30 10-18 * * 1-5"
+    }
   ]
 }
