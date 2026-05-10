@@ -22,14 +22,13 @@ export default async function handler(req, res) {
   }
 
   async function redisSet(data) {
-    await fetch(`${REDIS_URL}/set/${KEY}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${REDIS_TOKEN}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ value: JSON.stringify(data) })
+    // Formato correto do Upstash REST API
+    const encoded = encodeURIComponent(JSON.stringify(data));
+    const r = await fetch(`${REDIS_URL}/set/${KEY}/${encoded}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
     });
+    return r.ok;
   }
 
   if (req.method === "GET") {
