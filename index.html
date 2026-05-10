@@ -160,6 +160,7 @@
     <button class="tab" onclick="showTab('radar')">🔍 RADAR</button>
     <button class="tab" onclick="showTab('guru')">🧠 GURU INVESTIDOR</button>
     <button class="tab" onclick="showTab('portfolio')">💼 CARTEIRA</button>
+    <button class="tab" onclick="showTab('historico')">📈 HISTORICO</button>
   </div>
 
   <!-- ANALISAR -->
@@ -287,6 +288,38 @@
     <div id="portfolioContent"></div>
   </div>
 
+  <!-- HISTORICO -->
+  <div id="tab-historico" style="display:none;">
+    <!-- REGISTRO DE OPERACAO -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div style="background:var(--card);border:1px solid var(--hi);padding:20px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--cyan);">+ REGISTRAR OPERACAO</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div class="form-field"><label>TICKER</label><input type="text" id="hTicker" placeholder="PETR4"/></div>
+          <div class="form-field"><label>SINAL DO GURU</label>
+            <select id="hSinal" style="background:var(--card);border:1px solid var(--hi);color:var(--txt);padding:10px 12px;font-family:monospace;font-size:13px;outline:none;width:100%;">
+              <option>COMPRA</option><option>VENDA</option><option>AGUARDA</option>
+            </select>
+          </div>
+          <div class="form-field"><label>PRECO ENTRADA</label><input type="number" id="hEntrada" placeholder="38.50" step="0.01"/></div>
+          <div class="form-field"><label>QUANTIDADE</label><input type="number" id="hQty" placeholder="100"/></div>
+          <div class="form-field"><label>STOP LOSS</label><input type="number" id="hStop" placeholder="36.00" step="0.01"/></div>
+          <div class="form-field"><label>ALVO</label><input type="number" id="hAlvo" placeholder="42.00" step="0.01"/></div>
+          <div class="form-field"><label>SCORE DO GURU</label><input type="number" id="hScore" placeholder="78" min="0" max="100"/></div>
+          <div class="form-field"><label>DATA ENTRADA</label><input type="date" id="hDataEntrada" style="background:var(--card);border:1px solid var(--hi);color:var(--txt);padding:10px 12px;font-family:monospace;font-size:13px;outline:none;width:100%;"/></div>
+        </div>
+        <button class="btn" onclick="registrarOperacao()" style="width:100%;">+ REGISTRAR</button>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--hi);padding:20px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--green);">PERFORMANCE DO GURU</div>
+        <div id="performanceSummary" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>
+      </div>
+    </div>
+
+    <!-- HISTORICO DE OPERACOES -->
+    <div id="historicoContent"></div>
+  </div>
+
   <div class="disclaimer">
     ⚠️ DISCLAIMER: Ferramenta de apoio à decisão baseada em IA. Não constitui recomendação de investimento. Rentabilidade passada não garante resultados futuros. Renda variável envolve risco de perda. Consulte assessor certificado. Use stop loss sempre.
   </div>
@@ -299,30 +332,52 @@ let portfolio = [];
 
 // Carrega carteira da nuvem ao iniciar
 async function loadPortfolio() {
+  // Primeiro mostra o que tem no localStorage enquanto carrega da nuvem
+  const local = JSON.parse(localStorage.getItem("ai_portfolio") || "[]");
+  if (local.length > 0) {
+    portfolio = local;
+    renderPortfolio();
+  }
+
+  // Tenta carregar da nuvem com timeout de 8 segundos
   try {
-    const r = await fetch("/api/portfolio");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch("/api/portfolio", { signal: controller.signal });
+    clearTimeout(timeout);
     if (r.ok) {
       const d = await r.json();
-      portfolio = d.portfolio || [];
-      renderPortfolio();
+      const nuvem = d.portfolio || [];
+      // Usa a versao com mais dados (nuvem geralmente e mais completa)
+      if (nuvem.length >= portfolio.length) {
+        portfolio = nuvem;
+        localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
+        renderPortfolio();
+      }
     }
   } catch(e) {
-    portfolio = JSON.parse(localStorage.getItem("ai_portfolio") || "[]");
-    renderPortfolio();
+    // Se falhar, usa o localStorage que ja foi carregado
+    console.log("Usando dados locais:", e.message);
   }
 }
 
-// Salva carteira na nuvem
+// Salva carteira na nuvem E no localStorage
 async function savePortfolio() {
+  // Salva local primeiro (imediato)
+  localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
+  // Tenta salvar na nuvem
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
     await fetch("/api/portfolio", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ portfolio })
+      body: JSON.stringify({ portfolio }),
+      signal: controller.signal
     });
-    localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
+    clearTimeout(timeout);
   } catch(e) {
-    localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
+    console.log("Salvo apenas localmente:", e.message);
   }
 }
 
@@ -337,12 +392,13 @@ loadPortfolio();
 
 // ─── TABS ─────────────────────────────────────────────────────
 function showTab(name) {
-  ["analisar","radar","guru","portfolio"].forEach(t => {
+  ["analisar","radar","guru","portfolio","historico"].forEach(t => {
     document.getElementById(`tab-${t}`).style.display = t===name ? "" : "none";
   });
   document.querySelectorAll(".tab").forEach((el,i) => {
-    el.classList.toggle("active", ["analisar","radar","guru","portfolio"][i]===name);
+    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico"][i]===name);
   });
+  if (name === "historico") renderHistorico();
 }
 
 // ─── API CALLS (via backend Vercel) ───────────────────────────
@@ -1082,6 +1138,358 @@ async function guruBriefing() {
   document.getElementById("btnGuruMontar").disabled = false;
   document.getElementById("btnGuruBriefing").disabled = false;
 }
+
+
+// ─── HISTORICO DE OPERACOES ───────────────────────────────────
+let historico = [];
+
+async function loadHistorico() {
+  const local = JSON.parse(localStorage.getItem("ai_historico") || "[]");
+  if (local.length > 0) {
+    historico = local;
+  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch("/api/historico", { signal: controller.signal });
+    clearTimeout(timeout);
+    if (r.ok) {
+      const d = await r.json();
+      const nuvem = d.historico || [];
+      if (nuvem.length >= historico.length) {
+        historico = nuvem;
+        localStorage.setItem("ai_historico", JSON.stringify(historico));
+      }
+    }
+  } catch(e) {
+    console.log("Historico usando dados locais:", e.message);
+  }
+}
+
+async function saveOperacao(op) {
+  try {
+    await fetch("/api/historico", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ operacao: op })
+    });
+    localStorage.setItem("ai_historico", JSON.stringify(historico));
+  } catch(e) {
+    localStorage.setItem("ai_historico", JSON.stringify(historico));
+  }
+}
+
+async function deleteOperacao(id) {
+  historico = historico.filter(h => h.id !== id);
+  try {
+    await fetch("/api/historico", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id })
+    });
+    localStorage.setItem("ai_historico", JSON.stringify(historico));
+  } catch(e) {
+    localStorage.setItem("ai_historico", JSON.stringify(historico));
+  }
+  renderHistorico();
+}
+
+async function registrarOperacao() {
+  const ticker = document.getElementById("hTicker").value.trim().toUpperCase();
+  const sinal = document.getElementById("hSinal").value;
+  const entrada = parseFloat(document.getElementById("hEntrada").value);
+  const qty = parseFloat(document.getElementById("hQty").value);
+  const stop = parseFloat(document.getElementById("hStop").value) || null;
+  const alvo = parseFloat(document.getElementById("hAlvo").value) || null;
+  const score = parseInt(document.getElementById("hScore").value) || null;
+  const dataEntrada = document.getElementById("hDataEntrada").value || new Date().toISOString().split("T")[0];
+
+  if (!ticker || !entrada || !qty) {
+    alert("Preencha pelo menos: Ticker, Preco de Entrada e Quantidade.");
+    return;
+  }
+
+  const op = {
+    id: Date.now(),
+    ticker, sinal, entrada, qty, stop, alvo, score,
+    dataEntrada,
+    dataSaida: null,
+    saida: null,
+    motivo: null,
+    resultado: null,
+    guruAcertou: null,
+    status: "ABERTA",
+  };
+
+  historico.push(op);
+  await saveOperacao(op);
+  ["hTicker","hEntrada","hQty","hStop","hAlvo","hScore"].forEach(id => document.getElementById(id).value = "");
+  renderHistorico();
+}
+
+async function encerrarOperacao(id) {
+  const saida = parseFloat(prompt("Preco de saida:"));
+  if (!saida || isNaN(saida)) return;
+  const motivo = prompt("Motivo (ALVO ATINGIDO / STOP ATINGIDO / SAIDA MANUAL):") || "SAIDA MANUAL";
+
+  const idx = historico.findIndex(h => h.id === id);
+  if (idx < 0) return;
+  const op = historico[idx];
+
+  const resultado = ((saida - op.entrada) / op.entrada * 100);
+  const lucroReais = (saida - op.entrada) * op.qty;
+  const guruAcertou = op.sinal === "COMPRA" ? resultado > 0 : op.sinal === "VENDA" ? resultado < 0 : null;
+
+  historico[idx] = {
+    ...op,
+    dataSaida: new Date().toISOString().split("T")[0],
+    saida,
+    motivo,
+    resultado: resultado.toFixed(2),
+    lucroReais: lucroReais.toFixed(2),
+    guruAcertou,
+    status: "ENCERRADA",
+  };
+
+  await saveOperacao(historico[idx]);
+  renderHistorico();
+}
+
+function calcPerformance() {
+  const encerradas = historico.filter(h => h.status === "ENCERRADA");
+  if (!encerradas.length) return null;
+
+  const acertos = encerradas.filter(h => h.guruAcertou === true).length;
+  const taxaAcerto = ((acertos / encerradas.length) * 100).toFixed(1);
+  const lucroTotal = encerradas.reduce((a,h) => a + parseFloat(h.lucroReais || 0), 0);
+  const melhor = encerradas.reduce((a,h) => parseFloat(h.resultado) > parseFloat(a.resultado||"-999") ? h : a, encerradas[0]);
+  const pior = encerradas.reduce((a,h) => parseFloat(h.resultado) < parseFloat(a.resultado||"999") ? h : a, encerradas[0]);
+
+  return { encerradas: encerradas.length, acertos, taxaAcerto, lucroTotal, melhor, pior };
+}
+
+function calcRelatorioMensal() {
+  const agora = new Date();
+  const mesAtual = agora.getMonth();
+  const anoAtual = agora.getFullYear();
+
+  const doMes = historico.filter(h => {
+    if (!h.dataSaida) return false;
+    const d = new Date(h.dataSaida);
+    return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
+  });
+
+  if (!doMes.length) return null;
+
+  const acertos = doMes.filter(h => h.guruAcertou === true).length;
+  const lucroMes = doMes.reduce((a,h) => a + parseFloat(h.lucroReais || 0), 0);
+  const retornoPct = doMes.reduce((a,h) => a + parseFloat(h.resultado || 0), 0) / doMes.length;
+
+  return {
+    mes: agora.toLocaleDateString("pt-BR", { month: "long", year: "numeric" }),
+    operacoes: doMes.length,
+    acertos,
+    taxaAcerto: doMes.length > 0 ? ((acertos/doMes.length)*100).toFixed(1) : 0,
+    lucroMes: lucroMes.toFixed(2),
+    retornoPct: retornoPct.toFixed(2),
+    ops: doMes,
+  };
+}
+
+async function gerarRelatorioIA(relatorio, performance) {
+  if (!relatorio) return "Sem operacoes encerradas neste mes para gerar relatorio.";
+
+  const prompt = `Voce e o GURU INVESTIDOR. Gere um relatorio mensal de performance para seu cliente iniciante.
+
+MES: ${relatorio.mes}
+OPERACOES NO MES: ${relatorio.operacoes}
+ACERTOS: ${relatorio.acertos} de ${relatorio.operacoes} (${relatorio.taxaAcerto}%)
+LUCRO/PREJUIZO NO MES: R$ ${relatorio.lucroMes}
+RETORNO MEDIO: ${relatorio.retornoPct}%
+HISTORICO GERAL - TAXA DE ACERTO: ${performance ? performance.taxaAcerto : "N/A"}%
+LUCRO TOTAL ACUMULADO: R$ ${performance ? performance.lucroTotal.toFixed(2) : "0"}
+
+OPERACOES DO MES:
+${relatorio.ops.map(o => `- ${o.ticker}: entrada R$${o.entrada}, saida R$${o.saida}, resultado ${o.resultado}%, motivo: ${o.motivo}, guru acertou: ${o.guruAcertou}`).join("
+")}
+
+Escreva um relatorio mensal em portugues simples, como um gestor explicando para um amigo. Inclua:
+1. Resumo do mes em 2-3 frases
+2. O que funcionou e o que nao funcionou
+3. Licoes aprendidas
+4. Estrategia para o proximo mes
+5. Mensagem motivacional
+
+Retorne APENAS JSON:
+{"titulo":"Relatorio Mensal - MES","resumo":"","funcionou":"","nao_funcionou":"","licoes":"","estrategia_proximo_mes":"","mensagem":"","nota_guru":"A ou B ou C ou D (nota do guru no mes)"}`;
+
+  const data = await callClaude(prompt);
+  return data;
+}
+
+async function renderRelatorioMensal() {
+  const relatorio = calcRelatorioMensal();
+  const performance = calcPerformance();
+
+  const el = document.getElementById("relatorioMensalContent");
+  if (!relatorio) {
+    el.innerHTML = `<div class="empty">Sem operacoes encerradas neste mes. Complete operacoes para gerar o relatorio.</div>`;
+    return;
+  }
+
+  el.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;padding:30px;gap:12px"><div class="spinner"></div><div style="font-family:monospace;font-size:10px;color:var(--green);letter-spacing:2px">GERANDO RELATORIO MENSAL COM IA...</div></div>`;
+
+  try {
+    const ia = await gerarRelatorioIA(relatorio, performance);
+    const notaCor = ia.nota_guru === "A" ? "var(--green)" : ia.nota_guru === "B" ? "var(--cyan)" : ia.nota_guru === "C" ? "var(--yellow)" : "var(--red)";
+
+    el.innerHTML = `
+      <div style="animation:fadeUp .4s ease">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px;">
+          ${[
+            ["OPERACOES",relatorio.operacoes,"var(--txt)"],
+            ["TAXA ACERTO",relatorio.taxaAcerto+"%",parseFloat(relatorio.taxaAcerto)>=60?"var(--green)":"var(--red)"],
+            ["RESULTADO MES","R$ "+relatorio.lucroMes,parseFloat(relatorio.lucroMes)>=0?"var(--green)":"var(--red)"],
+            ["NOTA DO GURU",ia.nota_guru||"--",notaCor],
+          ].map(([k,v,c]) => `<div style="background:var(--card);border:1px solid var(--border);padding:14px 16px;">
+            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px">${k}</div>
+            <div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:${c}">${v}</div>
+          </div>`).join("")}
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+          ${[
+            ["RESUMO DO MES",ia.resumo,"var(--cyan)"],
+            ["O QUE FUNCIONOU",ia.funcionou,"var(--green)"],
+            ["O QUE NAO FUNCIONOU",ia.nao_funcionou,"var(--red)"],
+            ["LICOES APRENDIDAS",ia.licoes,"var(--yellow)"],
+          ].map(([t,v,c]) => `<div style="background:var(--card);border:1px solid var(--border);padding:18px;">
+            <div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:${c};margin-bottom:8px">${t}</div>
+            <div style="font-size:12px;color:var(--sub);line-height:1.7">${v||"--"}</div>
+          </div>`).join("")}
+        </div>
+
+        <div style="background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.25);padding:18px;margin-bottom:12px;">
+          <div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--green);margin-bottom:8px">ESTRATEGIA PARA O PROXIMO MES</div>
+          <div style="font-size:12px;color:var(--sub);line-height:1.7">${ia.estrategia_proximo_mes||"--"}</div>
+        </div>
+
+        <div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:18px;font-style:italic;font-size:13px;color:var(--sub);line-height:1.8;">
+          <div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;font-style:normal">GURU DIZ</div>
+          "${ia.mensagem||""}"
+        </div>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="error-box">Erro ao gerar relatorio: ${e.message}</div>`;
+  }
+}
+
+function renderHistorico() {
+  const performance = calcPerformance();
+
+  // Performance summary
+  const perfEl = document.getElementById("performanceSummary");
+  if (perfEl) {
+    if (!performance) {
+      perfEl.innerHTML = `<div style="grid-column:1/-1;font-family:monospace;font-size:10px;color:var(--dim);text-align:center;padding:20px">Sem operacoes encerradas ainda.<br>Registre e encerre operacoes para ver a performance.</div>`;
+    } else {
+      perfEl.innerHTML = [
+        ["OPERACOES",performance.encerradas,"var(--txt)"],
+        ["TAXA ACERTO",performance.taxaAcerto+"%",parseFloat(performance.taxaAcerto)>=60?"var(--green)":"var(--red)"],
+        ["LUCRO TOTAL","R$ "+performance.lucroTotal.toFixed(2),performance.lucroTotal>=0?"var(--green)":"var(--red)"],
+        ["ACERTOS",performance.acertos+"/"+performance.encerradas,"var(--cyan)"],
+        ["MELHOR OP",performance.melhor.ticker+" +"+performance.melhor.resultado+"%","var(--green)"],
+        ["PIOR OP",performance.pior.ticker+" "+performance.pior.resultado+"%","var(--red)"],
+      ].map(([k,v,c]) => `<div style="background:var(--bg);border:1px solid var(--border);padding:12px;">
+        <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px">${k}</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:${c}">${v}</div>
+      </div>`).join("");
+    }
+  }
+
+  // Lista de operacoes
+  const el = document.getElementById("historicoContent");
+  if (!el) return;
+
+  const abertas = historico.filter(h => h.status === "ABERTA");
+  const encerradas = historico.filter(h => h.status === "ENCERRADA").sort((a,b) => new Date(b.dataSaida) - new Date(a.dataSaida));
+
+  let html = "";
+
+  // Relatorio mensal
+  html += `
+    <div style="background:var(--card);border:1px solid var(--hi);padding:20px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--cyan)">RELATORIO MENSAL</div>
+        <button class="btn" onclick="renderRelatorioMensal()" style="padding:8px 20px;font-size:11px;">GERAR RELATORIO DO MES</button>
+      </div>
+      <div id="relatorioMensalContent">
+        <div class="empty" style="padding:20px">Clique em "GERAR RELATORIO DO MES" para ver a analise completa do Guru.</div>
+      </div>
+    </div>`;
+
+  // Operacoes abertas
+  if (abertas.length) {
+    html += `<div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;">POSICOES ABERTAS<div style="flex:1;height:1px;background:var(--border)"></div></div>`;
+    html += `<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">`;
+    html += abertas.map(op => `
+      <div style="background:var(--card);border:1px solid rgba(0,255,136,.2);border-left:3px solid var(--green);padding:14px 18px;display:grid;grid-template-columns:80px 80px 100px 100px 100px 100px 80px 1fr;align-items:center;gap:12px;">
+        <div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:var(--green)">${op.ticker}</div>
+        <div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:${op.sinal==="COMPRA"?"var(--green)":"var(--red)"}">${op.sinal}</div>
+        <div><div style="font-family:monospace;font-size:8px;color:var(--dim)">ENTRADA</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--blue)">R$ ${op.entrada}</div></div>
+        <div><div style="font-family:monospace;font-size:8px;color:var(--dim)">QTDE</div><div style="font-family:Rajdhani,sans-serif;font-size:14px">${op.qty}</div></div>
+        <div><div style="font-family:monospace;font-size:8px;color:var(--red)">STOP</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--red)">R$ ${op.stop||"--"}</div></div>
+        <div><div style="font-family:monospace;font-size:8px;color:var(--green)">ALVO</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--green)">R$ ${op.alvo||"--"}</div></div>
+        <div><div style="font-family:monospace;font-size:8px;color:var(--dim)">SCORE</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--yellow)">${op.score||"--"}</div></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button onclick="encerrarOperacao(${op.id})" style="background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);color:var(--green);padding:6px 14px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ENCERRAR</button>
+          <button onclick="deleteOperacao(${op.id})" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.3);color:var(--red);padding:6px 10px;cursor:pointer;font-family:monospace;font-size:9px;">DEL</button>
+        </div>
+      </div>`).join("");
+    html += `</div>`;
+  }
+
+  // Operacoes encerradas
+  if (encerradas.length) {
+    html += `<div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:10px;">HISTORICO DE OPERACOES<div style="flex:1;height:1px;background:var(--border)"></div></div>`;
+    html += `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;min-width:900px;">
+      <thead><tr>${["DATA","TICKER","SINAL","ENTRADA","SAIDA","RESULT.%","RESULT.R$","MOTIVO","GURU",""].map(h=>`<th style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;text-align:left;padding:8px 12px;border-bottom:1px solid var(--border)">${h}</th>`).join("")}</tr></thead>
+      <tbody>`;
+    html += encerradas.map(op => {
+      const res = parseFloat(op.resultado||0);
+      const rc = res >= 0 ? "var(--green)" : "var(--red)";
+      const guru = op.guruAcertou === true ? "[OK]" : op.guruAcertou === false ? "[ERRO]" : "--";
+      const guruC = op.guruAcertou === true ? "var(--green)" : op.guruAcertou === false ? "var(--red)" : "var(--dim)";
+      return `<tr style="border-bottom:1px solid var(--border)">
+        <td style="padding:10px 12px;font-family:monospace;font-size:9px;color:var(--dim)">${op.dataSaida||"--"}</td>
+        <td style="padding:10px 12px;font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">${op.ticker}</td>
+        <td style="padding:10px 12px;font-size:11px;font-weight:600;color:${op.sinal==="COMPRA"?"var(--green)":"var(--red)"}">${op.sinal}</td>
+        <td style="padding:10px 12px;color:var(--blue)">R$ ${op.entrada}</td>
+        <td style="padding:10px 12px">R$ ${op.saida||"--"}</td>
+        <td style="padding:10px 12px;font-weight:700;color:${rc}">${res>=0?"+":""}${op.resultado}%</td>
+        <td style="padding:10px 12px;font-weight:600;color:${rc}">R$ ${op.lucroReais||"--"}</td>
+        <td style="padding:10px 12px;font-family:monospace;font-size:9px;color:var(--dim)">${op.motivo||"--"}</td>
+        <td style="padding:10px 12px;font-weight:700;color:${guruC}">${guru}</td>
+        <td style="padding:10px 12px"><button onclick="deleteOperacao(${op.id})" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.3);color:var(--red);padding:3px 8px;cursor:pointer;font-family:monospace;font-size:9px;">DEL</button></td>
+      </tr>`;
+    }).join("");
+    html += `</tbody></table></div>`;
+  }
+
+  if (!abertas.length && !encerradas.length) {
+    html += `<div class="empty">Nenhuma operacao registrada ainda.<br><span style="font-size:9px;margin-top:8px;display:block">Registre sua primeira operacao acima para comecar a medir a precisao do Guru.</span></div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// Inicializa historico
+loadHistorico().then(() => {
+  if (document.getElementById("tab-historico") &&
+      document.getElementById("tab-historico").style.display !== "none") {
+    renderHistorico();
+  }
+});
 
 </script>
 </body>
