@@ -922,15 +922,18 @@ function renderPortfolio() {
     +["TICKER","MERCADO","QTDE","PRECO","TOTAL","STOP","ALVO","% CART.","DATA",""].map(h=>'<th>'+h+'</th>').join("")
     +'</tr></thead><tbody>'
     +portfolio.map(p=>{
-      const pt=p.qty*p.price;const pct=total>0?(pt/total*100).toFixed(1):0;
-      return '<tr><td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+p.ticker+'</td>'
-        +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+p.market+'</td>'
-        +'<td>'+p.qty+'</td><td style="color:var(--blue)">R$ '+p.price.toFixed(2)+'</td>'
+      const price = parseFloat(p.price)||0;
+      const qty = parseFloat(p.qty)||0;
+      const pt = qty * price;
+      const pct = total>0?(pt/total*100).toFixed(1):0;
+      return '<tr><td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+String(p.ticker||"")+ '</td>'
+        +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+String(p.market||"B3")+'</td>'
+        +'<td>'+qty+'</td><td style="color:var(--blue)">R$ '+price.toFixed(2)+'</td>'
         +'<td style="font-weight:600">R$ '+pt.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</td>'
         +'<td style="color:var(--red);font-family:monospace;font-size:11px">'+String(p.stop||"--")+'</td>'
         +'<td style="color:var(--green);font-family:monospace;font-size:11px">'+String(p.target||"--")+'</td>'
         +'<td style="color:'+(pct>15?"var(--red)":"var(--green)")+';font-family:monospace">'+pct+'% '+(pct>15?"(!!)":"")+'</td>'
-        +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+p.date+'</td>'
+        +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+String(p.date||"")+'</td>'
         +'<td><button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);" onclick="removePosition('+p.id+')">DEL</button></td></tr>';
     }).join("")
     +'</tbody></table></div>';
