@@ -8,22 +8,29 @@ export default async function handler(req, res) {
   const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!REDIS_URL || !REDIS_TOKEN) return res.status(500).json({ error: "Database not configured" });
 
-  const KEY = "analyst_ai_historico";
+  const KEY = "historico_v2";
 
-  async function redisGet() {
-    const r = await fetch(`${REDIS_URL}/get/${KEY}`, {
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
+  async function redisCall(command, ...args) {
+    const r = await fetch(`${REDIS_URL}/pipeline`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify([[command, ...args]])
     });
     const d = await r.json();
-    return d.result ? JSON.parse(d.result) : [];
+    return d?.[0]?.result;
+  }
+
+  async function redisGet() {
+    const result = await redisCall("GET", KEY);
+    if (!result) return [];
+    try { return JSON.parse(result); } catch(e) { return []; }
   }
 
   async function redisSet(data) {
-    await fetch(`${REDIS_URL}/set/${KEY}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ value: JSON.stringify(data) })
-    });
+    await redisCall("SET", KEY, JSON.stringify(data));
   }
 
   if (req.method === "GET") {
