@@ -1153,16 +1153,158 @@ function addPosition() {
   const target = document.getElementById("pTarget").value ? "R$"+parseFloat(document.getElementById("pTarget").value).toFixed(2) : "";
   const market = document.getElementById("pMarket").value;
   if (!ticker||!qty||!price) return;
-  portfolio.push({id:Date.now(),ticker,qty,price,market,stop,target,date:new Date().toLocaleDateString("pt-BR")});
+
+  const id = Date.now();
+  const dateStr = new Date().toISOString().split("T")[0];
+  const dataBr = new Date().toLocaleDateString("pt-BR");
+
+  // Adiciona na carteira
+  portfolio.push({id, ticker, qty, price, market, stop, target, date: dataBr});
   savePortfolio();
+
+  // Registra automaticamente no historico como ABERTA
+  const stopNum = stop ? parseFloat(stop.replace("R$","")) : null;
+  const alvoNum = target ? parseFloat(target.replace("R$","")) : null;
+  const op = {
+    id,
+    ticker,
+    sinal: "COMPRA",
+    entrada: price,
+    qty,
+    stop: stopNum,
+    alvo: alvoNum,
+    score: null,
+    dataEntrada: dateStr,
+    dataSaida: null,
+    saida: null,
+    motivo: null,
+    resultado: null,
+    lucroReais: null,
+    guruAcertou: null,
+    status: "ABERTA",
+    mercado: market,
+  };
+  saveOperacao(op);
+
   ["pTicker","pQty","pPrice","pStop","pTarget"].forEach(id=>document.getElementById(id).value="");
   renderPortfolio();
 }
 
-function removePosition(id) {
+async function venderParcial(id) {
+  const pos = portfolio.find(p=>p.id===id);
+  if (!pos) return;
+
+  const qtdVender = parseFloat(prompt("Quantas acoes de "+pos.ticker+" deseja vender?\nVoce tem: "+pos.qty+" acoes"));
+  if (!qtdVender || isNaN(qtdVender) || qtdVender <= 0) return;
+  if (qtdVender > pos.qty) {
+    alert("Quantidade maior do que o que voce tem ("+pos.qty+")");
+    return;
+  }
+
+  const saida = parseFloat(prompt("Preco de saida (R$):"));
+  if (!saida || isNaN(saida)) return;
+
+  const motivos = ["ALVO ATINGIDO","SAIDA PARCIAL PROGRAMADA","REALIZACAO PARCIAL","REBALANCEAMENTO"];
+  const motivoIdx = prompt("Motivo:\n0 - ALVO ATINGIDO\n1 - SAIDA PARCIAL PROGRAMADA\n2 - REALIZACAO PARCIAL\n3 - REBALANCEAMENTO\n\nDigite o numero:");
+  const motivo = motivos[parseInt(motivoIdx)] || "REALIZACAO PARCIAL";
+
+  const entrada = parseFloat(pos.price)||0;
+  const resultado = entrada > 0 ? ((saida - entrada) / entrada * 100).toFixed(2) : "0";
+  const lucroReais = ((saida - entrada) * qtdVender).toFixed(2);
+  const guruAcertou = parseFloat(resultado) > 0;
+
+  // Registra venda parcial no historico
+  const op = {
+    id: Date.now(),
+    ticker: pos.ticker,
+    sinal: "COMPRA",
+    entrada,
+    qty: qtdVender,
+    stop: pos.stop ? parseFloat(String(pos.stop).replace(/[^0-9.]/g,"")) : null,
+    alvo: pos.target ? parseFloat(String(pos.target).replace(/[^0-9.]/g,"")) : null,
+    score: null,
+    dataEntrada: pos.date ? pos.date.split("/").reverse().join("-") : new Date().toISOString().split("T")[0],
+    dataSaida: new Date().toISOString().split("T")[0],
+    saida,
+    motivo: motivo+" (PARCIAL "+qtdVender+" acoes)",
+    resultado,
+    lucroReais,
+    guruAcertou,
+    status: "ENCERRADA",
+    mercado: pos.market,
+  };
+  await saveOperacao(op);
+
+  // Atualiza quantidade restante na carteira
+  const qtdRestante = pos.qty - qtdVender;
+  if (qtdRestante <= 0) {
+    // Vendeu tudo — remove da carteira
+    portfolio = portfolio.filter(p=>p.id!==id);
+  } else {
+    // Atualiza quantidade
+    const idx = portfolio.findIndex(p=>p.id===id);
+    if (idx >= 0) portfolio[idx].qty = qtdRestante;
+  }
+  savePortfolio();
+  renderPortfolio();
+
+  alert("Venda parcial registrada!\n"+qtdVender+" acoes de "+pos.ticker+"\nEntrada: R$"+entrada.toFixed(2)+" | Saida: R$"+saida.toFixed(2)+"\nResultado: "+resultado+"% | R$ "+lucroReais+"\nRestam: "+(qtdRestante > 0 ? qtdRestante+" acoes" : "posicao encerrada"));
+}
+
+async function removePosition(id) {
+  const pos = portfolio.find(p=>p.id===id);
+  if (!pos) return;
+
+  // Pergunta motivo da saida
+  const saida = parseFloat(prompt("Preco de saida de "+pos.ticker+" (R$):"));
+  if (!saida || isNaN(saida)) {
+    // Se cancelar, apenas remove sem registrar no historico
+    if (!confirm("Remover sem registrar no historico?")) return;
+    portfolio = portfolio.filter(p=>p.id!==id);
+    savePortfolio();
+    renderPortfolio();
+    return;
+  }
+
+  const motivos = ["ALVO ATINGIDO","STOP ATINGIDO","SAIDA MANUAL","REBALANCEAMENTO"];
+  const motivoIdx = prompt("Motivo da saida:\n0 - ALVO ATINGIDO\n1 - STOP ATINGIDO\n2 - SAIDA MANUAL\n3 - REBALANCEAMENTO\n\nDigite o numero:");
+  const motivo = motivos[parseInt(motivoIdx)] || "SAIDA MANUAL";
+
+  const entrada = parseFloat(pos.price)||0;
+  const resultado = entrada > 0 ? ((saida - entrada) / entrada * 100).toFixed(2) : "0";
+  const lucroReais = ((saida - entrada) * (parseFloat(pos.qty)||0)).toFixed(2);
+  const guruAcertou = parseFloat(resultado) > 0;
+
+  // Encerra no historico
+  const opEncerrada = {
+    id: pos.id,
+    ticker: pos.ticker,
+    sinal: "COMPRA",
+    entrada,
+    qty: parseFloat(pos.qty)||0,
+    stop: pos.stop ? parseFloat(String(pos.stop).replace(/[^0-9.]/g,"")) : null,
+    alvo: pos.target ? parseFloat(String(pos.target).replace(/[^0-9.]/g,"")) : null,
+    score: null,
+    dataEntrada: pos.date ? pos.date.split("/").reverse().join("-") : new Date().toISOString().split("T")[0],
+    dataSaida: new Date().toISOString().split("T")[0],
+    saida,
+    motivo,
+    resultado,
+    lucroReais,
+    guruAcertou,
+    status: "ENCERRADA",
+    mercado: pos.market,
+  };
+  await saveOperacao(opEncerrada);
+
+  // Remove da carteira
   portfolio = portfolio.filter(p=>p.id!==id);
   savePortfolio();
   renderPortfolio();
+
+  // Mostra resultado
+  const emoji = parseFloat(resultado) >= 0 ? "LUCRO" : "PREJUIZO";
+  alert(emoji+" em "+pos.ticker+"\nEntrada: R$"+entrada.toFixed(2)+" | Saida: R$"+saida.toFixed(2)+"\nResultado: "+resultado+"% | R$ "+lucroReais+"\n\nRegistrado no historico!");
 }
 
 function renderPortfolio() {
@@ -1211,7 +1353,10 @@ function renderPortfolio() {
         +'<td style="color:var(--green);font-family:monospace;font-size:11px">'+String(p.target||"--")+'</td>'
         +'<td style="color:'+(pct>15?"var(--red)":"var(--green)")+';font-family:monospace">'+pct+'%'+(pct>15?" (!!)":"")+'</td>'
         +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+String(p.date||"")+'</td>'
-        +'<td><button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);" onclick="removePosition('+p.id+')">DEL</button></td></tr>';
+        +'<td style="display:flex;gap:4px;">'
+        +'<button class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.35);color:var(--yellow);" onclick="venderParcial('+p.id+')">VENDER</button>'
+        +'<button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);" onclick="removePosition('+p.id+')">TUDO</button>'
+        +'</td></tr>';
     }).join("")
     +'</tbody></table></div>';
   } catch(e) {
