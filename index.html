@@ -1354,8 +1354,8 @@ function renderPortfolio() {
         +'<td style="color:'+(pct>15?"var(--red)":"var(--green)")+';font-family:monospace">'+pct+'%'+(pct>15?" (!!)":"")+'</td>'
         +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+String(p.date||"")+'</td>'
         +'<td style="display:flex;gap:4px;">'
-        +'<button class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.35);color:var(--yellow);" onclick="venderParcial('+p.id+')">VENDER</button>'
-        +'<button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);" onclick="removePosition('+p.id+')">TUDO</button>'
+        +'<button class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.35);color:var(--yellow);" onclick="venderParcial('+p.id+')">VENDA PARCIAL</button>'
+        +'<button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);" onclick="removePosition('+p.id+')">VENDA TOTAL</button>'
         +'</td></tr>';
     }).join("")
     +'</tbody></table></div>';
