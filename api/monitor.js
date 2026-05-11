@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // Aceita chamadas do cron do Vercel e chamadas manuais
   res.setHeader("Access-Control-Allow-Origin", "*");
 
   const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
@@ -11,13 +10,13 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Environment variables not configured" });
   }
 
-  // Horario de mercado: B3 10h-18h, NYSE 10h-17h (horario Brasilia)
+  // Horario de mercado Brasilia
   const agora = new Date();
   const horaBrasilia = new Date(agora.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
   const hora = horaBrasilia.getHours();
-  const diaSemana = horaBrasilia.getDay(); // 0=domingo, 6=sabado
+  const minutos = horaBrasilia.getMinutes();
+  const diaSemana = horaBrasilia.getDay();
 
-  // Fora do horario de mercado nao monitora
   const fimDeSemana = diaSemana === 0 || diaSemana === 6;
   const foraDoHorario = hora < 10 || hora >= 18;
 
@@ -25,12 +24,29 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, msg: "Fora do horario de mercado", hora, diaSemana });
   }
 
-  async function sendTelegram(message) {
-    await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+  async function redisGet(key) {
+    const r = await fetch(`${REDIS_URL}/pipeline`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: "Markdown" }),
+      headers: {
+        Authorization: `Bearer ${REDIS_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify([["GET", key]])
     });
+    const d = await r.json();
+    const result = d?.[0]?.result;
+    if (!result) return [];
+    try { return JSON.parse(result); } catch(e) { return []; }
+  }
+
+  async function sendTelegram(message) {
+    try {
+      await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: "Markdown" }),
+      });
+    } catch(e) {}
   }
 
   async function fetchQuote(ticker) {
@@ -45,20 +61,18 @@ export default async function handler(req, res) {
       const d = await r.json();
       const meta = d?.chart?.result?.[0]?.meta;
       if (!meta?.regularMarketPrice) return null;
+      const prev = meta.chartPreviousClose || meta.regularMarketPrice;
       return {
         price: meta.regularMarketPrice,
+        change: (((meta.regularMarketPrice - prev) / prev) * 100).toFixed(2),
         currency: isB3 ? "R$" : "US$",
       };
     } catch(e) { return null; }
   }
 
   try {
-    // Carrega carteira do Redis
-    const r = await fetch(`${REDIS_URL}/get/analyst_ai_portfolio`, {
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` }
-    });
-    const d = await r.json();
-    const portfolio = d.result ? JSON.parse(d.result) : [];
+    // Carrega carteira com chave correta
+    const portfolio = await redisGet("portfolio_v4");
 
     if (!portfolio.length) {
       return res.status(200).json({ ok: true, msg: "Carteira vazia" });
@@ -72,51 +86,34 @@ export default async function handler(req, res) {
       if (!quote) continue;
 
       const atual = quote.price;
-      const stopNum = p.stop ? parseFloat(String(p.stop).replace("R$","").replace("US$","").replace(",",".")) : null;
-      const alvoNum = p.target ? parseFloat(String(p.target).replace("R$","").replace("US$","").replace(",",".")) : null;
-      const varPct = (((atual - p.price) / p.price) * 100).toFixed(2);
+      const entradaNum = parseFloat(p.price) || 0;
+      const stopNum = p.stop ? parseFloat(String(p.stop).replace(/[R$US]/g,"").replace(",",".")) : null;
+      const alvoNum = p.target ? parseFloat(String(p.target).replace(/[R$US]/g,"").replace(",",".")) : null;
+      const varPct = entradaNum > 0 ? (((atual - entradaNum) / entradaNum) * 100).toFixed(2) : "0.00";
+      const varHoje = parseFloat(quote.change);
 
-      resultados.push({ ticker: p.ticker, atual, varPct });
+      resultados.push({ ticker: p.ticker, atual, varPct, varHoje: quote.change });
 
-      // Verifica stop
       if (stopNum && atual <= stopNum) {
-        alertas.push({
-          tipo: "STOP",
-          msg: `🔴 *ATLAS WEALTH — STOP ATINGIDO*\n\nAtivo: *${p.ticker}*\nPreco atual: ${quote.currency}${atual.toFixed(2)}\nStop loss: ${p.stop}\nVariacao: ${varPct}%\n\n⚠️ *VENDA IMEDIATAMENTE* para proteger seu capital.`
-        });
-      }
-      // Verifica alvo
-      else if (alvoNum && atual >= alvoNum) {
-        const lucro = (((atual - p.price) / p.price) * 100).toFixed(2);
-        alertas.push({
-          tipo: "ALVO",
-          msg: `🟢 *ATLAS WEALTH — ALVO ATINGIDO*\n\nAtivo: *${p.ticker}*\nPreco atual: ${quote.currency}${atual.toFixed(2)}\nAlvo: ${p.target}\nLucro: +${lucro}%\n\n✅ Considere realizar o lucro.`
-        });
-      }
-      // Alerta se cair mais de 3% no dia
-      else if (parseFloat(varPct) <= -3) {
-        alertas.push({
-          tipo: "ATENCAO",
-          msg: `🟡 *ATLAS WEALTH — ATENCAO*\n\nAtivo: *${p.ticker}*\nQueda de *${varPct}%* hoje\nPreco atual: ${quote.currency}${atual.toFixed(2)}\nStop loss: ${p.stop || "nao definido"}\n\n_Fique de olho — stop em ${p.stop || "indefinido"}_`
-        });
+        alertas.push(`🔴 *ATLAS WEALTH — STOP ATINGIDO*\n\nAtivo: *${p.ticker}*\nPreco atual: ${quote.currency}${atual.toFixed(2)}\nStop loss: ${p.stop}\nVariacao desde entrada: ${varPct}%\n\n⚠️ *VENDA IMEDIATAMENTE* para proteger seu capital.`);
+      } else if (alvoNum && atual >= alvoNum) {
+        alertas.push(`🟢 *ATLAS WEALTH — ALVO ATINGIDO*\n\nAtivo: *${p.ticker}*\nPreco atual: ${quote.currency}${atual.toFixed(2)}\nAlvo: ${p.target}\nLucro desde entrada: +${varPct}%\n\n✅ Considere realizar o lucro.`);
+      } else if (varHoje <= -3) {
+        alertas.push(`🟡 *ATLAS WEALTH — ATENCAO*\n\nAtivo: *${p.ticker}*\nQueda de *${quote.change}%* hoje\nPreco atual: ${quote.currency}${atual.toFixed(2)}\nStop loss: ${p.stop || "nao definido"}\n\n_Monitore de perto_`);
       }
     }
 
-    // Envia alertas
-    for (const alerta of alertas) {
-      await sendTelegram(alerta.msg);
+    for (const msg of alertas) {
+      await sendTelegram(msg);
     }
 
-    // A cada hora cheia envia resumo da carteira (ex: 10h, 11h, 12h...)
-    const minutos = horaBrasilia.getMinutes();
+    // Resumo a cada hora cheia sem alertas
     if (minutos < 30 && alertas.length === 0 && resultados.length > 0) {
       const resumo = resultados.map(r =>
-        `${r.varPct >= 0 ? "🟢" : "🔴"} *${r.ticker}*: ${r.varPct >= 0 ? "+" : ""}${r.varPct}%`
+        `${parseFloat(r.varHoje) >= 0 ? "🟢" : "🔴"} *${r.ticker}*: hoje ${parseFloat(r.varHoje) >= 0 ? "+" : ""}${r.varHoje}% | desde entrada ${parseFloat(r.varPct) >= 0 ? "+" : ""}${r.varPct}%`
       ).join("\n");
 
-      await sendTelegram(
-        `📊 *ATLAS WEALTH — RESUMO ${hora}h*\n\n${resumo}\n\n_Nenhum stop ou alvo atingido_`
-      );
+      await sendTelegram(`📊 *ATLAS WEALTH — RESUMO ${hora}h*\n\n${resumo}\n\n_Nenhum stop ou alvo atingido_`);
     }
 
     return res.status(200).json({
