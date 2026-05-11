@@ -1009,12 +1009,6 @@ function renderPortfolio() {
     +["TICKER","MERCADO","QTDE","PRECO MEDIO","PRECO ATUAL","TOTAL ATUAL","RESULT.","STOP","ALVO","% CART.","DATA",""].map(h=>'<th>'+h+'</th>').join("")
     +'</tr></thead><tbody>'
     +portfolio.map(p=>{
-      const price = pars+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+v+'</div></div>').join("")
-    +'</div>'
-    +'<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'
-    +["TICKER","MERCADO","QTDE","PRECO","TOTAL","STOP","ALVO","% CART.","DATA",""].map(h=>'<th>'+h+'</th>').join("")
-    +'</tr></thead><tbody>'
-    +portfolio.map(p=>{
       const price = parseFloat(p.price)||0;
       const qty = parseFloat(p.qty)||0;
       const pt = qty * price;
