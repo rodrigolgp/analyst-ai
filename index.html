@@ -746,9 +746,37 @@ function buildRadarPrompt(tickers, quotes) {
 
 function buildGuruPrompt(quotes, cap) {
   const info = Object.entries(quotes).slice(0,60).map(([t,q])=>t+":"+q.currency+q.price+"("+q.change+"%)").join(",");
-  const cart = portfolio.length>0?portfolio.map(p=>p.ticker+"@R$"+p.price+",stop:"+p.stop+",alvo:"+p.target).join("; "):"Carteira vazia";
-  return "Voce e ATLAS, gestor quantitativo de elite do ATLAS WEALTH. Missao: montar a carteira ideal para MAXIMIZAR O RETORNO DESTE MES.\n\nPERFIL DO INVESTIDOR:\n- Capital disponivel: R$"+cap+"\n- Para investir (80%): R$"+(cap*0.8).toFixed(2)+"\n- Reserva obrigatoria (20%): R$"+(cap*0.2).toFixed(2)+"\n- META: +8% ao mes sobre o capital total\n- ESTRATEGIA: swing trade de 5 a 20 dias, girar capital rapidamente\n- PRIORIDADE: retorno mensal maximo, NAO valorizacao de longo prazo\n- Corretora: BTG Pactual\n\nCARTEIRA ATUAL: "+cart+"\nMERCADO HOJE: "+info+"\n\nREGRAS ABSOLUTAS:\n- Max 6 ativos simultaneos\n- 20% sempre em caixa = R$"+(cap*0.2).toFixed(2)+" - INTOCAVEL\n- Max 20% por ativo = R$"+(cap*0.2).toFixed(2)+"\n- Score minimo 75 para entrar\n- Risco/retorno minimo 1:2, preferir 1:3\n- Stop maximo 5% abaixo da entrada\n- Stop obrigatorio em TODA posicao\n- Upside minimo 8% em ate 15 dias\n- Linguagem simples e direta\n\nPRIORIZE ativos com:\n1. Catalisador iminente nos proximos 15 dias\n2. Momentum positivo com volume acima da media\n3. Setup tecnico favoravel de rompimento\n4. Setor em alta no momento\n\nMonte o plano completo agora. Use precos reais. Calcule valores exatos.\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_para_investir\":"+(cap*0.8)+",\"reserva_caixa\":"+(cap*0.2)+",\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"motivo\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
+  const temCarteira = portfolio.length > 0;
+  const capitalInvestido = portfolio.reduce((a,p)=>{
+    const q = quotes[p.ticker];
+    const precoAtual = q ? q.price : parseFloat(p.price)||0;
+    return a + (parseFloat(p.qty)||0) * precoAtual;
+  }, 0);
+  const reserva = cap * 0.2;
+  const caixaDisponivel = Math.max(0, cap - capitalInvestido - reserva);
+  const modo = temCarteira ? "REBALANCEAMENTO" : "MONTAGEM_INICIAL";
+
+  const posicoes = temCarteira ? portfolio.map(p => {
+    const q = quotes[p.ticker];
+    const atual = q ? q.price : parseFloat(p.price)||0;
+    const entrada = parseFloat(p.price)||0;
+    const qty = parseFloat(p.qty)||0;
+    const pl = entrada > 0 ? (((atual - entrada) / entrada) * 100).toFixed(2) : "0";
+    const valorAtual = (qty * atual).toFixed(2);
+    const stopN = p.stop ? parseFloat(String(p.stop).replace(/[^0-9.]/g,"")) : null;
+    const alvoN = p.target ? parseFloat(String(p.target).replace(/[^0-9.]/g,"")) : null;
+    const dStop = stopN && atual ? (((atual - stopN) / atual) * 100).toFixed(2) : "?";
+    const dAlvo = alvoN && atual ? (((alvoN - atual) / atual) * 100).toFixed(2) : "?";
+    return p.ticker+":entrada=R$"+entrada+",atual=R$"+atual.toFixed(2)+",qty="+qty+",valor=R$"+valorAtual+",PL="+pl+"%,stop="+(p.stop||"nao definido")+",alvo="+(p.target||"nao definido")+",dist_stop="+dStop+"%,dist_alvo="+dAlvo+"%";
+  }).join(" | ") : "Nenhuma posicao aberta";
+
+  const instrucoes = temCarteira
+    ? "MODO REBALANCEAMENTO - ja tenho posicoes abertas.\nPARA CADA POSICAO DECIDA:\n- MANTER: posicao saudavel, longe do stop, caminhando para o alvo\n- VENDER: atingiu alvo, proximo do stop (<2%), ou ha oportunidade muito melhor\n- REFORCAR: posicao vencedora com espaco para mais\n\nDepois, com o CAIXA LIVRE de R$"+caixaDisponivel.toFixed(2)+", sugira NOVAS ENTRADAS apenas se houver oportunidades com upside >8% em 15 dias e R/R >1:2. Se nao houver, mantenha o caixa. NAO force entradas."
+    : "MODO MONTAGEM INICIAL - carteira vazia.\nSelecione 5-6 ativos com maior potencial nos proximos 15 dias.\nCapital para investir: R$"+caixaDisponivel.toFixed(2);
+
+  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: MAXIMIZAR RETORNO DESTE MES.\n\nCAPITAL TOTAL: R$"+cap+"\nCAPITAL INVESTIDO: R$"+capitalInvestido.toFixed(2)+"\nCAIXA LIVRE: R$"+caixaDisponivel.toFixed(2)+"\nRESERVA (20%): R$"+reserva.toFixed(2)+"\nMETA: +8% ao mes | Swing trade 5-20 dias | BTG Pactual\n\nPOSICOES ATUAIS:\n"+posicoes+"\n\nMERCADO HOJE: "+info+"\n\n"+instrucoes+"\n\nREGRAS: max 6 ativos, 20% caixa intocavel, max 20% por ativo, stop max 5%, R/R min 1:2, linguagem simples.\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"motivo\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
 }
+
 
 function buildBriefingPrompt(quotes, cap) {
   const hoje = Object.entries(quotes).slice(0,30).map(([t,q])=>t+":"+q.change+"%").join(",");
@@ -881,7 +909,28 @@ function renderGuruResult(d) {
     +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:var(--green)">R$ '+Number(d.capital_para_investir||0).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div>'
     +'<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-top:4px">RESERVA: R$ '+Number(d.reserva_caixa||0).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'
     +'<div style="background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.3);padding:18px;"><div style="font-family:monospace;font-size:8px;color:var(--green);letter-spacing:1px;margin-bottom:8px;">GURU DIZ</div>'
-    +'<div style="font-size:12px;color:var(--sub);line-height:1.7;font-style:italic">"'+String(d.mensagem_guru||"")+'"</div></div></div>';
+    +'<div style="font-size:12px;color:var(--sub);line-height:1.7;font-style:italic">"'+String(d.mensagem_guru||"")+'"</div></div></div>'
+    +(d.modo?'<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:10px;display:flex;gap:20px;flex-wrap:wrap;">'
+      +'<span>MODO: <span style="color:var(--cyan)">'+d.modo+'</span></span>'
+      +(d.capital_investido!==undefined?'<span>INVESTIDO: <span style="color:var(--blue)">R$ '+Number(d.capital_investido).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</span></span>':"")
+      +(d.caixa_disponivel!==undefined?'<span>CAIXA LIVRE: <span style="color:var(--green)">R$ '+Number(d.caixa_disponivel).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</span></span>':"")
+      +(d.reserva_caixa!==undefined?'<span>RESERVA: <span style="color:var(--yellow)">R$ '+Number(d.reserva_caixa).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</span></span>':"")
+      +'</div>':"");
+
+  // Posicoes atuais com recomendacao
+  const posCard = d.posicoes_atuais&&d.posicoes_atuais.length&&d.posicoes_atuais[0].ticker?
+    sec("SUAS POSICOES - O QUE FAZER COM CADA UMA")
+    +'<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">'
+    +d.posicoes_atuais.map(p=>{
+      const ac = p.acao==="MANTER"?"var(--green)":p.acao==="VENDER"?"var(--red)":p.acao==="REFORCAR"?"var(--cyan)":"var(--yellow)";
+      return '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid '+ac+';padding:14px 20px;display:grid;grid-template-columns:100px 80px 1fr 1fr;align-items:center;gap:14px;">'
+        +'<div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;">'+String(p.ticker||"")+'</div>'
+        +'<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+ac+'">'+String(p.acao||"")+'</div>'
+        +'<div style="font-size:11px;color:var(--sub);">'+String(p.motivo||"")+'</div>'
+        +'<div style="font-size:11px;color:var(--dim);">'+String(p.recomendacao_saida||"")+'</div>'
+        +'</div>';
+    }).join("")+'</div>'
+    : "";
 
   const acoes = d.acoes_imediatas&&d.acoes_imediatas.length?sec("ACOES IMEDIATAS - O QUE FAZER AGORA")
     +'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">'
@@ -921,7 +970,7 @@ function renderGuruResult(d) {
 
   const rev = '<div style="font-family:monospace;font-size:10px;color:var(--dim);text-align:center;margin-bottom:20px;">PROXIMA REVISAO: <span style="color:var(--cyan)">'+String(d.proxima_revisao||"amanha antes da abertura")+'</span></div>';
 
-  return header+acoes+aloc+nao+rev;
+  return header+posCard+acoes+aloc+nao+rev;
 }
 
 function renderBriefing(d) {
