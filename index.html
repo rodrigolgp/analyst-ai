@@ -1546,50 +1546,25 @@ function buildRelatorioPrompt(mes, ops, capitalInicial) {
   const retornoPct = capitalInicial > 0 ? ((lucroTotal/capitalInicial)*100).toFixed(2) : 0;
   const melhor = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado)>parseFloat(a.resultado||"-999")?o:a,enc[0]) : null;
   const pior = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado)<parseFloat(a.resultado||"999")?o:a,enc[0]) : null;
-
-  const detalhes = enc.map(o=>
-    o.ticker+": entrada R$"+o.entrada+", saida R$"+o.saida+", resultado "+o.resultado+"%, lucro R$"+o.lucroReais+", motivo: "+o.motivo+", ATLAS acertou: "+o.guruAcertou
-  ).join("
-");
-
-  const abertasInfo = abertas.length > 0 ?
-    "POSICOES AINDA ABERTAS: "+abertas.map(o=>o.ticker+" (entrada R$"+o.entrada+")").join(", ") : "";
-
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Gere o relatorio mensal de performance com analise profunda e linguagem acessivel para um investidor iniciante.
-
-"
-    + "MES: "+mes+"
-"
-    + "OPERACOES ENCERRADAS: "+enc.length+"
-"
-    + "ACERTOS: "+acertos+" | ERROS: "+erros+" | TAXA DE ACERTO: "+taxaAcerto+"%
-"
-    + "LUCRO/PREJUIZO TOTAL: R$ "+lucroTotal.toFixed(2)+"
-"
-    + "RETORNO SOBRE CAPITAL: "+retornoPct+"%
-"
-    + "META DO MES: +8%
-"
-    + "META BATIDA: "+(parseFloat(retornoPct)>=8?"SIM":"NAO")+"
-"
-    + (melhor?"MELHOR OPERACAO: "+melhor.ticker+" +"+melhor.resultado+"% (R$"+melhor.lucroReais+")
-":""  )
-    + (pior?"PIOR OPERACAO: "+pior.ticker+" "+pior.resultado+"% (R$"+pior.lucroReais+")
-":"")
-    + (abertasInfo?abertasInfo+"
-":"")
-    + "
-DETALHE DAS OPERACOES:
-"+detalhes
-    + "
-
-Gere um relatorio completo e honesto. Seja direto sobre o que funcionou e o que nao funcionou. Use linguagem simples. Calcule a nota do ATLAS com rigor.
-
-"
-    + "Retorne APENAS JSON:
-"
-    + '{"mes":"","resumo_executivo":"","meta_batida":false,"retorno_real":"","taxa_acerto":"","lucro_total":"","operacoes_total":0,"acertos":0,"erros":0,"melhor_operacao":{"ticker":"","resultado":"","motivo_sucesso":""},"pior_operacao":{"ticker":"","resultado":"","motivo_falha":""},"o_que_funcionou":"","o_que_nao_funcionou":"","erros_cometidos":"","licoes_aprendidas":"","analise_atlas":"analise critica da performance do ATLAS","estrategia_proximo_mes":"","meta_proximo_mes":"+8%","nota_atlas":"A","justificativa_nota":"","mensagem_motivacional":""}';
+  const detalhes = enc.map(o=>o.ticker+": entrada R$"+o.entrada+", saida R$"+o.saida+", resultado "+o.resultado+"%, lucro R$"+o.lucroReais+", motivo: "+o.motivo+", ATLAS acertou: "+o.guruAcertou).join(" | ");
+  const abertasInfo = abertas.length > 0 ? "POSICOES ABERTAS: "+abertas.map(o=>o.ticker).join(", ") : "";
+  const p = [
+    "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Gere o relatorio mensal.",
+    "MES: "+mes,
+    "OPERACOES ENCERRADAS: "+enc.length,
+    "ACERTOS: "+acertos+" | ERROS: "+erros+" | TAXA: "+taxaAcerto+"%",
+    "LUCRO/PREJUIZO: R$ "+lucroTotal.toFixed(2),
+    "RETORNO: "+retornoPct+"% | META: +8% | META BATIDA: "+(parseFloat(retornoPct)>=8?"SIM":"NAO"),
+    melhor?"MELHOR: "+melhor.ticker+" +"+melhor.resultado+"%":"",
+    pior?"PIOR: "+pior.ticker+" "+pior.resultado+"%":"",
+    abertasInfo,
+    "OPERACOES: "+detalhes,
+    "Gere relatorio completo, honesto e em linguagem simples. Calcule nota com rigor.",
+    'Retorne APENAS JSON: {"mes":"","resumo_executivo":"","meta_batida":false,"retorno_real":"","taxa_acerto":"","lucro_total":"","operacoes_total":0,"acertos":0,"erros":0,"melhor_operacao":{"ticker":"","resultado":"","motivo_sucesso":""},"pior_operacao":{"ticker":"","resultado":"","motivo_falha":""},"o_que_funcionou":"","o_que_nao_funcionou":"","erros_cometidos":"","licoes_aprendidas":"","analise_atlas":"","estrategia_proximo_mes":"","meta_proximo_mes":"+8%","nota_atlas":"A","justificativa_nota":"","mensagem_motivacional":""}',
+  ].filter(Boolean).join("\n");
+  return p;
 }
+
 
 function renderRelatorioResult(d, stats) {
   const notaCor = d.nota_atlas==="A"?"var(--green)":d.nota_atlas==="B"?"var(--cyan)":d.nota_atlas==="C"?"var(--yellow)":"var(--red)";
