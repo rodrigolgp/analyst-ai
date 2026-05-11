@@ -329,8 +329,9 @@ function showTab(name) {
   if (name === "historico") renderHistorico();
   if (name === "portfolio") {
     renderPortfolio();
-    // Recarrega da nuvem ao abrir a aba
     loadPortfolio();
+    // Busca cotacoes em tempo real ao abrir carteira
+    atualizarCotacoesCarteira();
   }
 }
 
@@ -403,6 +404,24 @@ async function dbSet(key, data) {
     console.log("dbSet erro ("+key+"):", e.message);
     return false;
   }
+}
+
+// ─── COTACOES DA CARTEIRA ─────────────────────────────────────
+let portfolioQuotes = {};
+
+async function atualizarCotacoesCarteira() {
+  if (!portfolio.length) return;
+  // Busca cotacao de cada ativo em paralelo
+  const results = await Promise.all(
+    portfolio.map(async p => {
+      const q = await fetchQuote(p.ticker);
+      return { ticker: p.ticker, quote: q };
+    })
+  );
+  results.forEach(r => {
+    if (r.quote) portfolioQuotes[r.ticker] = r.quote;
+  });
+  renderPortfolio();
 }
 
 // ─── TELEGRAM ────────────────────────────────────────────────
@@ -974,8 +993,23 @@ function renderPortfolio() {
   }
   try {
     const total = portfolio.reduce((a,p)=>a+p.qty*(parseFloat(p.price)||0),0);
-  el.innerHTML = '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;">'
-    +[["POSICOES",portfolio.length],["CAPITAL","R$ "+total.toLocaleString("pt-BR",{minimumFractionDigits:2})]].map(([k,v])=>'<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:3px">'+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+v+'</div></div>').join("")
+    const totalAtual = portfolio.reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+p.qty*(q?q.price:parseFloat(p.price)||0);},0);
+    const totalPL = totalAtual - total;
+    const totalPLpct = total > 0 ? ((totalPL/total)*100).toFixed(2) : "0.00";
+    const hasQ = Object.keys(portfolioQuotes).length > 0;
+    const plC = totalPL>=0?"var(--green)":"var(--red)";
+    const plB = totalPL>=0?"rgba(0,255,136,.3)":"rgba(255,51,85,.3)";
+    el.innerHTML = '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">POSICOES</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+portfolio.length+'</div></div>'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">CUSTO MEDIO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">R$ '+total.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'
+    +(hasQ?'<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+'<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+(totalPL>=0?"+":"")+totalPL.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+(parseFloat(totalPLpct)>=0?"+":"")+totalPLpct+'%)</div></div>':'<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;opacity:.5;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:monospace;font-size:10px;color:var(--dim)">Buscando...</div></div>')
+    +'<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'
+    +'</div>'
+    +'<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'
+    +["TICKER","MERCADO","QTDE","PRECO MEDIO","PRECO ATUAL","TOTAL ATUAL","RESULT.","STOP","ALVO","% CART.","DATA",""].map(h=>'<th>'+h+'</th>').join("")
+    +'</tr></thead><tbody>'
+    +portfolio.map(p=>{
+      const price = pars+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+v+'</div></div>').join("")
     +'</div>'
     +'<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'
     +["TICKER","MERCADO","QTDE","PRECO","TOTAL","STOP","ALVO","% CART.","DATA",""].map(h=>'<th>'+h+'</th>').join("")
@@ -986,13 +1020,21 @@ function renderPortfolio() {
       const pt = qty * price;
       const pct = total>0?(pt/total*100).toFixed(1):0;
       const currency = (p.market||"B3").includes("NYSE") || (p.market||"B3").includes("NASDAQ") ? "US$" : "R$";
-      return '<tr><td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+String(p.ticker||"")+ '</td>'
+      const q = portfolioQuotes[p.ticker];
+      const precoAtual = q ? q.price : null;
+      const totalAtualPos = precoAtual ? qty * precoAtual : null;
+      const plPos = precoAtual ? ((precoAtual - price) / price * 100).toFixed(2) : null;
+      const plColor = plPos !== null ? (parseFloat(plPos)>=0?"var(--green)":"var(--red)") : "var(--dim)";
+      return '<tr><td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+String(p.ticker||"")+'</td>'
         +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+String(p.market||"B3")+'</td>'
-        +'<td>'+qty+'</td><td style="color:var(--blue)">'+currency+' '+price.toFixed(2)+'</td>'
-        +'<td style="font-weight:600">'+currency+' '+pt.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</td>'
+        +'<td>'+qty+'</td>'
+        +'<td style="color:var(--sub)">'+currency+' '+price.toFixed(2)+'</td>'
+        +'<td style="color:var(--blue);font-weight:600">'+(precoAtual?currency+' '+precoAtual.toFixed(2):'--')+'</td>'
+        +'<td style="font-weight:600;color:var(--cyan)">'+(totalAtualPos?currency+' '+totalAtualPos.toLocaleString("pt-BR",{minimumFractionDigits:2}):'--')+'</td>'
+        +'<td style="font-weight:700;color:'+plColor+'">'+(plPos!==null?(parseFloat(plPos)>=0?"+":"")+plPos+'%':'--')+'</td>'
         +'<td style="color:var(--red);font-family:monospace;font-size:11px">'+String(p.stop||"--")+'</td>'
         +'<td style="color:var(--green);font-family:monospace;font-size:11px">'+String(p.target||"--")+'</td>'
-        +'<td style="color:'+(pct>15?"var(--red)":"var(--green)")+';font-family:monospace">'+pct+'% '+(pct>15?"(!!)":"")+'</td>'
+        +'<td style="color:'+(pct>15?"var(--red)":"var(--green)")+';font-family:monospace">'+pct+'%'+(pct>15?" (!!)":"")+'</td>'
         +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+String(p.date||"")+'</td>'
         +'<td><button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);" onclick="removePosition('+p.id+')">DEL</button></td></tr>';
     }).join("")
