@@ -10,45 +10,52 @@ export default async function handler(req, res) {
 
   async function fetchIBOV() {
     try {
-      const r = await fetch(
+      // Busca 5 dias para calcular variacao do dia corretamente
+      const rDia = await fetch(
+        "https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?interval=1d&range=5d",
+        { headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" } }
+      );
+      // Busca 1 ano para calcular mes e ano
+      const rAno = await fetch(
         "https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?interval=1d&range=1y",
         { headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" } }
       );
-      if (!r.ok) return null;
-      const d = await r.json();
-      const result = d?.chart?.result?.[0];
-      const meta = result?.meta;
-      const closes = result?.indicators?.quote?.[0]?.close || [];
-      const timestamps = result?.timestamp || [];
 
-      if (!meta?.regularMarketPrice || closes.length < 2) return null;
+      if (!rDia.ok || !rAno.ok) return null;
 
-      // Filtra nulls e ordena
-      const valid = timestamps
-        .map((t,i) => ({ t, c: closes[i] }))
-        .filter(x => x.c !== null && x.c !== undefined);
+      const dDia = await rDia.json();
+      const dAno = await rAno.json();
 
-      if (valid.length < 2) return null;
+      const metaDia = dDia?.chart?.result?.[0]?.meta;
+      const closesDia = dDia?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
 
-      const hoje = meta.regularMarketPrice;
+      const metaAno = dAno?.chart?.result?.[0]?.meta;
+      const closesAno = dAno?.chart?.result?.[0]?.indicators?.quote?.[0]?.close || [];
+      const timestampsAno = dAno?.chart?.result?.[0]?.timestamp || [];
 
-      // Ontem = ultimo fechamento disponivel (penultimo ponto, pois o ultimo pode ser hoje ainda aberto)
-      const ontem = valid[valid.length - 1]?.c || valid[valid.length - 2]?.c;
+      if (!metaDia?.regularMarketPrice) return null;
 
-      // Variacao do DIA
+      const hoje = metaDia.regularMarketPrice;
+
+      // Para variacao do dia: pega o penultimo fechamento dos ultimos 5 dias
+      const validDia = closesDia.filter(c => c !== null && c !== undefined);
+      const ontem = validDia.length >= 2 ? validDia[validDia.length - 2] : validDia[validDia.length - 1];
       const varDia = ontem ? parseFloat(((hoje - ontem) / ontem * 100).toFixed(2)) : 0;
 
-      // Inicio do mes e do ano
+      // Para mes e ano: usa historico de 1 ano
+      const validAno = timestampsAno
+        .map((t,i) => ({ t, c: closesAno[i] }))
+        .filter(x => x.c !== null && x.c !== undefined);
+
       const agora = new Date();
       const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1).getTime() / 1000;
       const inicioAno = new Date(agora.getFullYear(), 0, 1).getTime() / 1000;
 
-      // Ultimo fechamento ANTES do inicio do mes
       let fechoMes = null;
       let fechoAno = null;
-      for (let i = 0; i < valid.length; i++) {
-        if (valid[i].t < inicioMes) fechoMes = valid[i].c;
-        if (valid[i].t < inicioAno) fechoAno = valid[i].c;
+      for (const item of validAno) {
+        if (item.t < inicioMes) fechoMes = item.c;
+        if (item.t < inicioAno) fechoAno = item.c;
       }
 
       const varMes = fechoMes ? parseFloat(((hoje - fechoMes) / fechoMes * 100).toFixed(2)) : 0;
