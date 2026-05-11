@@ -106,8 +106,10 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
     <div><div class="pf-key">MERCADOS</div><div class="pf-val">B3 + NYSE/NASDAQ</div></div>
     <div><div class="pf-key">HORIZONTE</div><div class="pf-val">Curto prazo</div></div>
     <div><div class="pf-key">CAPITAL</div><div class="pf-val">R$5k-R$20k + aportes</div></div>
-    <div><div class="pf-key">OBJETIVO</div><div class="pf-val">Multiplicar Capital</div></div>
+    <div><div class="pf-key">META</div><div class="pf-val green">+8% ao mes</div></div>
     <div><div class="pf-key">COTACOES</div><div class="pf-val green">Yahoo Finance OK</div></div>
+    <div id="benchIBOV"><div class="pf-key">IBOV HOJE</div><div class="pf-val" style="color:var(--dim)">Carregando...</div></div>
+    <div id="benchCDI"><div class="pf-key">CDI MES</div><div class="pf-val" style="color:var(--dim)">Carregando...</div></div>
   </div>
 
   <div class="tabs">
@@ -202,6 +204,8 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
 
   <!-- CARTEIRA -->
   <div id="tab-portfolio" style="display:none;">
+    <!-- Benchmark card -->
+    <div id="benchmarkCarteira" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;"></div>
     <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);margin-bottom:12px;">CADASTRAR POSICAO</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px;align-items:end;">
       <div class="form-field"><label>TICKER</label><input type="text" id="pTicker" placeholder="PETR4"/></div>
@@ -340,6 +344,7 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
 let historyArr = JSON.parse(localStorage.getItem("ai_history") || "[]");
 let portfolio = [];
 let historico = [];
+let benchmark = null;
 
 // ─── TICKER STRIP ─────────────────────────────────────────────
 (function(){
@@ -372,6 +377,37 @@ let historico = [];
   setTimeout(updateTicker, 2000);
   setInterval(updateTicker, 5 * 60 * 1000);
 })();
+
+// ─── BENCHMARK ────────────────────────────────────────────────
+async function fetchBenchmark() {
+  try {
+    const r = await fetch("/api/benchmark");
+    if (!r.ok) return;
+    benchmark = await r.json();
+    updateProfileBar();
+  } catch(e) {}
+}
+
+function updateProfileBar() {
+  if (!benchmark) return;
+  const ibovEl = document.getElementById("benchIBOV");
+  const cdiEl = document.getElementById("benchCDI");
+  if (ibovEl) {
+    const c = benchmark.ibovespa.var_dia >= 0 ? "var(--green)" : "var(--red)";
+    ibovEl.innerHTML = '<span style="color:var(--dim);font-size:8px;">IBOV HOJE</span><br>'
+      +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+c+'">'
+      +(benchmark.ibovespa.var_dia>=0?"+":"")+benchmark.ibovespa.var_dia+'%</span>';
+  }
+  if (cdiEl) {
+    cdiEl.innerHTML = '<span style="color:var(--dim);font-size:8px;">CDI MES</span><br>'
+      +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--yellow)">+'
+      +benchmark.cdi.var_mes+'%</span>';
+  }
+}
+
+// Busca benchmark ao carregar
+setTimeout(fetchBenchmark, 3000);
+setInterval(fetchBenchmark, 30 * 60 * 1000); // atualiza a cada 30 min
 
 // ─── TABS ─────────────────────────────────────────────────────
 function showTab(name) {
@@ -1413,6 +1449,24 @@ function renderPortfolio() {
   } catch(e) {
     el.innerHTML = '<div class="error-box">Erro ao renderizar carteira: ' + e.message + '</div>';
   }
+
+  // Atualiza benchmark card
+  const benchEl = document.getElementById("benchmarkCarteira");
+  if (benchEl && benchmark) {
+    const cartVar = total > 0 ? ((totalAtual - total) / total * 100).toFixed(2) : "0.00";
+    const items = [
+      ["SUA CARTEIRA", cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "Desde entrada"],
+      ["IBOVESPA MES", (benchmark.ibovespa.var_mes>=0?"+":"")+benchmark.ibovespa.var_mes+"%", benchmark.ibovespa.var_mes>=0?"var(--green)":"var(--red)", "No mes"],
+      ["CDI MES", "+"+benchmark.cdi.var_mes+"%", "var(--yellow)", "No mes"],
+    ];
+    benchEl.innerHTML = items.map(([k,v,c,sub])=>
+      '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:2px;">'+sub+'</div>'+
+      '</div>'
+    ).join("");
+  }
 }
 
 // ─── HISTORICO ─────────────────────────────────────────────────
@@ -1584,7 +1638,10 @@ function buildRelatorioPrompt(mes, ops, capitalInicial) {
     pior?"PIOR: "+pior.ticker+" "+pior.resultado+"%":"",
     abertasInfo,
     "OPERACOES: "+detalhes,
-    "Gere relatorio completo, honesto e em linguagem simples. Calcule nota com rigor.",
+    benchmark ? "CDI NO MES: +"+benchmark.cdi.var_mes+"% | IBOVESPA NO MES: "+(benchmark.ibovespa.var_mes>=0?"+":"")+benchmark.ibovespa.var_mes+"% | CDI NO ANO: +"+benchmark.cdi.var_ano+"% | IBOVESPA NO ANO: "+(benchmark.ibovespa.var_ano>=0?"+":"")+benchmark.ibovespa.var_ano+"%" : "",
+    "ATLAS BATEU CDI: "+(parseFloat(retornoPct) > (benchmark?.cdi?.var_mes||0.87) ? "SIM" : "NAO"),
+    "ATLAS BATEU IBOV: "+(parseFloat(retornoPct) > (benchmark?.ibovespa?.var_mes||0) ? "SIM" : "NAO"),
+    "Gere relatorio completo, honesto e em linguagem simples. Considere os benchmarks na nota. Calcule nota com rigor.",
     'Retorne APENAS JSON: {"mes":"","resumo_executivo":"","meta_batida":false,"retorno_real":"","taxa_acerto":"","lucro_total":"","operacoes_total":0,"acertos":0,"erros":0,"melhor_operacao":{"ticker":"","resultado":"","motivo_sucesso":""},"pior_operacao":{"ticker":"","resultado":"","motivo_falha":""},"o_que_funcionou":"","o_que_nao_funcionou":"","erros_cometidos":"","licoes_aprendidas":"","analise_atlas":"","estrategia_proximo_mes":"","meta_proximo_mes":"+8%","nota_atlas":"A","justificativa_nota":"","mensagem_motivacional":""}',
   ].filter(Boolean).join("\n");
   return p;
@@ -1612,6 +1669,18 @@ function renderRelatorioResult(d, stats) {
       +'<div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:'+c+';">'+String(v||"--")+'</div>'
       +'</div>').join("")
     +'</div>'
+
+    // Benchmark comparison
+    +(benchmark ? '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">'+
+      [
+        ["SUA CARTEIRA", d.retorno_real, parseFloat(String(d.retorno_real||"0").replace("%",""))>=8?"var(--green)":"var(--yellow)"],
+        ["CDI NO MES", "+"+(benchmark.cdi.var_mes)+"%", "var(--yellow)"],
+        ["IBOVESPA NO MES", (benchmark.ibovespa.var_mes>=0?"+":"")+benchmark.ibovespa.var_mes+"%", benchmark.ibovespa.var_mes>=0?"var(--green)":"var(--red)"],
+      ].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:16px;text-align:center;">'+
+        '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">'+k+'</div>'+
+        '<div style="font-family:Rajdhani,sans-serif;font-size:24px;font-weight:700;color:'+c+';">'+String(v||"--")+'</div>'+
+        '</div>').join("")+
+      '</div>' : "")
 
     // Stats row
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">'
