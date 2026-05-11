@@ -693,7 +693,7 @@ function renderResult(d, quote, indicators) {
     '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">'+
     [
       ["RSI(14)", indicators.indicadores.rsi.rsi14, indicators.indicadores.rsi.zona==="SOBRECOMPRADO"?"var(--red)":indicators.indicadores.rsi.zona==="SOBREVENDIDO"?"var(--green)":"var(--yellow)"],
-      ["TENDENCIA", indicators.tendencia, indicators.tendencia.includes("ALTA")?"var(--green)":"indicators.tendencia.includes("BAIXA")?"var(--red)":"var(--yellow)""],
+      ["TENDENCIA", indicators.tendencia, indicators.tendencia.includes("ALTA")?"var(--green)":indicators.tendencia.includes("BAIXA")?"var(--red)":"var(--yellow)"],
       ["SINAL TEC.", indicators.sinal_tecnico, indicators.sinal_tecnico.includes("COMPRA")?"var(--green)":"var(--red)"],
       ["VOLUME", indicators.indicadores.volume?.status, indicators.indicadores.volume?.status==="MUITO_ACIMA"||indicators.indicadores.volume?.status==="ACIMA"?"var(--green)":"var(--dim)"],
       ["MACD", indicators.indicadores.macd?.trend, indicators.indicadores.macd?.trend==="ALTA"?"var(--green)":"var(--red)"],
