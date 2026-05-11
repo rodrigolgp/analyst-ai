@@ -117,6 +117,7 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
     <button class="tab" onclick="showTab('portfolio')">CARTEIRA</button>
     <button class="tab" onclick="showTab('historico')">HISTORICO</button>
     <button class="tab" onclick="showTab('config')">CONFIG</button>
+    <button class="tab" onclick="showTab('relatorio')">RELATORIO</button>
   </div>
 
   <!-- ANALISAR -->
@@ -303,6 +304,30 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
     </div>
   </div>
 
+  <!-- RELATORIO -->
+  <div id="tab-relatorio" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:4px;">RELATORIO MENSAL</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--dim);">Analise completa da performance do ATLAS este mes</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="relatorioMes" style="background:var(--card);border:1px solid var(--hi);color:var(--txt);padding:8px 14px;font-family:monospace;font-size:12px;outline:none;">
+        </select>
+        <button class="btn" onclick="gerarRelatorio()">GERAR RELATORIO</button>
+      </div>
+    </div>
+    <div class="loading" id="loadRelatorio" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsRelatorio"></div></div>
+    <div class="error-box" id="errRelatorio" style="display:none;"></div>
+    <div id="resultRelatorio" style="display:none;"></div>
+    <div id="emptyRelatorio" class="empty">
+      CLIQUE EM "GERAR RELATORIO" PARA VER A ANALISE COMPLETA DO MES<br>
+      <span style="font-size:9px;margin-top:8px;display:block;color:var(--green)">
+        Taxa de acerto - Resultado - Licoes - Estrategia - Nota do ATLAS
+      </span>
+    </div>
+  </div>
+
   <div class="disclaimer">
     DISCLAIMER: Ferramenta de apoio a decisao baseada em IA. Nao constitui recomendacao de investimento.
     Rentabilidade passada nao garante resultados futuros. Renda variavel envolve risco de perda.
@@ -325,12 +350,13 @@ let historico = [];
 
 // ─── TABS ─────────────────────────────────────────────────────
 function showTab(name) {
-  ["analisar","radar","guru","portfolio","historico","config"].forEach(t => {
+  ["analisar","radar","guru","portfolio","historico","config","relatorio"].forEach(t => {
     document.getElementById("tab-"+t).style.display = t===name ? "" : "none";
   });
   document.querySelectorAll(".tab").forEach((el,i) => {
-    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","config"][i]===name);
+    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","config","relatorio"][i]===name);
   });
+  if (name === "relatorio") renderRelatorioTab();
   if (name === "historico") renderHistorico();
   if (name === "portfolio") {
     renderPortfolio();
@@ -1487,6 +1513,234 @@ function renderHistorico() {
 // ─── INIT ─────────────────────────────────────────────────────
 loadPortfolio();
 loadHistorico();
+
+// ─── RELATORIO MENSAL ──────────────────────────────────────────
+function renderRelatorioTab() {
+  // Popula o select de meses com os meses que tem operacoes
+  const sel = document.getElementById("relatorioMes");
+  if (!sel) return;
+  const meses = {};
+  historico.forEach(h => {
+    const d = h.dataSaida || h.dataEntrada;
+    if (!d) return;
+    const [ano, mes] = d.split("-");
+    const key = ano+"-"+mes;
+    const label = new Date(ano, mes-1, 1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+    meses[key] = label;
+  });
+  const keys = Object.keys(meses).sort().reverse();
+  if (!keys.length) {
+    sel.innerHTML = '<option>Nenhum mes disponivel</option>';
+    return;
+  }
+  sel.innerHTML = keys.map(k=>'<option value="'+k+'">'+meses[k]+'</option>').join("");
+}
+
+function buildRelatorioPrompt(mes, ops, capitalInicial) {
+  const enc = ops.filter(o=>o.status==="ENCERRADA");
+  const abertas = ops.filter(o=>o.status==="ABERTA");
+  const acertos = enc.filter(o=>o.guruAcertou===true).length;
+  const erros = enc.filter(o=>o.guruAcertou===false).length;
+  const taxaAcerto = enc.length > 0 ? ((acertos/enc.length)*100).toFixed(1) : 0;
+  const lucroTotal = enc.reduce((a,o)=>a+parseFloat(o.lucroReais||0),0);
+  const retornoPct = capitalInicial > 0 ? ((lucroTotal/capitalInicial)*100).toFixed(2) : 0;
+  const melhor = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado)>parseFloat(a.resultado||"-999")?o:a,enc[0]) : null;
+  const pior = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado)<parseFloat(a.resultado||"999")?o:a,enc[0]) : null;
+
+  const detalhes = enc.map(o=>
+    o.ticker+": entrada R$"+o.entrada+", saida R$"+o.saida+", resultado "+o.resultado+"%, lucro R$"+o.lucroReais+", motivo: "+o.motivo+", ATLAS acertou: "+o.guruAcertou
+  ).join("
+");
+
+  const abertasInfo = abertas.length > 0 ?
+    "POSICOES AINDA ABERTAS: "+abertas.map(o=>o.ticker+" (entrada R$"+o.entrada+")").join(", ") : "";
+
+  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Gere o relatorio mensal de performance com analise profunda e linguagem acessivel para um investidor iniciante.
+
+"
+    + "MES: "+mes+"
+"
+    + "OPERACOES ENCERRADAS: "+enc.length+"
+"
+    + "ACERTOS: "+acertos+" | ERROS: "+erros+" | TAXA DE ACERTO: "+taxaAcerto+"%
+"
+    + "LUCRO/PREJUIZO TOTAL: R$ "+lucroTotal.toFixed(2)+"
+"
+    + "RETORNO SOBRE CAPITAL: "+retornoPct+"%
+"
+    + "META DO MES: +8%
+"
+    + "META BATIDA: "+(parseFloat(retornoPct)>=8?"SIM":"NAO")+"
+"
+    + (melhor?"MELHOR OPERACAO: "+melhor.ticker+" +"+melhor.resultado+"% (R$"+melhor.lucroReais+")
+":""  )
+    + (pior?"PIOR OPERACAO: "+pior.ticker+" "+pior.resultado+"% (R$"+pior.lucroReais+")
+":"")
+    + (abertasInfo?abertasInfo+"
+":"")
+    + "
+DETALHE DAS OPERACOES:
+"+detalhes
+    + "
+
+Gere um relatorio completo e honesto. Seja direto sobre o que funcionou e o que nao funcionou. Use linguagem simples. Calcule a nota do ATLAS com rigor.
+
+"
+    + "Retorne APENAS JSON:
+"
+    + '{"mes":"","resumo_executivo":"","meta_batida":false,"retorno_real":"","taxa_acerto":"","lucro_total":"","operacoes_total":0,"acertos":0,"erros":0,"melhor_operacao":{"ticker":"","resultado":"","motivo_sucesso":""},"pior_operacao":{"ticker":"","resultado":"","motivo_falha":""},"o_que_funcionou":"","o_que_nao_funcionou":"","erros_cometidos":"","licoes_aprendidas":"","analise_atlas":"analise critica da performance do ATLAS","estrategia_proximo_mes":"","meta_proximo_mes":"+8%","nota_atlas":"A","justificativa_nota":"","mensagem_motivacional":""}';
+}
+
+function renderRelatorioResult(d, stats) {
+  const notaCor = d.nota_atlas==="A"?"var(--green)":d.nota_atlas==="B"?"var(--cyan)":d.nota_atlas==="C"?"var(--yellow)":"var(--red)";
+  const metaCor = d.meta_batida ? "var(--green)" : "var(--red)";
+  const metaEmoji = d.meta_batida ? "BATIDA" : "NAO BATIDA";
+  const lucroCor = parseFloat(String(d.lucro_total||"0").replace(/[^0-9.-]/g,"")) >= 0 ? "var(--green)" : "var(--red)";
+
+  return '<div style="animation:fadeUp .4s ease">'
+
+    // Header cards
+    +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px;">'
+    +[
+      ["MES", d.mes, "var(--txt)"],
+      ["RETORNO REAL", d.retorno_real, lucroCor],
+      ["META +8%", metaEmoji, metaCor],
+      ["TAXA ACERTO", d.taxa_acerto, parseFloat(d.taxa_acerto)>=60?"var(--green)":"var(--red)"],
+      ["NOTA DO ATLAS", d.nota_atlas, notaCor],
+    ].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:16px;text-align:center;">'
+      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">'+k+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:'+c+';">'+String(v||"--")+'</div>'
+      +'</div>').join("")
+    +'</div>'
+
+    // Stats row
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">'
+    +[
+      ["LUCRO TOTAL", d.lucro_total, lucroCor],
+      ["OPERACOES", d.operacoes_total, "var(--txt)"],
+      ["ACERTOS", d.acertos, "var(--green)"],
+      ["ERROS", d.erros, "var(--red)"],
+    ].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:14px;">'
+      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+';">'+String(v||"0")+'</div>'
+      +'</div>').join("")
+    +'</div>'
+
+    // Resumo executivo
+    +'<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:22px;margin-bottom:16px;">'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;">RESUMO EXECUTIVO</div>'
+    +'<div style="font-size:14px;color:var(--sub);line-height:1.8;font-style:italic;">"'+String(d.resumo_executivo||"")+'"</div>'
+    +'</div>'
+
+    // Melhor e pior operacao
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">'
+    +'<div style="background:var(--card);border:1px solid rgba(0,255,136,.3);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--green);margin-bottom:10px;">MELHOR OPERACAO</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:24px;font-weight:700;color:var(--green);margin-bottom:4px;">'+String(d.melhor_operacao?.ticker||"--")+'</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:18px;color:var(--green);margin-bottom:8px;">'+String(d.melhor_operacao?.resultado||"")+'</div>'
+    +'<div style="font-size:11px;color:var(--sub);line-height:1.6;">'+String(d.melhor_operacao?.motivo_sucesso||"")+'</div>'
+    +'</div>'
+    +'<div style="background:var(--card);border:1px solid rgba(255,51,85,.3);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--red);margin-bottom:10px;">PIOR OPERACAO</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:24px;font-weight:700;color:var(--red);margin-bottom:4px;">'+String(d.pior_operacao?.ticker||"--")+'</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:18px;color:var(--red);margin-bottom:8px;">'+String(d.pior_operacao?.resultado||"")+'</div>'
+    +'<div style="font-size:11px;color:var(--sub);line-height:1.6;">'+String(d.pior_operacao?.motivo_falha||"")+'</div>'
+    +'</div>'
+    +'</div>'
+
+    // Analise detalhada
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">'
+    +[
+      ["O QUE FUNCIONOU","var(--green)",d.o_que_funcionou],
+      ["O QUE NAO FUNCIONOU","var(--red)",d.o_que_nao_funcionou],
+      ["ERROS COMETIDOS","var(--yellow)",d.erros_cometidos],
+      ["LICOES APRENDIDAS","var(--cyan)",d.licoes_aprendidas],
+    ].map(([t,c,v])=>'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:'+c+';margin-bottom:10px;">'+t+'</div>'
+      +'<div style="font-size:12px;color:var(--sub);line-height:1.7;">'+String(v||"--")+'</div>'
+      +'</div>').join("")
+    +'</div>'
+
+    // Analise do ATLAS
+    +'<div style="background:rgba(255,204,0,.04);border:1px solid rgba(255,204,0,.2);padding:20px;margin-bottom:16px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:10px;">AUTOCRITICA DO ATLAS</div>'
+    +'<div style="font-size:12px;color:var(--sub);line-height:1.7;">'+String(d.analise_atlas||"")+'</div>'
+    +'</div>'
+
+    // Estrategia proximo mes
+    +'<div style="background:rgba(0,170,255,.05);border:1px solid rgba(0,170,255,.25);padding:20px;margin-bottom:16px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--blue);margin-bottom:10px;">ESTRATEGIA PARA O PROXIMO MES</div>'
+    +'<div style="font-size:12px;color:var(--sub);line-height:1.7;margin-bottom:10px;">'+String(d.estrategia_proximo_mes||"")+'</div>'
+    +'<div style="font-family:monospace;font-size:10px;color:var(--blue);">META: '+String(d.meta_proximo_mes||"+8%")+'</div>'
+    +'</div>'
+
+    // Nota e mensagem
+    +'<div style="display:grid;grid-template-columns:150px 1fr;gap:10px;margin-bottom:20px;">'
+    +'<div style="background:var(--card);border:2px solid '+notaCor+';padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:2px;margin-bottom:8px;">NOTA DO ATLAS</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:72px;font-weight:700;color:'+notaCor+';line-height:1;">'+String(d.nota_atlas||"--")+'</div>'
+    +'<div style="font-size:10px;color:var(--sub);margin-top:8px;line-height:1.5;">'+String(d.justificativa_nota||"")+'</div>'
+    +'</div>'
+    +'<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:22px;display:flex;flex-direction:column;justify-content:center;">'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:12px;">MENSAGEM DO ATLAS PARA VOCE</div>'
+    +'<div style="font-size:14px;color:var(--sub);line-height:1.8;font-style:italic;">"'+String(d.mensagem_motivacional||"")+'"</div>'
+    +'</div>'
+    +'</div>'
+
+    +'</div>';
+}
+
+async function gerarRelatorio() {
+  const sel = document.getElementById("relatorioMes");
+  const mesSel = sel?.value;
+  if (!mesSel || mesSel === "Nenhum mes disponivel") {
+    alert("Nenhuma operacao registrada ainda. Faca operacoes primeiro!");
+    return;
+  }
+
+  const [ano, mes] = mesSel.split("-");
+  const mesNome = new Date(ano, mes-1, 1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+
+  // Filtra operacoes do mes
+  const opsDoMes = historico.filter(h=>{
+    const d = h.dataSaida || h.dataEntrada;
+    if (!d) return false;
+    const [a,m] = d.split("-");
+    return a===ano && m===mes;
+  });
+
+  if (!opsDoMes.length) {
+    alert("Nenhuma operacao encontrada para "+mesNome);
+    return;
+  }
+
+  document.getElementById("emptyRelatorio").style.display = "none";
+  document.getElementById("errRelatorio").style.display = "none";
+  document.getElementById("resultRelatorio").style.display = "none";
+  document.getElementById("loadRelatorio").style.display = "flex";
+  document.getElementById("stepsRelatorio").innerHTML = [
+    "Calculando resultados...",
+    "Analisando operacoes...",
+    "Avaliando performance do ATLAS...",
+    "Gerando relatorio com IA...",
+    "Calculando nota final..."
+  ].map((s,i)=>'<div style="color:var(--green);font-family:monospace;font-size:10px;">'+( i===0?">":".")+" "+s+'</div>').join("");
+
+  // Calcula capital inicial (valor da carteira no inicio do mes)
+  const capitalInicial = portfolio.reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.price)||0),0) || 5000;
+
+  try {
+    const data = await callClaude(buildRelatorioPrompt(mesNome, opsDoMes, capitalInicial));
+    document.getElementById("loadRelatorio").style.display = "none";
+    document.getElementById("resultRelatorio").innerHTML = renderRelatorioResult(data, {});
+    document.getElementById("resultRelatorio").style.display = "block";
+  } catch(e) {
+    document.getElementById("loadRelatorio").style.display = "none";
+    document.getElementById("errRelatorio").textContent = "ERRO: "+e.message;
+    document.getElementById("errRelatorio").style.display = "block";
+  }
+}
+
 </script>
 </body>
 </html>
