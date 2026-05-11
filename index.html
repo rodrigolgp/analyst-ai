@@ -393,15 +393,20 @@ function updateProfileBar() {
   const ibovEl = document.getElementById("benchIBOV");
   const cdiEl = document.getElementById("benchCDI");
   if (ibovEl) {
-    const c = benchmark.ibovespa.var_dia >= 0 ? "var(--green)" : "var(--red)";
+    const v = parseFloat(benchmark.ibovespa.var_dia).toFixed(2);
+    const c = parseFloat(v) >= 0 ? "var(--green)" : "var(--red)";
     ibovEl.innerHTML = '<span style="color:var(--dim);font-size:8px;">IBOV HOJE</span><br>'
       +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+c+'">'
-      +(benchmark.ibovespa.var_dia>=0?"+":"")+benchmark.ibovespa.var_dia+'%</span>';
+      +(parseFloat(v)>=0?"+":"")+v+'%</span>';
   }
   if (cdiEl) {
-    cdiEl.innerHTML = '<span style="color:var(--dim);font-size:8px;">CDI MES</span><br>'
+    const mes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
+    const ano = parseFloat(benchmark.cdi.var_ano).toFixed(2);
+    cdiEl.innerHTML = '<span style="color:var(--dim);font-size:8px;">CDI ACUMULADO</span><br>'
       +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--yellow)">+'
-      +benchmark.cdi.var_mes+'%</span>';
+      +mes+'% mes</span><br>'
+      +'<span style="font-family:monospace;font-size:9px;color:var(--dim)">+'
+      +ano+'% ano</span>';
   }
 }
 
