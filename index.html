@@ -165,9 +165,18 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
       <div style="background:var(--card);border:1px solid var(--hi);padding:22px;">
         <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:6px;">GURU INVESTIDOR</div>
         <div style="font-family:monospace;font-size:10px;color:var(--dim);line-height:1.8;margin-bottom:16px;">Seu gestor pessoal. Decide o que comprar, quanto, quando vender.</div>
-        <div style="margin-bottom:12px;">
-          <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">SEU CAPITAL (R$)</div>
-          <input type="number" id="guruCapital" value="5000" step="100" style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:var(--green);"/>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div>
+            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">NOVO APORTE (R$)</div>
+            <input type="number" id="guruAporte" value="0" step="100" style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;color:var(--green);width:100%;background:var(--card);border:1px solid var(--hi);padding:10px 14px;outline:none;color:var(--green);"/>
+          </div>
+          <div>
+            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">CAIXA NO BANCO (R$)</div>
+            <input type="number" id="guruCaixa" value="0" step="100" style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;width:100%;background:var(--card);border:1px solid var(--hi);padding:10px 14px;outline:none;color:var(--yellow);"/>
+          </div>
+        </div>
+        <div id="guruCapitalInfo" style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:12px;padding:10px;background:var(--bg);border:1px solid var(--border);line-height:2;">
+          Carregando carteira...
         </div>
         <button class="btn" id="btnGuruMontar" onclick="guruMontar()" style="width:100%;margin-bottom:8px;">MONTAR MINHA CARTEIRA</button>
         <button class="btn-outline" id="btnGuruBriefing" onclick="guruBriefing()" style="width:100%;">BRIEFING DO DIA</button>
@@ -404,6 +413,32 @@ async function dbSet(key, data) {
     console.log("dbSet erro ("+key+"):", e.message);
     return false;
   }
+}
+
+// ─── INFO CAPITAL GURU ────────────────────────────────────────
+function atualizarInfoCapital() {
+  const infoEl = document.getElementById("guruCapitalInfo");
+  if (!infoEl) return;
+  if (!portfolio.length) {
+    infoEl.innerHTML = "Carteira vazia - o ATLAS vai montar do zero.<br>"
+      + "Informe o capital que deseja investir no campo acima.";
+    // If portfolio empty, enable capital input
+    const aporteEl = document.getElementById("guruAporte");
+    if (aporteEl && aporteEl.value === "0") aporteEl.value = "5000";
+    return;
+  }
+  const valorCarteira = portfolio.reduce((a,p)=>{
+    const q = portfolioQuotes[p.ticker];
+    const preco = q ? q.price : parseFloat(p.price)||0;
+    return a + (parseFloat(p.qty)||0) * preco;
+  }, 0);
+  const aporte = parseFloat(document.getElementById("guruAporte")?.value) || 0;
+  const caixaBanco = parseFloat(document.getElementById("guruCaixa")?.value) || 0;
+  const total = valorCarteira + aporte + caixaBanco;
+  infoEl.innerHTML = "Valor da carteira atual: <span style='color:var(--blue)'>R$ "+valorCarteira.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+    + "Novo aporte: <span style='color:var(--green)'>R$ "+aporte.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+    + "Caixa no banco: <span style='color:var(--yellow)'>R$ "+caixaBanco.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+    + "Capital total para o ATLAS: <span style='color:var(--cyan);font-weight:700'>R$ "+total.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span>";
 }
 
 // ─── INDICADORES MATEMATICOS ──────────────────────────────────
@@ -1012,7 +1047,23 @@ function renderBriefing(d) {
 }
 
 async function guruMontar() {
-  const cap = parseFloat(document.getElementById("guruCapital").value) || 5000;
+  // Capital total = valor atual da carteira + novo aporte
+  const aporte = parseFloat(document.getElementById("guruAporte").value) || 0;
+  const caixaBanco = parseFloat(document.getElementById("guruCaixa").value) || 0;
+  const valorCarteira = portfolio.reduce((a,p)=>{
+    const q = portfolioQuotes[p.ticker];
+    const preco = q ? q.price : parseFloat(p.price)||0;
+    return a + (parseFloat(p.qty)||0) * preco;
+  }, 0);
+  const cap = valorCarteira + aporte + caixaBanco;
+  // Atualiza info visual
+  const infoEl = document.getElementById("guruCapitalInfo");
+  if (infoEl) {
+    infoEl.innerHTML = "Valor da carteira atual: <span style='color:var(--blue)'>R$ "+valorCarteira.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+      + "Novo aporte: <span style='color:var(--green)'>R$ "+aporte.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+      + "Caixa no banco: <span style='color:var(--yellow)'>R$ "+caixaBanco.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+      + "Capital total para o ATLAS: <span style='color:var(--cyan);font-weight:700'>R$ "+cap.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span>";
+  }
   document.getElementById("emptyG").style.display = "none";
   document.getElementById("errG").style.display = "none";
   document.getElementById("resG").style.display = "none";
@@ -1046,7 +1097,14 @@ async function guruMontar() {
 }
 
 async function guruBriefing() {
-  const cap = parseFloat(document.getElementById("guruCapital").value) || 5000;
+  const aporte = parseFloat(document.getElementById("guruAporte").value) || 0;
+  const caixaBanco = parseFloat(document.getElementById("guruCaixa").value) || 0;
+  const valorCarteira = portfolio.reduce((a,p)=>{
+    const q = portfolioQuotes[p.ticker];
+    const preco = q ? q.price : parseFloat(p.price)||0;
+    return a + (parseFloat(p.qty)||0) * preco;
+  }, 0);
+  const cap = valorCarteira + aporte + caixaBanco;
   document.getElementById("emptyG").style.display = "none";
   document.getElementById("errG").style.display = "none";
   document.getElementById("resG").style.display = "none";
