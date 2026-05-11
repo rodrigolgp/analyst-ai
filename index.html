@@ -406,6 +406,41 @@ async function dbSet(key, data) {
   }
 }
 
+// ─── INDICADORES MATEMATICOS ──────────────────────────────────
+async function fetchIndicators(ticker) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const r = await fetch("/api/indicators?ticker="+ticker, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) {
+    console.log("Indicators error:", e.message);
+    return null;
+  }
+}
+
+function buildIndicatorsContext(ind) {
+  if (!ind) return "INDICADORES: nao disponivel";
+  const i = ind.indicadores;
+  return "INDICADORES MATEMATICOS CALCULADOS (200 dias de historico real):\n"
+    + "TENDENCIA: "+ind.tendencia+"\n"
+    + "SINAL TECNICO: "+ind.sinal_tecnico+" ("+ind.pontuacao_tecnica+"/11 pontos)\n"
+    + "RSI(14): "+i.rsi.rsi14+" - "+i.rsi.zona+"\n"
+    + "RSI(9): "+i.rsi.rsi9+"\n"
+    + "MACD: "+i.macd?.macd+" | Signal: "+i.macd?.signal+" | Histograma: "+i.macd?.histogram+" | Tendencia: "+i.macd?.trend+" | Cruzamento: "+i.macd?.crossover+"\n"
+    + "MM9: "+i.medias.mm9+" | MM21: "+i.medias.mm21+" | MM50: "+i.medias.mm50+" | MM200: "+i.medias.mm200+"\n"
+    + "EMA9: "+i.medias.ema9+" | EMA21: "+i.medias.ema21+"\n"
+    + "Preco acima MM50: "+i.medias.acimaMM50+" | Preco acima MM200: "+i.medias.acimaMM200+"\n"
+    + "BOLLINGER: Superior="+i.bollinger?.upper+" | Medio="+i.bollinger?.middle+" | Inferior="+i.bollinger?.lower+" | %B="+i.bollinger?.pctB+" | Posicao: "+i.bollinger?.position+"\n"
+    + "ATR(14): "+i.atr+" ("+ind.gestao_risco.atr_pct+"% do preco)\n"
+    + "VOLUME: Atual="+i.volume?.atual?.toLocaleString()+" | Media20="+i.volume?.media20?.toLocaleString()+" | Ratio="+i.volume?.ratio+"x | Status: "+i.volume?.status+"\n"
+    + "SUPORTE: "+ind.suporte_resistencia.suporte+" ("+ind.suporte_resistencia.distSuport+"% abaixo) | RESISTENCIA: "+ind.suporte_resistencia.resistencia+" ("+ind.suporte_resistencia.distResist+"% acima)\n"
+    + "STOP MATEMATICO (2x ATR): "+ind.gestao_risco.stop_sugerido+"\n"
+    + "ALVO MATEMATICO (3x ATR): "+ind.gestao_risco.alvo_sugerido;
+}
+
 // ─── COTACOES DA CARTEIRA ─────────────────────────────────────
 let portfolioQuotes = {};
 
@@ -535,7 +570,7 @@ const sec = l => '<div class="sec"><span class="sec-label">'+l+'</span><div clas
 const steps = (arr,cur) => arr.map((s,i) => '<div style="color:'+(i<cur?"var(--dim)":i===cur?"var(--green)":"var(--border)")+'">'+( i<cur?"v":i===cur?">":".")+" "+s+'</div>').join("");
 
 // ─── RENDER ANALISE ───────────────────────────────────────────
-function renderResult(d, quote) {
+function renderResult(d, quote, indicators) {
   const sig = d.sinal||"AGUARDA";
   const sigC = sigCol(sig);
   const cons = d.sis ? Object.values(d.sis).filter(s=>s.v===sig).length : 0;
@@ -652,15 +687,49 @@ function renderResult(d, quote) {
     +'<div style="font-family:monospace;font-size:9px;color:'+(d.ok?"var(--green)":"var(--red)")+';letter-spacing:1px;margin-bottom:6px">'+(d.ok?"OK - ADEQUADO AO SEU PERFIL":"ATENCAO - FORA DO PERFIL")+'</div>'
     +'<div style="font-size:12px;color:var(--sub);line-height:1.6">'+String(d.just||"")+'</div></div>';
 
+  // Indicadores matematicos card
+  const indCard = indicators ? '<div style="background:var(--card);border:1px solid var(--hi);padding:20px;margin-bottom:10px;">'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">INDICADORES MATEMATICOS CALCULADOS</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">'+
+    [
+      ["RSI(14)", indicators.indicadores.rsi.rsi14, indicators.indicadores.rsi.zona==="SOBRECOMPRADO"?"var(--red)":indicators.indicadores.rsi.zona==="SOBREVENDIDO"?"var(--green)":"var(--yellow)"],
+      ["TENDENCIA", indicators.tendencia, indicators.tendencia.includes("ALTA")?"var(--green)":"indicators.tendencia.includes("BAIXA")?"var(--red)":"var(--yellow)""],
+      ["SINAL TEC.", indicators.sinal_tecnico, indicators.sinal_tecnico.includes("COMPRA")?"var(--green)":"var(--red)"],
+      ["VOLUME", indicators.indicadores.volume?.status, indicators.indicadores.volume?.status==="MUITO_ACIMA"||indicators.indicadores.volume?.status==="ACIMA"?"var(--green)":"var(--dim)"],
+      ["MACD", indicators.indicadores.macd?.trend, indicators.indicadores.macd?.trend==="ALTA"?"var(--green)":"var(--red)"],
+      ["BOLLINGER", indicators.indicadores.bollinger?.position?.replace(/_/g," "), indicators.indicadores.bollinger?.position==="DENTRO_DAS_BANDAS"?"var(--green)":"var(--yellow)"],
+      ["ATR(14)", indicators.indicadores.atr, "var(--txt)"],
+      ["ACIMA MM50", indicators.indicadores.medias.acimaMM50?"SIM":"NAO", indicators.indicadores.medias.acimaMM50?"var(--green)":"var(--red)"],
+    ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+c+'">'+String(v||"--")+'</div></div>'
+    ).join("")+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">'+
+    [
+      ["MM9", indicators.indicadores.medias.mm9,"var(--sub)"],
+      ["MM21", indicators.indicadores.medias.mm21,"var(--sub)"],
+      ["MM50", indicators.indicadores.medias.mm50,"var(--sub)"],
+      ["MM200", indicators.indicadores.medias.mm200,"var(--sub)"],
+      ["SUP.", indicators.suporte_resistencia.suporte,"var(--green)"],
+      ["RESIST.", indicators.suporte_resistencia.resistencia,"var(--red)"],
+      ["STOP ATR", indicators.gestao_risco.stop_sugerido,"var(--red)"],
+      ["ALVO ATR", indicators.gestao_risco.alvo_sugerido,"var(--green)"],
+    ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:600;color:'+c+'">'+String(v||"--")+'</div></div>'
+    ).join("")+
+    '</div></div>' : "";
+
   const res = '<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:20px;margin-bottom:20px;font-size:13px;color:var(--sub);line-height:1.8;font-style:italic;">'
     +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;font-style:normal">RESUMO EXECUTIVO</div>'
     +'"'+String(d.res||"")+'"\n</div>';
 
-  return qBadge + hero + sis + trav + temp + tecFun + catRis + cen + said + prof + res;
+  return qBadge + hero + sis + trav + temp + indCard + tecFun + catRis + cen + said + prof + res;
 }
 
 // ─── PROMPTS ──────────────────────────────────────────────────
-function buildAnalyzePrompt(ticker, quote, manualPrice) {
+function buildAnalyzePrompt(ticker, quote, manualPrice, indicators) {
   const pi = manualPrice
     ? "PRECO ATUAL (manual): "+(quote&&quote.currency||"R$")+" "+manualPrice
     : quote
@@ -711,15 +780,20 @@ async function analyze(tickerOverride) {
   document.getElementById("stepsA").innerHTML = steps(STEPS_A, 0);
 
   try {
-    let quote = await fetchQuote(ticker);
+    // Busca cotacao e indicadores em paralelo
+    const [quoteRaw, indicators] = await Promise.all([
+      fetchQuote(ticker),
+      fetchIndicators(ticker)
+    ]);
+    let quote = quoteRaw;
     if (mp) quote = { price:mp, change:quote&&quote.change||"0.00", high:quote&&quote.high||mp, low:quote&&quote.low||mp, volume:quote&&quote.volume||0, prevClose:quote&&quote.prevClose||mp, market:quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"), currency:quote&&quote.currency||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"R$":"US$"), name:quote&&quote.name||ticker, source:"Manual" };
-    const data = await callClaude(buildAnalyzePrompt(ticker, quote, mp));
+    const data = await callClaude(buildAnalyzePrompt(ticker, quote, mp, indicators));
     historyArr = [ticker, ...historyArr.filter(x=>x!==ticker)].slice(0,8);
     localStorage.setItem("ai_history", JSON.stringify(historyArr));
     renderHistory();
     clearInterval(iv);
     document.getElementById("loadA").style.display = "none";
-    document.getElementById("resA").innerHTML = renderResult(data, quote);
+    document.getElementById("resA").innerHTML = renderResult(data, quote, indicators);
     document.getElementById("resA").style.display = "block";
   } catch(e) {
     clearInterval(iv);
