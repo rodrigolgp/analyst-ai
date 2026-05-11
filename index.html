@@ -343,9 +343,34 @@ let historico = [];
 
 // ─── TICKER STRIP ─────────────────────────────────────────────
 (function(){
-  const items = ["PETR4","VALE3","ITUB4","WEGE3","AAPL","NVDA","MSFT","IBOV","SP500","SELIC","DOLAR","BTC","IVVB11","KNRI11","BBAS3","BLAU3"];
-  const html = [...items,...items].map(t => '<span style="margin:0 22px;color:var(--sub)">@ '+t+'</span>').join("");
+  // Inicia com placeholders
+  const items = ["PETR4","VALE3","ITUB4","BBAS3","WEGE3","AAPL","NVDA","MSFT","AMZN","META","TSLA","BBDC4","PRIO3","BPAC11","GOOGL","JPM"];
+  const html = [...items,...items].map(t => '<span style="margin:0 28px;color:var(--dim);font-family:monospace;font-size:10px;">@ '+t+'</span>').join("");
   document.getElementById("tickerInner").innerHTML = html;
+
+  // Busca precos reais em background
+  async function updateTicker() {
+    try {
+      const r = await fetch("/api/tickers");
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.tickers || !d.tickers.length) return;
+      const html = [...d.tickers, ...d.tickers].map(t => {
+        const color = t.up ? "var(--green)" : "var(--red)";
+        const arrow = t.up ? "+" : "";
+        return '<span style="margin:0 28px;font-family:monospace;font-size:10px;">'+
+          '<span style="color:var(--cyan);">'+t.ticker+'</span> '+
+          '<span style="color:var(--txt);">'+t.currency+t.price.toFixed(2)+'</span> '+
+          '<span style="color:'+color+';">'+arrow+t.change+'%</span>'+
+          '</span>';
+      }).join("");
+      document.getElementById("tickerInner").innerHTML = html;
+    } catch(e) {}
+  }
+
+  // Atualiza imediatamente e a cada 5 minutos
+  setTimeout(updateTicker, 2000);
+  setInterval(updateTicker, 5 * 60 * 1000);
 })();
 
 // ─── TABS ─────────────────────────────────────────────────────
