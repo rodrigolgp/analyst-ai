@@ -386,25 +386,36 @@ async function updateBenchmarkCard() {
   const cartVar = totalInv > 0 ? ((totalAtual - totalInv) / totalInv * 100).toFixed(2) : "0.00";
   const cartPL = (totalAtual - totalInv).toFixed(2);
 
+  // Calcula resultado do dia (vs fechamento de ontem)
+  const totalOntem = portfolio.reduce((a,p)=>{
+    const q = portfolioQuotes[p.ticker];
+    const prevClose = q && q.prevClose ? q.prevClose : (q ? q.price : parseFloat(p.price)||0);
+    return a + (parseFloat(p.qty)||0) * prevClose;
+  }, 0);
+  const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
+  const plDia = (totalAtual - totalOntem).toFixed(2);
+
   // Atualiza barra de perfil
   const barEl = document.getElementById("benchCarteiraBar");
   if (barEl && totalInv > 0) {
-    const c = parseFloat(cartVar) >= 0 ? "var(--green)" : "var(--red)";
+    const cTotal = parseFloat(cartVar) >= 0 ? "var(--green)" : "var(--red)";
+    const cDia = parseFloat(varDia) >= 0 ? "var(--green)" : "var(--red)";
     barEl.innerHTML = '<div class="pf-key">MINHA CARTEIRA</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+c+'">'+
-      (parseFloat(cartVar)>=0?"+":"")+cartVar+'%</div>'
-      +'<div style="font-family:monospace;font-size:8px;color:'+c+'">'+
-      (parseFloat(cartPL)>=0?"+ R$ ":"- R$ ")+Math.abs(cartPL)+'</div>';
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+cTotal+'">'+
+      (parseFloat(cartVar)>=0?"+":"")+cartVar+'% total</div>'
+      +'<div style="font-family:monospace;font-size:9px;color:'+cDia+'">'+
+      (parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div>';
   }
 
   const benchEl = document.getElementById("benchmarkCarteira");
   if (!benchEl || !benchmark) return;
   const ibovMes = parseFloat(benchmark.ibovespa.var_mes).toFixed(2);
+  const ibovDia = parseFloat(benchmark.ibovespa.var_dia).toFixed(2);
   const cdiMes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
   const items = [
-    ["SUA CARTEIRA", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "Desde entrada"],
-    ["IBOVESPA MES", (parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%", parseFloat(ibovMes)>=0?"var(--green)":"var(--red)", "Mai/2026"],
-    ["CDI MES", "+"+cdiMes+"%", "var(--yellow)", "Mai/2026"],
+    ["SUA CARTEIRA", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", (parseFloat(varDia)>=0?"+":"")+varDia+"% hoje"],
+    ["IBOVESPA", (parseFloat(ibovMes)>=0?"+":"")+ibovMes+"% mes", parseFloat(ibovMes)>=0?"var(--green)":"var(--red)", (parseFloat(ibovDia)>=0?"+":"")+ibovDia+"% hoje"],
+    ["CDI", "+"+cdiMes+"% mes", "var(--yellow)", "+"+parseFloat(benchmark.cdi.var_dia).toFixed(4)+"% hoje"],
   ];
   benchEl.innerHTML = items.map(([k,v,c,sub])=>
     '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
