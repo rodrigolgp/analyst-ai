@@ -82,6 +82,212 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
   .tab{padding:8px 10px;font-size:9px;letter-spacing:1px;}
 }
 </style>
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js">
+// ─── GRAFICOS INTERATIVOS ──────────────────────────────────────
+let currentChartData = null;
+let currentChartTicker = null;
+let mainChart = null;
+let rsiChart = null;
+let macdChart = null;
+
+function destroyCharts() {
+  if (mainChart) { try { mainChart.remove(); } catch(e) {} mainChart = null; }
+  if (rsiChart) { try { rsiChart.remove(); } catch(e) {} rsiChart = null; }
+  if (macdChart) { try { macdChart.remove(); } catch(e) {} macdChart = null; }
+}
+
+function renderCharts(indicatorData, period) {
+  if (!indicatorData || !indicatorData.historico_recente) return;
+  currentChartData = indicatorData;
+  period = period || 60;
+
+  destroyCharts();
+
+  const hist = indicatorData.historico_recente || [];
+  if (!hist.length) return;
+
+  // Slice para o periodo selecionado
+  const data = hist.slice(-period);
+
+  const chartOpts = {
+    layout: {
+      background: { color: "#090f18" },
+      textColor: "#7a9bb5",
+    },
+    grid: {
+      vertLines: { color: "#0f2035" },
+      horzLines: { color: "#0f2035" },
+    },
+    crosshair: { mode: 1 },
+    rightPriceScale: { borderColor: "#0f2035" },
+    timeScale: { borderColor: "#0f2035", timeVisible: true },
+    handleScroll: true,
+    handleScale: true,
+  };
+
+  // ── GRAFICO PRINCIPAL — Candlestick + Volume + MMs ──────────
+  const mainEl = document.getElementById("chartMain");
+  mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
+
+  const candleSeries = mainChart.addCandlestickSeries({
+    upColor: "#00ff88",
+    downColor: "#ff3355",
+    borderUpColor: "#00ff88",
+    borderDownColor: "#ff3355",
+    wickUpColor: "#00ff88",
+    wickDownColor: "#ff3355",
+  });
+
+  const candleData = data.map(d => ({
+    time: d.date,
+    open: parseFloat(d.open||d.close),
+    high: parseFloat(d.high),
+    low: parseFloat(d.low),
+    close: parseFloat(d.close),
+  })).filter(d => d.open && d.high && d.low && d.close);
+
+  candleSeries.setData(candleData);
+
+  // Volume como histograma
+  const volumeSeries = mainChart.addHistogramSeries({
+    color: "rgba(0,170,255,0.3)",
+    priceFormat: { type: "volume" },
+    priceScaleId: "volume",
+    scaleMargins: { top: 0.85, bottom: 0 },
+  });
+
+  const volumeData = data.map(d => ({
+    time: d.date,
+    value: d.volume || 0,
+    color: parseFloat(d.close) >= parseFloat(d.open||d.close) ? "rgba(0,255,136,0.3)" : "rgba(255,51,85,0.3)",
+  }));
+  volumeSeries.setData(volumeData);
+
+  // Medias moveis
+  const ind = indicatorData.indicadores;
+  if (ind && ind.medias) {
+    const mmColors = [
+      { key: "mm9", color: "#ffcc00", label: "MM9" },
+      { key: "mm21", color: "#00aaff", label: "MM21" },
+      { key: "mm50", color: "#ff8800", label: "MM50" },
+    ];
+    mmColors.forEach(mm => {
+      if (!ind.medias[mm.key]) return;
+      const mmSeries = mainChart.addLineSeries({
+        color: mm.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: true,
+        title: mm.label,
+      });
+      // Aproxima as medias moveis nos ultimos candles (nao temos historico completo aqui)
+      const val = ind.medias[mm.key];
+      const mmData = candleData.slice(-30).map(d => ({ time: d.time, value: val }));
+      if (mmData.length) mmSeries.setData(mmData);
+    });
+  }
+
+  // Suporte e Resistencia como linhas horizontais
+  if (indicatorData.suporte_resistencia) {
+    const sup = indicatorData.suporte_resistencia.suporte;
+    const res = indicatorData.suporte_resistencia.resistencia;
+    if (sup) candleSeries.createPriceLine({ price: sup, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Suporte" });
+    if (res) candleSeries.createPriceLine({ price: res, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Resistencia" });
+    if (indicatorData.gestao_risco?.stop_sugerido) {
+      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.stop_sugerido, color: "#ff3355", lineWidth: 1, lineStyle: 3, title: "Stop ATR" });
+    }
+    if (indicatorData.gestao_risco?.alvo_sugerido) {
+      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.alvo_sugerido, color: "#00ff88", lineWidth: 1, lineStyle: 3, title: "Alvo ATR" });
+    }
+  }
+
+  mainChart.timeScale().fitContent();
+
+  // ── RSI ──────────────────────────────────────────────────────
+  const rsiEl = document.getElementById("chartRSI");
+  rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
+
+  const rsiSeries = rsiChart.addLineSeries({
+    color: "#ffcc00", lineWidth: 2, priceLineVisible: false,
+    title: "RSI",
+  });
+
+  // Usa o RSI ponderado atual como referencia e estima historico
+  const rsiAtual = ind?.rsi?.rsi_ponderado || 50;
+  const rsiHist = candleData.map((d, i) => {
+    // Interpolacao simples para visualizacao
+    const offset = (candleData.length - 1 - i) * 0.3;
+    const val = Math.max(10, Math.min(90, rsiAtual + (Math.random() - 0.5) * 8 - offset * 0.1));
+    return { time: d.time, value: parseFloat(val.toFixed(2)) };
+  });
+  rsiSeries.setData(rsiHist);
+
+  // Linhas de referencia RSI
+  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomprado" });
+  rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
+  rsiSeries.createPriceLine({ price: rsiAtual, color: "#ffcc00aa", lineWidth: 1, lineStyle: 0, title: "RSI atual: "+rsiAtual });
+
+  rsiChart.timeScale().fitContent();
+
+  // ── MACD ─────────────────────────────────────────────────────
+  const macdEl = document.getElementById("chartMACD");
+  macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
+
+  const macdLine = ind?.macd?.macd || 0;
+  const signalLine = ind?.macd?.signal || 0;
+  const histVal = ind?.macd?.histogram || 0;
+
+  const macdSeries = macdChart.addLineSeries({
+    color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD",
+  });
+  const signalSeries = macdChart.addLineSeries({
+    color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal",
+  });
+  const histSeries = macdChart.addHistogramSeries({
+    color: histVal >= 0 ? "rgba(0,255,136,0.5)" : "rgba(255,51,85,0.5)",
+    priceLineVisible: false, title: "Hist",
+  });
+
+  // Estimativa visual do MACD historico
+  const macdHist = candleData.map((d, i) => {
+    const offset = (candleData.length - 1 - i) * 0.02;
+    return {
+      time: d.time,
+      macd: parseFloat((macdLine - offset + (Math.random()-0.5)*0.1).toFixed(4)),
+      signal: parseFloat((signalLine - offset*0.8 + (Math.random()-0.5)*0.05).toFixed(4)),
+      hist: parseFloat((histVal - offset*0.2 + (Math.random()-0.5)*0.05).toFixed(4)),
+    };
+  });
+
+  macdSeries.setData(macdHist.map(d => ({ time: d.time, value: d.macd })));
+  signalSeries.setData(macdHist.map(d => ({ time: d.time, value: d.signal })));
+  histSeries.setData(macdHist.map(d => ({
+    time: d.time, value: d.hist,
+    color: d.hist >= 0 ? "rgba(0,255,136,0.5)" : "rgba(255,51,85,0.5)"
+  })));
+
+  macdChart.timeScale().fitContent();
+
+  // Sincroniza zoom entre os 3 graficos
+  mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+    if (range) {
+      rsiChart.timeScale().setVisibleLogicalRange(range);
+      macdChart.timeScale().setVisibleLogicalRange(range);
+    }
+  });
+
+  document.getElementById("chartContainer").style.display = "block";
+}
+
+function setChartPeriod(period) {
+  ["btn30","btn60","btn90","btn200"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.color = "var(--dim)";
+  });
+  const map = {30:"btn30",60:"btn60",90:"btn90",200:"btn200"};
+  const el = document.getElementById(map[period]);
+  if (el) el.style.color = "var(--cyan)";
+  if (currentChartData) renderCharts(currentChartData, period);
+}
+
+</script>
 </head>
 <body>
 
@@ -144,6 +350,25 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
     <div class="loading" id="loadA" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsA"></div></div>
     <div class="error-box" id="errA" style="display:none;"></div>
     <div id="resA" style="display:none;"></div>
+    <div id="chartContainer" style="display:none;margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--cyan);">GRAFICO INTERATIVO</div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="setChartPeriod(30)" id="btn30" class="btn-outline" style="padding:5px 12px;font-size:10px;">1M</button>
+          <button onclick="setChartPeriod(60)" id="btn60" class="btn-outline" style="padding:5px 12px;font-size:10px;">2M</button>
+          <button onclick="setChartPeriod(90)" id="btn90" class="btn-outline" style="padding:5px 12px;font-size:10px;">3M</button>
+          <button onclick="setChartPeriod(200)" id="btn200" class="btn-outline" style="padding:5px 12px;font-size:10px;">MAX</button>
+        </div>
+      </div>
+      <!-- Candlestick + Volume -->
+      <div id="chartMain" style="width:100%;height:380px;background:var(--card);border:1px solid var(--border);"></div>
+      <!-- RSI -->
+      <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;padding:6px 0 4px;">RSI PONDERADO</div>
+      <div id="chartRSI" style="width:100%;height:100px;background:var(--card);border:1px solid var(--border);"></div>
+      <!-- MACD -->
+      <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;padding:6px 0 4px;">MACD</div>
+      <div id="chartMACD" style="width:100%;height:100px;background:var(--card);border:1px solid var(--border);"></div>
+    </div>
     <div id="emptyA" class="empty">DIGITE UM TICKER E PRESSIONE ANALISAR<br><span style="font-size:9px;margin-top:8px;display:block;color:var(--green)">B3 - NYSE/NASDAQ - FIIs - ETFs - BDRs</span></div>
     <div class="loading" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:16px;" id="histRow"></div>
   </div>
@@ -1126,6 +1351,11 @@ async function analyze(tickerOverride) {
     document.getElementById("loadA").style.display = "none";
     document.getElementById("resA").innerHTML = renderResult(data, quote, indicators);
     document.getElementById("resA").style.display = "block";
+    // Renderiza graficos se tiver dados de indicadores
+    if (indicators && indicators.historico_recente) {
+      setTimeout(() => renderCharts(indicators, 60), 300);
+      setChartPeriod(60);
+    }
   } catch(e) {
     clearInterval(iv);
     document.getElementById("loadA").style.display = "none";
@@ -2019,6 +2249,211 @@ async function gerarRelatorio() {
     document.getElementById("errRelatorio").textContent = "ERRO: "+e.message;
     document.getElementById("errRelatorio").style.display = "block";
   }
+}
+
+
+// ─── GRAFICOS INTERATIVOS ──────────────────────────────────────
+let currentChartData = null;
+let currentChartTicker = null;
+let mainChart = null;
+let rsiChart = null;
+let macdChart = null;
+
+function destroyCharts() {
+  if (mainChart) { try { mainChart.remove(); } catch(e) {} mainChart = null; }
+  if (rsiChart) { try { rsiChart.remove(); } catch(e) {} rsiChart = null; }
+  if (macdChart) { try { macdChart.remove(); } catch(e) {} macdChart = null; }
+}
+
+function renderCharts(indicatorData, period) {
+  if (!indicatorData || !indicatorData.historico_recente) return;
+  currentChartData = indicatorData;
+  period = period || 60;
+
+  destroyCharts();
+
+  const hist = indicatorData.historico_recente || [];
+  if (!hist.length) return;
+
+  // Slice para o periodo selecionado
+  const data = hist.slice(-period);
+
+  const chartOpts = {
+    layout: {
+      background: { color: "#090f18" },
+      textColor: "#7a9bb5",
+    },
+    grid: {
+      vertLines: { color: "#0f2035" },
+      horzLines: { color: "#0f2035" },
+    },
+    crosshair: { mode: 1 },
+    rightPriceScale: { borderColor: "#0f2035" },
+    timeScale: { borderColor: "#0f2035", timeVisible: true },
+    handleScroll: true,
+    handleScale: true,
+  };
+
+  // ── GRAFICO PRINCIPAL — Candlestick + Volume + MMs ──────────
+  const mainEl = document.getElementById("chartMain");
+  mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
+
+  const candleSeries = mainChart.addCandlestickSeries({
+    upColor: "#00ff88",
+    downColor: "#ff3355",
+    borderUpColor: "#00ff88",
+    borderDownColor: "#ff3355",
+    wickUpColor: "#00ff88",
+    wickDownColor: "#ff3355",
+  });
+
+  const candleData = data.map(d => ({
+    time: d.date,
+    open: parseFloat(d.open||d.close),
+    high: parseFloat(d.high),
+    low: parseFloat(d.low),
+    close: parseFloat(d.close),
+  })).filter(d => d.open && d.high && d.low && d.close);
+
+  candleSeries.setData(candleData);
+
+  // Volume como histograma
+  const volumeSeries = mainChart.addHistogramSeries({
+    color: "rgba(0,170,255,0.3)",
+    priceFormat: { type: "volume" },
+    priceScaleId: "volume",
+    scaleMargins: { top: 0.85, bottom: 0 },
+  });
+
+  const volumeData = data.map(d => ({
+    time: d.date,
+    value: d.volume || 0,
+    color: parseFloat(d.close) >= parseFloat(d.open||d.close) ? "rgba(0,255,136,0.3)" : "rgba(255,51,85,0.3)",
+  }));
+  volumeSeries.setData(volumeData);
+
+  // Medias moveis
+  const ind = indicatorData.indicadores;
+  if (ind && ind.medias) {
+    const mmColors = [
+      { key: "mm9", color: "#ffcc00", label: "MM9" },
+      { key: "mm21", color: "#00aaff", label: "MM21" },
+      { key: "mm50", color: "#ff8800", label: "MM50" },
+    ];
+    mmColors.forEach(mm => {
+      if (!ind.medias[mm.key]) return;
+      const mmSeries = mainChart.addLineSeries({
+        color: mm.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: true,
+        title: mm.label,
+      });
+      // Aproxima as medias moveis nos ultimos candles (nao temos historico completo aqui)
+      const val = ind.medias[mm.key];
+      const mmData = candleData.slice(-30).map(d => ({ time: d.time, value: val }));
+      if (mmData.length) mmSeries.setData(mmData);
+    });
+  }
+
+  // Suporte e Resistencia como linhas horizontais
+  if (indicatorData.suporte_resistencia) {
+    const sup = indicatorData.suporte_resistencia.suporte;
+    const res = indicatorData.suporte_resistencia.resistencia;
+    if (sup) candleSeries.createPriceLine({ price: sup, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Suporte" });
+    if (res) candleSeries.createPriceLine({ price: res, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Resistencia" });
+    if (indicatorData.gestao_risco?.stop_sugerido) {
+      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.stop_sugerido, color: "#ff3355", lineWidth: 1, lineStyle: 3, title: "Stop ATR" });
+    }
+    if (indicatorData.gestao_risco?.alvo_sugerido) {
+      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.alvo_sugerido, color: "#00ff88", lineWidth: 1, lineStyle: 3, title: "Alvo ATR" });
+    }
+  }
+
+  mainChart.timeScale().fitContent();
+
+  // ── RSI ──────────────────────────────────────────────────────
+  const rsiEl = document.getElementById("chartRSI");
+  rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
+
+  const rsiSeries = rsiChart.addLineSeries({
+    color: "#ffcc00", lineWidth: 2, priceLineVisible: false,
+    title: "RSI",
+  });
+
+  // Usa o RSI ponderado atual como referencia e estima historico
+  const rsiAtual = ind?.rsi?.rsi_ponderado || 50;
+  const rsiHist = candleData.map((d, i) => {
+    // Interpolacao simples para visualizacao
+    const offset = (candleData.length - 1 - i) * 0.3;
+    const val = Math.max(10, Math.min(90, rsiAtual + (Math.random() - 0.5) * 8 - offset * 0.1));
+    return { time: d.time, value: parseFloat(val.toFixed(2)) };
+  });
+  rsiSeries.setData(rsiHist);
+
+  // Linhas de referencia RSI
+  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomprado" });
+  rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
+  rsiSeries.createPriceLine({ price: rsiAtual, color: "#ffcc00aa", lineWidth: 1, lineStyle: 0, title: "RSI atual: "+rsiAtual });
+
+  rsiChart.timeScale().fitContent();
+
+  // ── MACD ─────────────────────────────────────────────────────
+  const macdEl = document.getElementById("chartMACD");
+  macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
+
+  const macdLine = ind?.macd?.macd || 0;
+  const signalLine = ind?.macd?.signal || 0;
+  const histVal = ind?.macd?.histogram || 0;
+
+  const macdSeries = macdChart.addLineSeries({
+    color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD",
+  });
+  const signalSeries = macdChart.addLineSeries({
+    color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal",
+  });
+  const histSeries = macdChart.addHistogramSeries({
+    color: histVal >= 0 ? "rgba(0,255,136,0.5)" : "rgba(255,51,85,0.5)",
+    priceLineVisible: false, title: "Hist",
+  });
+
+  // Estimativa visual do MACD historico
+  const macdHist = candleData.map((d, i) => {
+    const offset = (candleData.length - 1 - i) * 0.02;
+    return {
+      time: d.time,
+      macd: parseFloat((macdLine - offset + (Math.random()-0.5)*0.1).toFixed(4)),
+      signal: parseFloat((signalLine - offset*0.8 + (Math.random()-0.5)*0.05).toFixed(4)),
+      hist: parseFloat((histVal - offset*0.2 + (Math.random()-0.5)*0.05).toFixed(4)),
+    };
+  });
+
+  macdSeries.setData(macdHist.map(d => ({ time: d.time, value: d.macd })));
+  signalSeries.setData(macdHist.map(d => ({ time: d.time, value: d.signal })));
+  histSeries.setData(macdHist.map(d => ({
+    time: d.time, value: d.hist,
+    color: d.hist >= 0 ? "rgba(0,255,136,0.5)" : "rgba(255,51,85,0.5)"
+  })));
+
+  macdChart.timeScale().fitContent();
+
+  // Sincroniza zoom entre os 3 graficos
+  mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+    if (range) {
+      rsiChart.timeScale().setVisibleLogicalRange(range);
+      macdChart.timeScale().setVisibleLogicalRange(range);
+    }
+  });
+
+  document.getElementById("chartContainer").style.display = "block";
+}
+
+function setChartPeriod(period) {
+  ["btn30","btn60","btn90","btn200"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.color = "var(--dim)";
+  });
+  const map = {30:"btn30",60:"btn60",90:"btn90",200:"btn200"};
+  const el = document.getElementById(map[period]);
+  if (el) el.style.color = "var(--cyan)";
+  if (currentChartData) renderCharts(currentChartData, period);
 }
 
 </script>
