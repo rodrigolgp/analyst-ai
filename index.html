@@ -894,46 +894,93 @@ function buildIndicatorsContext(ind) {
   const conf = ind.confluencia;
   const kelly = ind.kelly_criterion;
   const candle = ind.candle_pattern;
-  return "=== INDICADORES MATEMATICOS CALCULADOS (200 dias de historico real) ===\n"
-    + "TENDENCIA: "+ind.tendencia+"\n"
+
+  // Calcula tendencia temporal dos indicadores (narrativa historica)
+  function tendenciaRSI(hist, janela) {
+    if (!hist || hist.length < janela) return null;
+    const atual = hist[hist.length-1].value;
+    const anterior = hist[hist.length-janela].value;
+    const diff = parseFloat((atual - anterior).toFixed(2));
+    const dir = diff > 5 ? "SUBINDO FORTE" : diff > 2 ? "SUBINDO" : diff < -5 ? "CAINDO FORTE" : diff < -2 ? "CAINDO" : "LATERAL";
+    return { atual, anterior, diff, dir };
+  }
+
+  function tendenciaMACD(hist) {
+    if (!hist || !hist.histogram || hist.histogram.length < 5) return null;
+    const h = hist.histogram;
+    const atual = h[h.length-1].value;
+    const h3d = h[h.length-3]?.value || 0;
+    const h5d = h[h.length-5]?.value || 0;
+    const acelerando = Math.abs(atual) > Math.abs(h3d);
+    const virando = (atual > 0 && h5d < 0) ? "CRUZOU_POSITIVO_RECENTE" : (atual < 0 && h5d > 0) ? "CRUZOU_NEGATIVO_RECENTE" : "SEM_CRUZAMENTO_RECENTE";
+    return { atual, h3d, h5d, acelerando, virando };
+  }
+
+  function tendenciaMM(hist9, hist21, preco) {
+    if (!hist9 || !hist21 || hist9.length < 5) return null;
+    const mm9atual = hist9[hist9.length-1].value;
+    const mm9_3d = hist9[hist9.length-3]?.value;
+    const mm21atual = hist21[hist21.length-1]?.value;
+    const cruzouRecente = hist9.slice(-5).some((d,i,arr) => {
+      if (i === 0) return false;
+      const m21 = hist21[hist21.length-5+i]?.value;
+      const m21prev = hist21[hist21.length-5+i-1]?.value;
+      return m21 && m21prev && ((arr[i-1].value < m21prev && d.value > m21) || (arr[i-1].value > m21prev && d.value < m21));
+    });
+    const precoAcimaMM9 = preco > mm9atual;
+    const mm9Subindo = mm9_3d ? mm9atual > mm9_3d : null;
+    return { mm9atual, mm21atual, cruzouRecente, precoAcimaMM9, mm9Subindo };
+  }
+
+  const rsiTend = tendenciaRSI(ind.historico_rsi, 5);
+  const macdTend = tendenciaMACD(ind.historico_macd);
+  const mmTend = tendenciaMM(ind.historico_mm9, ind.historico_mm21, ind.preco_atual);
+
+  return "=== INDICADORES MATEMATICOS COM DIMENSAO TEMPORAL (200 dias reais) ===\n"
+    + "PRECO ATUAL: "+ind.preco_atual+" | VARIACAO HOJE: "+ind.variacao_hoje+"%\n"
+    + "TENDENCIA GERAL: "+ind.tendencia+"\n"
     + "\n--- SCORE DE CONFLUENCIA ---\n"
-    + "CONFLUENCIA: "+conf?.score+"/100 | Direcao: "+conf?.direcao+"\n"
-    + "Pontos ALTA: "+conf?.pontos_alta+" | Pontos BAIXA: "+conf?.pontos_baixa+"\n"
-    + "Sinais confirmadores: "+conf?.sinais_confirmadores?.join(", ")+"\n"
-    + "Sinais negativos: "+conf?.sinais_negativos?.join(", ")+"\n"
-    + "\n--- RSI MULTI-PERIODO ---\n"
-    + "RSI(5): "+i.rsi.rsi5+" | RSI(9): "+i.rsi.rsi9+" | RSI(14): "+i.rsi.rsi14+"\n"
-    + "RSI PONDERADO (5d=40%,9d=35%,14d=25%): "+i.rsi.rsi_ponderado+" - "+i.rsi.zona+"\n"
-    + "\n--- MACD (12,26,9) ---\n"
-    + "MACD: "+i.macd?.macd+" | Signal: "+i.macd?.signal+" | Histograma: "+i.macd?.histogram+"\n"
-    + "Tendencia: "+i.macd?.trend+" | Cruzamento: "+i.macd?.crossover+" | Acelerando: "+i.macd?.acelerando+"\n"
-    + "\n--- MEDIAS MOVEIS ---\n"
+    + "SCORE: "+conf?.score+"/100 | DIRECAO: "+conf?.direcao+"\n"
+    + "Sinais confirmadores ("+conf?.pontos_alta+" pts): "+conf?.sinais_confirmadores?.join(", ")+"\n"
+    + "Sinais negativos ("+conf?.pontos_baixa+" pts): "+conf?.sinais_negativos?.join(", ")+"\n"
+    + "\n--- RSI — TENDENCIA TEMPORAL ---\n"
+    + "RSI(5)="+i.rsi.rsi5+" | RSI(9)="+i.rsi.rsi9+" | RSI(14)="+i.rsi.rsi14+"\n"
+    + "RSI PONDERADO ATUAL: "+i.rsi.rsi_ponderado+" ("+i.rsi.zona+")\n"
+    + (rsiTend ? "RSI HA 5 DIAS: "+rsiTend.anterior+" → HOJE: "+rsiTend.atual+" | MOVIMENTO: "+rsiTend.diff+" pts | DIRECAO: "+rsiTend.dir+"\n" : "")
+    + (rsiTend && rsiTend.diff > 10 ? "*** RSI ACELEROU FORTEMENTE — sinal de momentum crescente ***\n" : "")
+    + (rsiTend && rsiTend.atual < 35 && rsiTend.dir.includes("SUBINDO") ? "*** RSI SAINDO DE ZONA SOBREVENDIDA — possivel reversao ***\n" : "")
+    + "\n--- MACD — TENDENCIA TEMPORAL ---\n"
+    + "MACD atual: "+i.macd?.macd+" | Signal: "+i.macd?.signal+" | Histograma: "+i.macd?.histogram+"\n"
+    + "Tendencia: "+i.macd?.trend+" | Cruzamento atual: "+i.macd?.crossover+"\n"
+    + (macdTend ? "Histograma 5d atras: "+macdTend.h5d+" → 3d atras: "+macdTend.h3d+" → hoje: "+macdTend.atual+"\n" : "")
+    + (macdTend ? "Histograma acelerando: "+macdTend.acelerando+" | Status cruzamento: "+macdTend.virando+"\n" : "")
+    + (macdTend?.virando === "CRUZOU_POSITIVO_RECENTE" ? "*** MACD CRUZOU PARA POSITIVO NOS ULTIMOS 5 DIAS — sinal forte de compra ***\n" : "")
+    + "\n--- MEDIAS MOVEIS — TENDENCIA TEMPORAL ---\n"
     + "MM9="+i.medias.mm9+" | MM21="+i.medias.mm21+" | MM50="+i.medias.mm50+" | MM200="+i.medias.mm200+"\n"
-    + "EMA9="+i.medias.ema9+" | EMA21="+i.medias.ema21+"\n"
-    + "Acima MM50: "+i.medias.acimaMM50+" | Acima MM200: "+i.medias.acimaMM200+"\n"
-    + "\n--- BOLLINGER BANDS (20,2) ---\n"
+    + "Preco acima MM50: "+i.medias.acimaMM50+" | Preco acima MM200: "+i.medias.acimaMM200+"\n"
+    + (mmTend ? "MM9 subindo nos ultimos 3 dias: "+mmTend.mm9Subindo+" | Preco acima MM9: "+mmTend.precoAcimaMM9+"\n" : "")
+    + (mmTend?.cruzouRecente ? "*** MM9 CRUZOU MM21 NOS ULTIMOS 5 DIAS — cruzamento dourado/mortifero recente ***\n" : "")
+    + "\n--- BOLLINGER BANDS ---\n"
     + "Superior="+i.bollinger?.upper+" | Medio="+i.bollinger?.middle+" | Inferior="+i.bollinger?.lower+"\n"
     + "%B="+i.bollinger?.pctB+" | Bandwidth="+i.bollinger?.bandwidth+"% | Posicao: "+i.bollinger?.position+"\n"
-    + "Squeeze (volatilidade comprimida): "+i.bollinger?.squeeze+"\n"
-    + "\n--- VWAP (Fluxo Institucional) ---\n"
+    + (i.bollinger?.squeeze ? "*** BOLLINGER SQUEEZE — volatilidade comprimida, movimento explosivo iminente ***\n" : "")
+    + "\n--- VWAP (FLUXO INSTITUCIONAL) ---\n"
     + "VWAP(20d)="+i.vwap?.vwap+" | Diferenca: "+i.vwap?.diferenca_pct+"% | Sinal: "+i.vwap?.sinal+"\n"
-    + "\n--- ATR E VOLUME ---\n"
-    + "ATR(14): "+i.atr+" ("+ind.gestao_risco.atr_pct+"% do preco)\n"
+    + "\n--- VOLUME E ATR ---\n"
     + "Volume: Atual="+i.volume?.atual?.toLocaleString()+" | Media20="+i.volume?.media20?.toLocaleString()+" | Ratio="+i.volume?.ratio+"x | Status: "+i.volume?.status+"\n"
-    + "\n--- PADROES DE CANDLESTICK ---\n"
-    + "Padrao detectado: "+candle?.pattern+" | Bias: "+candle?.bias+" | Confianca: "+candle?.confianca+"%\n"
+    + "ATR(14): "+i.atr+" ("+ind.gestao_risco.atr_pct+"% do preco)\n"
+    + "\n--- PADRAO DE CANDLESTICK ---\n"
+    + "Padrao: "+candle?.pattern+" | Bias: "+candle?.bias+" | Confianca historica: "+candle?.confianca+"%\n"
     + "\n--- SUPORTE E RESISTENCIA ---\n"
     + "Suporte: "+ind.suporte_resistencia.suporte+" ("+ind.suporte_resistencia.distSuport+"% abaixo)\n"
     + "Resistencia: "+ind.suporte_resistencia.resistencia+" ("+ind.suporte_resistencia.distResist+"% acima)\n"
-    + "R/R Natural: 1:"+ind.suporte_resistencia.rr_natural+"\n"
-    + "\n--- KELLY CRITERION (Tamanho Otimo da Posicao) ---\n"
-    + "Kelly completo: "+kelly?.kelly_completo+"% | Half Kelly (recomendado): "+kelly?.half_kelly+"%\n"
-    + "Classificacao: "+kelly?.explicacao+"\n"
+    + "R/R Natural suporte/resistencia: 1:"+ind.suporte_resistencia.rr_natural+"\n"
+    + "\n--- KELLY CRITERION ---\n"
+    + "Half Kelly recomendado: "+kelly?.half_kelly+"% do capital | Classificacao: "+kelly?.explicacao+"\n"
     + "\n--- GESTAO DE RISCO ---\n"
-    + "Stop matematico (2x ATR): "+ind.gestao_risco.stop_sugerido+"\n"
-    + "Alvo matematico (3x ATR): "+ind.gestao_risco.alvo_sugerido+"\n"
-    + "Tamanho de posicao recomendado: "+ind.gestao_risco.tamanho_posicao_recomendado+"\n"
-    + "\nUSE TODOS ESSES DADOS como base da analise. Nao estime - use os numeros reais.";
+    + "Stop matematico (2xATR): "+ind.gestao_risco.stop_sugerido+"\n"
+    + "Alvo matematico (3xATR): "+ind.gestao_risco.alvo_sugerido+"\n"
+    + "\nINSTRUCAO: Use os dados temporais (tendencias, cruzamentos recentes, aceleracoes) como peso adicional na sua decisao. Sinais marcados com *** sao especialmente relevantes.";
 }
 
 // ─── COTACOES DA CARTEIRA ─────────────────────────────────────
@@ -1214,20 +1261,32 @@ function buildRadarPrompt(tickers, quotes, indicadoresRadar) {
   const info = tickers.slice(0,80).map(t=>{const q=quotes[t];return q?t+"("+q.currency+q.price+","+q.change+"%hoje)":t;}).join(",");
 
   // Adiciona indicadores dos top candidatos
+  // Usa buildIndicatorsContext para contexto completo com dimensao temporal
   const indInfo = Object.entries(indicadoresRadar||{}).map(([t, ind]) => {
+    const ctx = buildIndicatorsContext(ind);
+    // Extrai apenas o essencial para nao sobrecarregar o prompt
     const conf = ind.confluencia;
     const candle = ind.candle_pattern;
-    const vwap = ind.indicadores?.vwap;
-    return t+": CONFLUENCIA="+conf?.score+"/"+conf?.direcao
-      +"|RSI_POND="+ind.indicadores?.rsi?.rsi_ponderado
-      +"|MACD="+ind.indicadores?.macd?.trend+(ind.indicadores?.macd?.crossover!=="NENHUM"?"("+ind.indicadores?.macd?.crossover+")":"")
-      +"|VWAP="+vwap?.sinal
-      +"|VOLUME="+ind.indicadores?.volume?.status
-      +"|CANDLE="+candle?.pattern+"("+candle?.bias+")"
-      +"|STOP_ATR="+ind.gestao_risco?.stop_sugerido
-      +"|ALVO_ATR="+ind.gestao_risco?.alvo_sugerido
-      +"|KELLY="+ind.kelly_criterion?.half_kelly+"%";
-  }).join(" | ");
+    const rsiHist = ind.historico_rsi;
+    const macdHist = ind.historico_macd;
+    const rsiAtual = ind.indicadores?.rsi?.rsi_ponderado;
+    const rsi5dAtras = rsiHist && rsiHist.length >= 5 ? rsiHist[rsiHist.length-5]?.value : null;
+    const macdH = macdHist?.histogram;
+    const macdAcelerou = macdH && macdH.length >= 3 ? Math.abs(macdH[macdH.length-1]?.value) > Math.abs(macdH[macdH.length-3]?.value) : false;
+    const macdCruzouRecente = macdH && macdH.length >= 5 ? (macdH[macdH.length-1]?.value > 0 && macdH[macdH.length-5]?.value < 0) : false;
+    return "["+t+"]"
+      +" CONFLUENCIA="+conf?.score+"/"+conf?.direcao
+      +" RSI="+rsiAtual+(rsi5dAtras?" (era "+rsi5dAtras.toFixed(1)+" ha 5d"+(rsiAtual>rsi5dAtras?" SUBINDO":" CAINDO")+")":"")
+      +" MACD="+ind.indicadores?.macd?.trend+(macdCruzouRecente?" CRUZOU_POSITIVO_RECENTE":"")+(macdAcelerou?" ACELERANDO":"")
+      +" VWAP="+ind.indicadores?.vwap?.sinal
+      +" VOLUME="+ind.indicadores?.volume?.status
+      +" CANDLE="+candle?.pattern+"("+candle?.bias+","+candle?.confianca+"%)"
+      +(ind.indicadores?.bollinger?.squeeze?" BOLLINGER_SQUEEZE":"")
+      +" STOP="+ind.gestao_risco?.stop_sugerido
+      +" ALVO="+ind.gestao_risco?.alvo_sugerido
+      +" KELLY="+ind.kelly_criterion?.half_kelly+"%"
+      +(conf?.score >= 65 ? " ***ALTA_CONFLUENCIA***" : "");
+  }).join("\n");
 
   return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: identificar as melhores oportunidades de RETORNO MAXIMO nos proximos 5 a 15 dias.\n\nPERFIL: Investidor agressivo de curto prazo, meta +8% ao mes, gira capital rapidamente, B3+NYSE/NASDAQ, capital R$5k-20k.\n\nATIVOS COM PRECOS REAIS:\n"+info+"\n\nINDICADORES MATEMATICOS (top candidatos):\n"+indInfo+"\n\nCRITERIOS DE SELECAO (rigorosos):\n1. CONFLUENCIA alta (score >60) - multiplos sistemas confirmando\n2. MOMENTUM FORTE - subindo com volume acima da media AGORA\n3. VWAP favoravel - institucional comprando\n4. CATALISADOR IMINENTE - resultado, evento nos proximos 15 dias\n5. SETUP TECNICO - rompimento, pullback, candle de reversao\n6. UPSIDE MINIMO 8% em ate 15 dias | STOP MAXIMO 5%\n7. RISCO/RETORNO minimo 1:2, preferir 1:3\n\nSelecione TOP 8. Para ativos com indicadores matematicos disponíveis, USE OS DADOS REAIS para calcular alvos e stops.\nListe os ativos a EVITAR com motivo claro.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"evitar\":[\"\"]}";
 }
@@ -1266,15 +1325,25 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru) {
     + Object.entries(indicadoresGuru||{}).map(([t,ind])=>{
         const conf = ind.confluencia;
         const candle = ind.candle_pattern;
-        return t+": CONFLUENCIA="+conf?.score+"/"+conf?.direcao
-          +"|RSI="+ind.indicadores?.rsi?.rsi_ponderado
-          +"|MACD="+ind.indicadores?.macd?.trend
-          +"|VWAP="+ind.indicadores?.vwap?.sinal
-          +"|CANDLE="+candle?.pattern+"("+candle?.bias+")"
-          +"|KELLY="+ind.kelly_criterion?.half_kelly+"%"
-          +"|STOP_ATR="+ind.gestao_risco?.stop_sugerido
-          +"|ALVO_ATR="+ind.gestao_risco?.alvo_sugerido;
-      }).join(" | ")
+        const rsiHist = ind.historico_rsi;
+        const macdHist = ind.historico_macd;
+        const rsiAtual = ind.indicadores?.rsi?.rsi_ponderado;
+        const rsi5dAtras = rsiHist && rsiHist.length >= 5 ? rsiHist[rsiHist.length-5]?.value : null;
+        const macdH = macdHist?.histogram;
+        const macdCruzouRecente = macdH && macdH.length >= 5 ? (macdH[macdH.length-1]?.value > 0 && macdH[macdH.length-5]?.value < 0) : false;
+        const macdAcelerou = macdH && macdH.length >= 3 ? Math.abs(macdH[macdH.length-1]?.value) > Math.abs(macdH[macdH.length-3]?.value) : false;
+        return "["+t+"]"
+          +" CONFLUENCIA="+conf?.score+"/"+conf?.direcao
+          +" RSI="+rsiAtual+(rsi5dAtras?" (era "+rsi5dAtras.toFixed(1)+" 5d atras"+(rsiAtual>rsi5dAtras?" SUBINDO":" CAINDO")+")":"")
+          +" MACD="+ind.indicadores?.macd?.trend+(macdCruzouRecente?" CRUZOU_POSITIVO_RECENTE":"")+(macdAcelerou?" ACELERANDO":"")
+          +" VWAP="+ind.indicadores?.vwap?.sinal
+          +" CANDLE="+candle?.pattern+"("+candle?.bias+")"
+          +(ind.indicadores?.bollinger?.squeeze?" SQUEEZE":"")
+          +" KELLY="+ind.kelly_criterion?.half_kelly+"%"
+          +" STOP="+ind.gestao_risco?.stop_sugerido
+          +" ALVO="+ind.gestao_risco?.alvo_sugerido
+          +(conf?.score >= 65 ? " ***ALTA_CONFLUENCIA***":"");
+      }).join("\n")
     )+"\n\nREGRAS: max 6 ativos, 20% caixa intocavel, max 20% por ativo, stop max 5%, R/R min 1:2, linguagem simples. USE OS INDICADORES MATEMATICOS para calcular stops e alvos quando disponíveis.\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"motivo\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
 }
 
