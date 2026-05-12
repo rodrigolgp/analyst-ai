@@ -163,26 +163,23 @@ function renderCharts(indicatorData, period) {
   }));
   volumeSeries.setData(volumeData);
 
-  // Medias moveis
+  // Medias moveis — dados reais historicos
   const ind = indicatorData.indicadores;
-  if (ind && ind.medias) {
-    const mmColors = [
-      { key: "mm9", color: "#ffcc00", label: "MM9" },
-      { key: "mm21", color: "#00aaff", label: "MM21" },
-      { key: "mm50", color: "#ff8800", label: "MM50" },
-    ];
-    mmColors.forEach(mm => {
-      if (!ind.medias[mm.key]) return;
-      const mmSeries = mainChart.addLineSeries({
-        color: mm.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: true,
-        title: mm.label,
-      });
-      // Aproxima as medias moveis nos ultimos candles (nao temos historico completo aqui)
-      const val = ind.medias[mm.key];
-      const mmData = candleData.slice(-30).map(d => ({ time: d.time, value: val }));
-      if (mmData.length) mmSeries.setData(mmData);
+  const mmDefs = [
+    { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
+    { key: "historico_mm21", color: "#00aaff", label: "MM21", width: 1 },
+    { key: "historico_mm50", color: "#ff8800", label: "MM50", width: 1.5 },
+  ];
+  mmDefs.forEach(mm => {
+    const hist = (indicatorData[mm.key] || []).slice(-period);
+    if (!hist.length) return;
+    const mmSeries = mainChart.addLineSeries({
+      color: mm.color, lineWidth: mm.width,
+      priceLineVisible: false, lastValueVisible: true,
+      title: mm.label,
     });
-  }
+    mmSeries.setData(hist.map(d => ({ time: d.date, value: d.value })));
+  });
 
   // Suporte e Resistencia como linhas horizontais
   if (indicatorData.suporte_resistencia) {
@@ -200,67 +197,43 @@ function renderCharts(indicatorData, period) {
 
   mainChart.timeScale().fitContent();
 
-  // ── RSI ──────────────────────────────────────────────────────
+  // ── RSI REAL ──────────────────────────────────────────────────
   const rsiEl = document.getElementById("chartRSI");
   rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
 
   const rsiSeries = rsiChart.addLineSeries({
-    color: "#ffcc00", lineWidth: 2, priceLineVisible: false,
-    title: "RSI",
+    color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
   });
 
-  // Usa o RSI ponderado atual como referencia e estima historico
-  const rsiAtual = ind?.rsi?.rsi_ponderado || 50;
-  const rsiHist = candleData.map((d, i) => {
-    // Interpolacao simples para visualizacao
-    const offset = (candleData.length - 1 - i) * 0.3;
-    const val = Math.max(10, Math.min(90, rsiAtual + (Math.random() - 0.5) * 8 - offset * 0.1));
-    return { time: d.time, value: parseFloat(val.toFixed(2)) };
-  });
-  rsiSeries.setData(rsiHist);
+  // Usa dados historicos reais do indicators.js
+  const rsiHistData = (indicatorData.historico_rsi || []).slice(-period);
+  if (rsiHistData.length) {
+    rsiSeries.setData(rsiHistData.map(d => ({ time: d.date, value: d.value })));
+  }
 
-  // Linhas de referencia RSI
-  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomprado" });
+  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomp." });
   rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
-  rsiSeries.createPriceLine({ price: rsiAtual, color: "#ffcc00aa", lineWidth: 1, lineStyle: 0, title: "RSI atual: "+rsiAtual });
-
+  rsiSeries.createPriceLine({ price: 50, color: "#3a5570", lineWidth: 1, lineStyle: 2 });
   rsiChart.timeScale().fitContent();
 
-  // ── MACD ─────────────────────────────────────────────────────
+  // ── MACD REAL ─────────────────────────────────────────────────
   const macdEl = document.getElementById("chartMACD");
   macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
 
-  const macdLine = ind?.macd?.macd || 0;
-  const signalLine = ind?.macd?.signal || 0;
-  const histVal = ind?.macd?.histogram || 0;
+  const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
+  const signalSeries = macdChart.addLineSeries({ color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
+  const histSeries = macdChart.addHistogramSeries({ priceLineVisible: false, title: "Hist" });
 
-  const macdSeries = macdChart.addLineSeries({
-    color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD",
-  });
-  const signalSeries = macdChart.addLineSeries({
-    color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal",
-  });
-  const histSeries = macdChart.addHistogramSeries({
-    color: histVal >= 0 ? "rgba(0,255,136,0.5)" : "rgba(255,51,85,0.5)",
-    priceLineVisible: false, title: "Hist",
-  });
+  const macdHistData = indicatorData.historico_macd || {};
+  const macdLineData = (macdHistData.macdLine || []).slice(-period);
+  const signalLineData = (macdHistData.signalLine || []).slice(-period);
+  const histData = (macdHistData.histogram || []).slice(-period);
 
-  // Estimativa visual do MACD historico
-  const macdHist = candleData.map((d, i) => {
-    const offset = (candleData.length - 1 - i) * 0.02;
-    return {
-      time: d.time,
-      macd: parseFloat((macdLine - offset + (Math.random()-0.5)*0.1).toFixed(4)),
-      signal: parseFloat((signalLine - offset*0.8 + (Math.random()-0.5)*0.05).toFixed(4)),
-      hist: parseFloat((histVal - offset*0.2 + (Math.random()-0.5)*0.05).toFixed(4)),
-    };
-  });
-
-  macdSeries.setData(macdHist.map(d => ({ time: d.time, value: d.macd })));
-  signalSeries.setData(macdHist.map(d => ({ time: d.time, value: d.signal })));
-  histSeries.setData(macdHist.map(d => ({
-    time: d.time, value: d.hist,
-    color: d.hist >= 0 ? "rgba(0,255,136,0.5)" : "rgba(255,51,85,0.5)"
+  if (macdLineData.length) macdSeries.setData(macdLineData.map(d => ({ time: d.date, value: d.value })));
+  if (signalLineData.length) signalSeries.setData(signalLineData.map(d => ({ time: d.date, value: d.value })));
+  if (histData.length) histSeries.setData(histData.map(d => ({
+    time: d.date, value: d.value,
+    color: d.value >= 0 ? "rgba(0,255,136,0.6)" : "rgba(255,51,85,0.6)"
   })));
 
   macdChart.timeScale().fitContent();
@@ -2332,26 +2305,23 @@ function renderCharts(indicatorData, period) {
   }));
   volumeSeries.setData(volumeData);
 
-  // Medias moveis
+  // Medias moveis — dados reais historicos
   const ind = indicatorData.indicadores;
-  if (ind && ind.medias) {
-    const mmColors = [
-      { key: "mm9", color: "#ffcc00", label: "MM9" },
-      { key: "mm21", color: "#00aaff", label: "MM21" },
-      { key: "mm50", color: "#ff8800", label: "MM50" },
-    ];
-    mmColors.forEach(mm => {
-      if (!ind.medias[mm.key]) return;
-      const mmSeries = mainChart.addLineSeries({
-        color: mm.color, lineWidth: 1, priceLineVisible: false, lastValueVisible: true,
-        title: mm.label,
-      });
-      // Aproxima as medias moveis nos ultimos candles (nao temos historico completo aqui)
-      const val = ind.medias[mm.key];
-      const mmData = candleData.slice(-30).map(d => ({ time: d.time, value: val }));
-      if (mmData.length) mmSeries.setData(mmData);
+  const mmDefs = [
+    { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
+    { key: "historico_mm21", color: "#00aaff", label: "MM21", width: 1 },
+    { key: "historico_mm50", color: "#ff8800", label: "MM50", width: 1.5 },
+  ];
+  mmDefs.forEach(mm => {
+    const hist = (indicatorData[mm.key] || []).slice(-period);
+    if (!hist.length) return;
+    const mmSeries = mainChart.addLineSeries({
+      color: mm.color, lineWidth: mm.width,
+      priceLineVisible: false, lastValueVisible: true,
+      title: mm.label,
     });
-  }
+    mmSeries.setData(hist.map(d => ({ time: d.date, value: d.value })));
+  });
 
   // Suporte e Resistencia como linhas horizontais
   if (indicatorData.suporte_resistencia) {
@@ -2369,67 +2339,43 @@ function renderCharts(indicatorData, period) {
 
   mainChart.timeScale().fitContent();
 
-  // ── RSI ──────────────────────────────────────────────────────
+  // ── RSI REAL ──────────────────────────────────────────────────
   const rsiEl = document.getElementById("chartRSI");
   rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
 
   const rsiSeries = rsiChart.addLineSeries({
-    color: "#ffcc00", lineWidth: 2, priceLineVisible: false,
-    title: "RSI",
+    color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
   });
 
-  // Usa o RSI ponderado atual como referencia e estima historico
-  const rsiAtual = ind?.rsi?.rsi_ponderado || 50;
-  const rsiHist = candleData.map((d, i) => {
-    // Interpolacao simples para visualizacao
-    const offset = (candleData.length - 1 - i) * 0.3;
-    const val = Math.max(10, Math.min(90, rsiAtual + (Math.random() - 0.5) * 8 - offset * 0.1));
-    return { time: d.time, value: parseFloat(val.toFixed(2)) };
-  });
-  rsiSeries.setData(rsiHist);
+  // Usa dados historicos reais do indicators.js
+  const rsiHistData = (indicatorData.historico_rsi || []).slice(-period);
+  if (rsiHistData.length) {
+    rsiSeries.setData(rsiHistData.map(d => ({ time: d.date, value: d.value })));
+  }
 
-  // Linhas de referencia RSI
-  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomprado" });
+  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomp." });
   rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
-  rsiSeries.createPriceLine({ price: rsiAtual, color: "#ffcc00aa", lineWidth: 1, lineStyle: 0, title: "RSI atual: "+rsiAtual });
-
+  rsiSeries.createPriceLine({ price: 50, color: "#3a5570", lineWidth: 1, lineStyle: 2 });
   rsiChart.timeScale().fitContent();
 
-  // ── MACD ─────────────────────────────────────────────────────
+  // ── MACD REAL ─────────────────────────────────────────────────
   const macdEl = document.getElementById("chartMACD");
   macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
 
-  const macdLine = ind?.macd?.macd || 0;
-  const signalLine = ind?.macd?.signal || 0;
-  const histVal = ind?.macd?.histogram || 0;
+  const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
+  const signalSeries = macdChart.addLineSeries({ color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
+  const histSeries = macdChart.addHistogramSeries({ priceLineVisible: false, title: "Hist" });
 
-  const macdSeries = macdChart.addLineSeries({
-    color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD",
-  });
-  const signalSeries = macdChart.addLineSeries({
-    color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal",
-  });
-  const histSeries = macdChart.addHistogramSeries({
-    color: histVal >= 0 ? "rgba(0,255,136,0.5)" : "rgba(255,51,85,0.5)",
-    priceLineVisible: false, title: "Hist",
-  });
+  const macdHistData = indicatorData.historico_macd || {};
+  const macdLineData = (macdHistData.macdLine || []).slice(-period);
+  const signalLineData = (macdHistData.signalLine || []).slice(-period);
+  const histData = (macdHistData.histogram || []).slice(-period);
 
-  // Estimativa visual do MACD historico
-  const macdHist = candleData.map((d, i) => {
-    const offset = (candleData.length - 1 - i) * 0.02;
-    return {
-      time: d.time,
-      macd: parseFloat((macdLine - offset + (Math.random()-0.5)*0.1).toFixed(4)),
-      signal: parseFloat((signalLine - offset*0.8 + (Math.random()-0.5)*0.05).toFixed(4)),
-      hist: parseFloat((histVal - offset*0.2 + (Math.random()-0.5)*0.05).toFixed(4)),
-    };
-  });
-
-  macdSeries.setData(macdHist.map(d => ({ time: d.time, value: d.macd })));
-  signalSeries.setData(macdHist.map(d => ({ time: d.time, value: d.signal })));
-  histSeries.setData(macdHist.map(d => ({
-    time: d.time, value: d.hist,
-    color: d.hist >= 0 ? "rgba(0,255,136,0.5)" : "rgba(255,51,85,0.5)"
+  if (macdLineData.length) macdSeries.setData(macdLineData.map(d => ({ time: d.date, value: d.value })));
+  if (signalLineData.length) signalSeries.setData(signalLineData.map(d => ({ time: d.date, value: d.value })));
+  if (histData.length) histSeries.setData(histData.map(d => ({
+    time: d.date, value: d.value,
+    color: d.value >= 0 ? "rgba(0,255,136,0.6)" : "rgba(255,51,85,0.6)"
   })));
 
   macdChart.timeScale().fitContent();
