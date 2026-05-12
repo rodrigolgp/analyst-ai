@@ -610,21 +610,49 @@ async function fetchIndicators(ticker) {
 function buildIndicatorsContext(ind) {
   if (!ind) return "INDICADORES: nao disponivel";
   const i = ind.indicadores;
-  return "INDICADORES MATEMATICOS CALCULADOS (200 dias de historico real):\n"
+  const conf = ind.confluencia;
+  const kelly = ind.kelly_criterion;
+  const candle = ind.candle_pattern;
+  return "=== INDICADORES MATEMATICOS CALCULADOS (200 dias de historico real) ===\n"
     + "TENDENCIA: "+ind.tendencia+"\n"
-    + "SINAL TECNICO: "+ind.sinal_tecnico+" ("+ind.pontuacao_tecnica+"/11 pontos)\n"
-    + "RSI(14): "+i.rsi.rsi14+" - "+i.rsi.zona+"\n"
-    + "RSI(9): "+i.rsi.rsi9+"\n"
-    + "MACD: "+i.macd?.macd+" | Signal: "+i.macd?.signal+" | Histograma: "+i.macd?.histogram+" | Tendencia: "+i.macd?.trend+" | Cruzamento: "+i.macd?.crossover+"\n"
-    + "MM9: "+i.medias.mm9+" | MM21: "+i.medias.mm21+" | MM50: "+i.medias.mm50+" | MM200: "+i.medias.mm200+"\n"
-    + "EMA9: "+i.medias.ema9+" | EMA21: "+i.medias.ema21+"\n"
-    + "Preco acima MM50: "+i.medias.acimaMM50+" | Preco acima MM200: "+i.medias.acimaMM200+"\n"
-    + "BOLLINGER: Superior="+i.bollinger?.upper+" | Medio="+i.bollinger?.middle+" | Inferior="+i.bollinger?.lower+" | %B="+i.bollinger?.pctB+" | Posicao: "+i.bollinger?.position+"\n"
+    + "\n--- SCORE DE CONFLUENCIA ---\n"
+    + "CONFLUENCIA: "+conf?.score+"/100 | Direcao: "+conf?.direcao+"\n"
+    + "Pontos ALTA: "+conf?.pontos_alta+" | Pontos BAIXA: "+conf?.pontos_baixa+"\n"
+    + "Sinais confirmadores: "+conf?.sinais_confirmadores?.join(", ")+"\n"
+    + "Sinais negativos: "+conf?.sinais_negativos?.join(", ")+"\n"
+    + "\n--- RSI MULTI-PERIODO ---\n"
+    + "RSI(5): "+i.rsi.rsi5+" | RSI(9): "+i.rsi.rsi9+" | RSI(14): "+i.rsi.rsi14+"\n"
+    + "RSI PONDERADO (5d=40%,9d=35%,14d=25%): "+i.rsi.rsi_ponderado+" - "+i.rsi.zona+"\n"
+    + "\n--- MACD (12,26,9) ---\n"
+    + "MACD: "+i.macd?.macd+" | Signal: "+i.macd?.signal+" | Histograma: "+i.macd?.histogram+"\n"
+    + "Tendencia: "+i.macd?.trend+" | Cruzamento: "+i.macd?.crossover+" | Acelerando: "+i.macd?.acelerando+"\n"
+    + "\n--- MEDIAS MOVEIS ---\n"
+    + "MM9="+i.medias.mm9+" | MM21="+i.medias.mm21+" | MM50="+i.medias.mm50+" | MM200="+i.medias.mm200+"\n"
+    + "EMA9="+i.medias.ema9+" | EMA21="+i.medias.ema21+"\n"
+    + "Acima MM50: "+i.medias.acimaMM50+" | Acima MM200: "+i.medias.acimaMM200+"\n"
+    + "\n--- BOLLINGER BANDS (20,2) ---\n"
+    + "Superior="+i.bollinger?.upper+" | Medio="+i.bollinger?.middle+" | Inferior="+i.bollinger?.lower+"\n"
+    + "%B="+i.bollinger?.pctB+" | Bandwidth="+i.bollinger?.bandwidth+"% | Posicao: "+i.bollinger?.position+"\n"
+    + "Squeeze (volatilidade comprimida): "+i.bollinger?.squeeze+"\n"
+    + "\n--- VWAP (Fluxo Institucional) ---\n"
+    + "VWAP(20d)="+i.vwap?.vwap+" | Diferenca: "+i.vwap?.diferenca_pct+"% | Sinal: "+i.vwap?.sinal+"\n"
+    + "\n--- ATR E VOLUME ---\n"
     + "ATR(14): "+i.atr+" ("+ind.gestao_risco.atr_pct+"% do preco)\n"
-    + "VOLUME: Atual="+i.volume?.atual?.toLocaleString()+" | Media20="+i.volume?.media20?.toLocaleString()+" | Ratio="+i.volume?.ratio+"x | Status: "+i.volume?.status+"\n"
-    + "SUPORTE: "+ind.suporte_resistencia.suporte+" ("+ind.suporte_resistencia.distSuport+"% abaixo) | RESISTENCIA: "+ind.suporte_resistencia.resistencia+" ("+ind.suporte_resistencia.distResist+"% acima)\n"
-    + "STOP MATEMATICO (2x ATR): "+ind.gestao_risco.stop_sugerido+"\n"
-    + "ALVO MATEMATICO (3x ATR): "+ind.gestao_risco.alvo_sugerido;
+    + "Volume: Atual="+i.volume?.atual?.toLocaleString()+" | Media20="+i.volume?.media20?.toLocaleString()+" | Ratio="+i.volume?.ratio+"x | Status: "+i.volume?.status+"\n"
+    + "\n--- PADROES DE CANDLESTICK ---\n"
+    + "Padrao detectado: "+candle?.pattern+" | Bias: "+candle?.bias+" | Confianca: "+candle?.confianca+"%\n"
+    + "\n--- SUPORTE E RESISTENCIA ---\n"
+    + "Suporte: "+ind.suporte_resistencia.suporte+" ("+ind.suporte_resistencia.distSuport+"% abaixo)\n"
+    + "Resistencia: "+ind.suporte_resistencia.resistencia+" ("+ind.suporte_resistencia.distResist+"% acima)\n"
+    + "R/R Natural: 1:"+ind.suporte_resistencia.rr_natural+"\n"
+    + "\n--- KELLY CRITERION (Tamanho Otimo da Posicao) ---\n"
+    + "Kelly completo: "+kelly?.kelly_completo+"% | Half Kelly (recomendado): "+kelly?.half_kelly+"%\n"
+    + "Classificacao: "+kelly?.explicacao+"\n"
+    + "\n--- GESTAO DE RISCO ---\n"
+    + "Stop matematico (2x ATR): "+ind.gestao_risco.stop_sugerido+"\n"
+    + "Alvo matematico (3x ATR): "+ind.gestao_risco.alvo_sugerido+"\n"
+    + "Tamanho de posicao recomendado: "+ind.gestao_risco.tamanho_posicao_recomendado+"\n"
+    + "\nUSE TODOS ESSES DADOS como base da analise. Nao estime - use os numeros reais.";
 }
 
 // ─── COTACOES DA CARTEIRA ─────────────────────────────────────
@@ -874,38 +902,68 @@ function renderResult(d, quote, indicators) {
     +'<div style="font-size:12px;color:var(--sub);line-height:1.6">'+String(d.just||"")+'</div></div>';
 
   // Indicadores matematicos card
-  const indCard = indicators ? '<div style="background:var(--card);border:1px solid var(--hi);padding:20px;margin-bottom:10px;">'+
+  const indCard = indicators ? (function() {
+    const i = indicators.indicadores;
+    const conf = indicators.confluencia;
+    const candle = indicators.candle_pattern;
+    const kelly = indicators.kelly_criterion;
+    const confColor = conf?.score >= 65 ? "var(--green)" : conf?.score >= 50 ? "var(--yellow)" : "var(--red)";
+    return '<div style="background:var(--card);border:1px solid var(--hi);padding:20px;margin-bottom:10px;">'+
     '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">INDICADORES MATEMATICOS CALCULADOS</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px;">'+
+
+    // Score de confluencia
+    '<div style="background:var(--bg);border:1px solid '+confColor+'44;padding:12px;margin-bottom:12px;display:grid;grid-template-columns:120px 1fr 1fr;">'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">SCORE CONFLUENCIA</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:32px;font-weight:700;color:'+confColor+'">'+conf?.score+'</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:13px;color:'+confColor+'">'+conf?.direcao+'</div></div>'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--green);margin-bottom:6px;">CONFIRMADORES</div>'+
+    (conf?.sinais_confirmadores||[]).map(s=>'<div style="font-size:9px;color:var(--green);margin-bottom:2px;">> '+s+'</div>').join("")+'</div>'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--red);margin-bottom:6px;">NEGATIVOS</div>'+
+    (conf?.sinais_negativos||[]).map(s=>'<div style="font-size:9px;color:var(--red);margin-bottom:2px;">x '+s+'</div>').join("")+'</div>'+
+    '</div>'+
+
+    // Grid indicadores
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'+
     [
-      ["RSI(14)", indicators.indicadores.rsi.rsi14, indicators.indicadores.rsi.zona==="SOBRECOMPRADO"?"var(--red)":indicators.indicadores.rsi.zona==="SOBREVENDIDO"?"var(--green)":"var(--yellow)"],
+      ["RSI PONDERADO", i.rsi.rsi_ponderado, i.rsi.zona==="SOBRECOMPRADO"?"var(--red)":i.rsi.zona==="SOBREVENDIDO"?"var(--green)":"var(--yellow)"],
       ["TENDENCIA", indicators.tendencia, indicators.tendencia.includes("ALTA")?"var(--green)":indicators.tendencia.includes("BAIXA")?"var(--red)":"var(--yellow)"],
-      ["SINAL TEC.", indicators.sinal_tecnico, indicators.sinal_tecnico.includes("COMPRA")?"var(--green)":"var(--red)"],
-      ["VOLUME", indicators.indicadores.volume?.status, indicators.indicadores.volume?.status==="MUITO_ACIMA"||indicators.indicadores.volume?.status==="ACIMA"?"var(--green)":"var(--dim)"],
-      ["MACD", indicators.indicadores.macd?.trend, indicators.indicadores.macd?.trend==="ALTA"?"var(--green)":"var(--red)"],
-      ["BOLLINGER", indicators.indicadores.bollinger?.position?.replace(/_/g," "), indicators.indicadores.bollinger?.position==="DENTRO_DAS_BANDAS"?"var(--green)":"var(--yellow)"],
-      ["ATR(14)", indicators.indicadores.atr, "var(--txt)"],
-      ["ACIMA MM50", indicators.indicadores.medias.acimaMM50?"SIM":"NAO", indicators.indicadores.medias.acimaMM50?"var(--green)":"var(--red)"],
+      ["VWAP", i.vwap?.sinal?.replace(/_/g," "), i.vwap?.acima?"var(--green)":"var(--red)"],
+      ["VOLUME", i.volume?.status, i.volume?.status==="EXPLOSIVO"||i.volume?.status==="MUITO_ACIMA"?"var(--green)":i.volume?.status==="ABAIXO"?"var(--red)":"var(--dim)"],
+      ["MACD", i.macd?.crossover==="NENHUM"?i.macd?.trend:i.macd?.crossover?.replace(/_/g," "), i.macd?.trend==="ALTA"?"var(--green)":"var(--red)"],
+      ["BOLLINGER", i.bollinger?.position?.replace(/_/g," "), i.bollinger?.position==="DENTRO_DAS_BANDAS"?"var(--green)":"var(--yellow)"],
+      ["CANDLE", candle?.pattern?.replace(/_/g," "), candle?.bias==="ALTA"?"var(--green)":candle?.bias==="BAIXA"?"var(--red)":"var(--dim)"],
+      ["ACIMA MM50", i.medias.acimaMM50?"SIM":"NAO", i.medias.acimaMM50?"var(--green)":"var(--red)"],
     ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'+
       '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
-      '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+c+'">'+String(v||"--")+'</div></div>'
-    ).join("")+
-    '</div>'+
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+c+'">'+String(v||"--")+'</div></div>'
+    ).join("")+'</div>'+
+
+    // Medias e gestao de risco
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'+
     [
-      ["MM9", indicators.indicadores.medias.mm9,"var(--sub)"],
-      ["MM21", indicators.indicadores.medias.mm21,"var(--sub)"],
-      ["MM50", indicators.indicadores.medias.mm50,"var(--sub)"],
-      ["MM200", indicators.indicadores.medias.mm200,"var(--sub)"],
-      ["SUP.", indicators.suporte_resistencia.suporte,"var(--green)"],
-      ["RESIST.", indicators.suporte_resistencia.resistencia,"var(--red)"],
+      ["MM9", i.medias.mm9,"var(--sub)"],["MM21", i.medias.mm21,"var(--sub)"],
+      ["MM50", i.medias.mm50,"var(--sub)"],["MM200", i.medias.mm200,"var(--sub)"],
+      ["SUPORTE", indicators.suporte_resistencia.suporte,"var(--green)"],
+      ["RESISTENCIA", indicators.suporte_resistencia.resistencia,"var(--red)"],
       ["STOP ATR", indicators.gestao_risco.stop_sugerido,"var(--red)"],
       ["ALVO ATR", indicators.gestao_risco.alvo_sugerido,"var(--green)"],
     ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'+
       '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
       '<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:600;color:'+c+'">'+String(v||"--")+'</div></div>'
-    ).join("")+
-    '</div></div>' : "";
+    ).join("")+'</div>'+
+
+    // Kelly Criterion
+    '<div style="background:rgba(255,204,0,.05);border:1px solid rgba(255,204,0,.2);padding:12px;display:grid;grid-template-columns:1fr 1fr 1fr;">'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--yellow);margin-bottom:4px;">KELLY CRITERION</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--yellow)">'+kelly?.half_kelly+'%</div>'+
+    '<div style="font-family:monospace;font-size:8px;color:var(--dim)">do capital (half kelly)</div></div>'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">CLASSIFICACAO</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:13px;color:var(--yellow)">'+String(kelly?.explicacao||"--").replace(/_/g," ")+'</div></div>'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">R/R NATURAL</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:13px;color:var(--txt)">1:'+indicators.suporte_resistencia.rr_natural+'</div>'+
+    '<div style="font-size:9px;color:var(--dim)">suporte/resistencia</div></div>'+
+    '</div></div>';
+  })() : "";
 
   const res = '<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:20px;margin-bottom:20px;font-size:13px;color:var(--sub);line-height:1.8;font-style:italic;">'
     +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;font-style:normal">RESUMO EXECUTIVO</div>'
