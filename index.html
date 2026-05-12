@@ -343,9 +343,16 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
 <script>
 // ─── ESTADO ───────────────────────────────────────────────────
 let historyArr = JSON.parse(localStorage.getItem("ai_history") || "[]");
-let portfolio = [];
-let historico = [];
+let operacoes = [];
+let portfolioQuotes = {};
 let benchmark = null;
+
+// Atalhos para compatibilidade com codigo existente
+function getCarteira() { return operacoes.filter(o => o.status === "ABERTA" || o.status === "PARCIAL"); }
+function getHistorico() { return operacoes.filter(o => o.status === "ENCERRADA"); }
+// portfolio e historico como aliases para compatibilidade
+Object.defineProperty(window, "portfolio", { get: () => getCarteira() });
+Object.defineProperty(window, "historico", { get: () => getHistorico() });
 
 // ─── TICKER STRIP ─────────────────────────────────────────────
 (function(){
@@ -569,43 +576,66 @@ async function callClaude(prompt) {
 }
 
 // ─── CLOUD DB ─────────────────────────────────────────────────
-async function dbGet(key) {
+// ─── OPERACOES — API unificada ────────────────────────────────
+async function apiOperacoes(method, body) {
   try {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
-    const r = await fetch("/api/"+key, {
-      signal: controller.signal,
-      headers: { "Accept": "application/json", "Cache-Control": "no-cache" }
-    });
+    const timer = setTimeout(() => controller.abort(), 12000);
+    const opts = { method, headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" }, signal: controller.signal };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch("/api/operacoes", opts);
     clearTimeout(timer);
-    if (!r.ok) return null;
-    const d = await r.json();
-    return d[key] || d.portfolio || d.historico || [];
-  } catch(e) {
-    console.log("dbGet erro ("+key+"):", e.message);
-    return null;
+    if (!r.ok) throw new Error("HTTP "+r.status);
+    return await r.json();
+  } catch(e) { console.log("apiOperacoes erro:", e.message); return null; }
+}
+
+async function loadOperacoes() {
+  const local = JSON.parse(localStorage.getItem("operacoes_v1") || "[]");
+  if (local.length > 0) { operacoes = local; renderPortfolio(); renderHistorico(); }
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const d = await apiOperacoes("GET");
+    if (d !== null) {
+      if (d.operacoes && d.operacoes.length >= operacoes.length) {
+        operacoes = d.operacoes;
+        localStorage.setItem("operacoes_v1", JSON.stringify(operacoes));
+        renderPortfolio(); renderHistorico();
+      }
+      return;
+    }
+    if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
   }
 }
 
-async function dbSet(key, data) {
-  localStorage.setItem("ai_"+key, JSON.stringify(data));
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 10000);
-    const body = {};
-    body[key] = data;
-    const r = await fetch("/api/"+key, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: controller.signal
-    });
-    clearTimeout(timer);
-    return r.ok;
-  } catch(e) {
-    console.log("dbSet erro ("+key+"):", e.message);
-    return false;
-  }
+async function abrirOperacao(dados) {
+  const d = await apiOperacoes("POST", { acao: "ABRIR", ...dados });
+  if (d && d.ok) { operacoes.push(d.operacao); localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); renderHistorico(); }
+  return d;
+}
+
+async function venderOperacao(id, quantidade, preco, motivo) {
+  const d = await apiOperacoes("POST", { acao: "VENDER", id, quantidade, preco, motivo });
+  if (d && d.ok) { const idx = operacoes.findIndex(o=>o.id===id); if(idx>=0) operacoes[idx]=d.operacao; localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); renderHistorico(); }
+  return d;
+}
+
+async function reforcarOperacao(id, quantidade, preco) {
+  const d = await apiOperacoes("POST", { acao: "REFORCAR", id, quantidade, preco });
+  if (d && d.ok) { const idx = operacoes.findIndex(o=>o.id===id); if(idx>=0) operacoes[idx]=d.operacao; localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); }
+  return d;
+}
+
+async function editarOperacao(id, campos) {
+  const d = await apiOperacoes("POST", { acao: "EDITAR", id, ...campos });
+  if (d && d.ok) { const idx = operacoes.findIndex(o=>o.id===id); if(idx>=0) operacoes[idx]=d.operacao; localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); }
+  return d;
+}
+
+async function deletarOperacao(id) {
+  if (!confirm("Deletar esta operação?")) return;
+  const d = await apiOperacoes("DELETE", { id });
+  if (d && d.ok) { operacoes = operacoes.filter(o=>o.id!==id); localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); renderHistorico(); }
+  return d;
 }
 
 // ─── INFO CAPITAL GURU ────────────────────────────────────────
@@ -709,12 +739,11 @@ function buildIndicatorsContext(ind) {
 }
 
 // ─── COTACOES DA CARTEIRA ─────────────────────────────────────
-let portfolioQuotes = {};
-
 async function atualizarCotacoesCarteira() {
-  if (!portfolio.length) return;
+  const carteira = getCarteira();
+  if (!carteira.length) return;
   const results = await Promise.all(
-    portfolio.map(async p => {
+    carteira.map(async p => {
       const q = await fetchQuote(p.ticker);
       return { ticker: p.ticker, quote: q };
     })
@@ -745,88 +774,35 @@ async function testarTelegram() {
 
 // Verifica stops e alvos e notifica via Telegram
 async function verificarAlertas() {
-  if (!portfolio.length) return;
-  for (const p of portfolio) {
+  const carteira = getCarteira();
+  if (!carteira.length) return;
+  for (const p of carteira) {
     const quote = await fetchQuote(p.ticker);
     if (!quote) continue;
     const atual = quote.price;
-    const stopNum = p.stop ? parseFloat(String(p.stop).replace("R$","").replace(",",".")) : null;
-    const alvoNum = p.target ? parseFloat(String(p.target).replace("R$","").replace(",",".")) : null;
+    const stopNum = p.stop_loss || null;
+    const alvoNum = p.alvo || null;
     if (stopNum && atual <= stopNum) {
       await sendTelegram("STOP_ATINGIDO", {
         ticker: p.ticker,
         preco: quote.currency + atual.toFixed(2),
-        stop: p.stop,
+        stop: p.stop_loss ? "R$"+p.stop_loss : "--",
       });
     } else if (alvoNum && atual >= alvoNum) {
       await sendTelegram("ALVO_ATINGIDO", {
         ticker: p.ticker,
         preco: quote.currency + atual.toFixed(2),
-        alvo: p.target,
-        lucro: "+" + (((atual - p.price) / p.price) * 100).toFixed(2) + "%",
+        alvo: p.alvo ? "R$"+p.alvo : "--",
+        lucro: "+" + (((atual - p.preco_medio) / p.preco_medio) * 100).toFixed(2) + "%",
       });
     }
   }
 }
 
-async function loadPortfolio() {
-  // 1. Mostra local imediatamente
-  const local = JSON.parse(localStorage.getItem("ai_portfolio") || "[]");
-  if (local.length > 0) {
-    portfolio = local;
-    renderPortfolio();
-  }
-  // 2. Tenta nuvem com retry
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const cloud = await dbGet("portfolio");
-    if (cloud !== null) {
-      if (cloud.length >= portfolio.length) {
-        portfolio = cloud;
-        localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
-        renderPortfolio();
-      }
-      return;
-    }
-    // Aguarda antes de tentar novamente
-    if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
-  }
-  console.log("Portfolio: usando dados locais apos 3 tentativas");
-}
-
-async function savePortfolio() {
-  localStorage.setItem("ai_portfolio", JSON.stringify(portfolio));
-  await dbSet("portfolio", portfolio);
-}
-
-async function loadHistorico() {
-  const local = JSON.parse(localStorage.getItem("ai_historico") || "[]");
-  if (local.length > 0) { historico = local; }
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const cloud = await dbGet("historico");
-    if (cloud !== null) {
-      if (cloud.length >= historico.length) {
-        historico = cloud;
-        localStorage.setItem("ai_historico", JSON.stringify(historico));
-      }
-      return;
-    }
-    if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
-  }
-}
-
-async function saveOperacao(op) {
-  const idx = historico.findIndex(h => h.id === op.id);
-  if (idx >= 0) historico[idx] = op;
-  else historico.push(op);
-  localStorage.setItem("ai_historico", JSON.stringify(historico));
-  try {
-    await fetch("/api/historico", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ operacao: op })
-    });
-  } catch(e) {}
-}
+// Aliases de compatibilidade
+async function loadPortfolio() { await loadOperacoes(); }
+async function savePortfolio() { /* incluido em abrirOperacao/venderOperacao */ }
+async function loadHistoricoFn() { /* incluido em loadOperacoes */ }
 
 // ─── HELPERS ──────────────────────────────────────────────────
 const sigCol = s => s==="COMPRA"?"var(--green)":s==="VENDA"?"var(--red)":"var(--yellow)";
@@ -1550,292 +1526,206 @@ async function guruBriefing() {
 }
 
 // ─── CARTEIRA ─────────────────────────────────────────────────
+// ─── CARTEIRA ─────────────────────────────────────────────────
 function addPosition() {
   const ticker = document.getElementById("pTicker").value.trim().toUpperCase();
   const qty = parseFloat(document.getElementById("pQty").value);
   const price = parseFloat(document.getElementById("pPrice").value);
-  const stop = document.getElementById("pStop").value ? "R$"+parseFloat(document.getElementById("pStop").value).toFixed(2) : "";
-  const target = document.getElementById("pTarget").value ? "R$"+parseFloat(document.getElementById("pTarget").value).toFixed(2) : "";
+  const stop = parseFloat(document.getElementById("pStop").value) || null;
+  const target = parseFloat(document.getElementById("pTarget").value) || null;
   const market = document.getElementById("pMarket").value;
-  if (!ticker||!qty||!price) return;
-
-  const id = Date.now();
-  const dateStr = new Date().toISOString().split("T")[0];
-  const dataBr = new Date().toLocaleDateString("pt-BR");
-
-  // Adiciona na carteira
-  portfolio.push({id, ticker, qty, price, market, stop, target, date: dataBr});
-  savePortfolio();
-
-  // Registra automaticamente no historico como ABERTA
-  const stopNum = stop ? parseFloat(stop.replace("R$","")) : null;
-  const alvoNum = target ? parseFloat(target.replace("R$","")) : null;
-  const op = {
-    id,
-    ticker,
-    sinal: "COMPRA",
-    entrada: price,
-    qty,
-    stop: stopNum,
-    alvo: alvoNum,
-    score: null,
-    dataEntrada: dateStr,
-    dataSaida: null,
-    saida: null,
-    motivo: null,
-    resultado: null,
-    lucroReais: null,
-    guruAcertou: null,
-    status: "ABERTA",
-    mercado: market,
-  };
-  saveOperacao(op);
-
-  ["pTicker","pQty","pPrice","pStop","pTarget"].forEach(id=>document.getElementById(id).value="");
-  renderPortfolio();
+  if (!ticker||!qty||!price) { alert("Preencha Ticker, Quantidade e Preco."); return; }
+  abrirOperacao({ ticker, quantidade: qty, preco: price, stop, alvo: target, mercado: market });
+  ["pTicker","pQty","pPrice","pStop","pTarget"].forEach(id => document.getElementById(id).value = "");
 }
 
 async function venderParcial(id) {
-  const pos = portfolio.find(p=>p.id===id);
-  if (!pos) return;
-
-  const qtdVender = parseFloat(prompt("Quantas acoes de "+pos.ticker+" deseja vender?\nVoce tem: "+pos.qty+" acoes"));
-  if (!qtdVender || isNaN(qtdVender) || qtdVender <= 0) return;
-  if (qtdVender > pos.qty) {
-    alert("Quantidade maior do que o que voce tem ("+pos.qty+")");
-    return;
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+  const qtd = parseFloat(prompt("Quantas acoes de "+op.ticker+" deseja vender?\nVoce tem: "+op.quantidade_atual+" acoes"));
+  if (!qtd || isNaN(qtd) || qtd <= 0) return;
+  if (qtd > op.quantidade_atual) { alert("Quantidade maior que a posicao atual ("+op.quantidade_atual+")"); return; }
+  const preco = parseFloat(prompt("Preco de saida (R$):"));
+  if (!preco || isNaN(preco)) return;
+  const motivos = ["ALVO ATINGIDO","SAIDA PARCIAL PROGRAMADA","REALIZACAO PARCIAL","REBALANCEAMENTO","STOP ATINGIDO"];
+  const idx = prompt("Motivo:\n0 - ALVO ATINGIDO\n1 - SAIDA PARCIAL PROGRAMADA\n2 - REALIZACAO PARCIAL\n3 - REBALANCEAMENTO\n4 - STOP ATINGIDO");
+  const motivo = motivos[parseInt(idx)] || "REALIZACAO PARCIAL";
+  const d = await venderOperacao(id, qtd, preco, motivo);
+  if (d && d.ok) {
+    const res = d.operacao;
+    alert("Venda registrada!\n"+qtd+" acoes de "+op.ticker+"\nEntrada: R$"+op.preco_medio.toFixed(2)+" | Saida: R$"+preco.toFixed(2)+"\nResultado: "+(res.resultado_pct>=0?"+":"")+res.resultado_pct+"% | R$ "+res.lucro_total+"\n"+(res.quantidade_atual>0?"Restam: "+res.quantidade_atual+" acoes":"Posicao encerrada!"));
   }
-
-  const saida = parseFloat(prompt("Preco de saida (R$):"));
-  if (!saida || isNaN(saida)) return;
-
-  const motivos = ["ALVO ATINGIDO","SAIDA PARCIAL PROGRAMADA","REALIZACAO PARCIAL","REBALANCEAMENTO"];
-  const motivoIdx = prompt("Motivo:\n0 - ALVO ATINGIDO\n1 - SAIDA PARCIAL PROGRAMADA\n2 - REALIZACAO PARCIAL\n3 - REBALANCEAMENTO\n\nDigite o numero:");
-  const motivo = motivos[parseInt(motivoIdx)] || "REALIZACAO PARCIAL";
-
-  const entrada = parseFloat(pos.price)||0;
-  const resultado = entrada > 0 ? ((saida - entrada) / entrada * 100).toFixed(2) : "0";
-  const lucroReais = ((saida - entrada) * qtdVender).toFixed(2);
-  const guruAcertou = parseFloat(resultado) > 0;
-
-  // Registra venda parcial no historico
-  const op = {
-    id: Date.now(),
-    ticker: pos.ticker,
-    sinal: "COMPRA",
-    entrada,
-    qty: qtdVender,
-    stop: pos.stop ? parseFloat(String(pos.stop).replace(/[^0-9.]/g,"")) : null,
-    alvo: pos.target ? parseFloat(String(pos.target).replace(/[^0-9.]/g,"")) : null,
-    score: null,
-    dataEntrada: pos.date ? pos.date.split("/").reverse().join("-") : new Date().toISOString().split("T")[0],
-    dataSaida: new Date().toISOString().split("T")[0],
-    saida,
-    motivo: motivo+" (PARCIAL "+qtdVender+" acoes)",
-    resultado,
-    lucroReais,
-    guruAcertou,
-    status: "ENCERRADA",
-    mercado: pos.market,
-  };
-  await saveOperacao(op);
-
-  // Atualiza quantidade restante na carteira
-  const qtdRestante = pos.qty - qtdVender;
-  if (qtdRestante <= 0) {
-    // Vendeu tudo — remove da carteira
-    portfolio = portfolio.filter(p=>p.id!==id);
-  } else {
-    // Atualiza quantidade
-    const idx = portfolio.findIndex(p=>p.id===id);
-    if (idx >= 0) portfolio[idx].qty = qtdRestante;
-  }
-  savePortfolio();
-  renderPortfolio();
-
-  alert("Venda parcial registrada!\n"+qtdVender+" acoes de "+pos.ticker+"\nEntrada: R$"+entrada.toFixed(2)+" | Saida: R$"+saida.toFixed(2)+"\nResultado: "+resultado+"% | R$ "+lucroReais+"\nRestam: "+(qtdRestante > 0 ? qtdRestante+" acoes" : "posicao encerrada"));
 }
 
 async function removePosition(id) {
-  const pos = portfolio.find(p=>p.id===id);
-  if (!pos) return;
-
-  // Pergunta motivo da saida
-  const saida = parseFloat(prompt("Preco de saida de "+pos.ticker+" (R$):"));
-  if (!saida || isNaN(saida)) {
-    // Se cancelar, apenas remove sem registrar no historico
-    if (!confirm("Remover sem registrar no historico?")) return;
-    portfolio = portfolio.filter(p=>p.id!==id);
-    savePortfolio();
-    renderPortfolio();
-    return;
-  }
-
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+  const preco = parseFloat(prompt("Preco de saida total de "+op.ticker+" (R$):"));
+  if (!preco || isNaN(preco)) return;
   const motivos = ["ALVO ATINGIDO","STOP ATINGIDO","SAIDA MANUAL","REBALANCEAMENTO"];
-  const motivoIdx = prompt("Motivo da saida:\n0 - ALVO ATINGIDO\n1 - STOP ATINGIDO\n2 - SAIDA MANUAL\n3 - REBALANCEAMENTO\n\nDigite o numero:");
-  const motivo = motivos[parseInt(motivoIdx)] || "SAIDA MANUAL";
+  const idx = prompt("Motivo:\n0 - ALVO ATINGIDO\n1 - STOP ATINGIDO\n2 - SAIDA MANUAL\n3 - REBALANCEAMENTO");
+  const motivo = motivos[parseInt(idx)] || "SAIDA MANUAL";
+  const d = await venderOperacao(id, op.quantidade_atual, preco, motivo);
+  if (d && d.ok) {
+    const res = d.operacao;
+    alert("Operacao encerrada!\n"+op.ticker+"\nResultado: "+(res.resultado_pct>=0?"+":"")+res.resultado_pct+"% | R$ "+res.lucro_total+"\nATLAS acertou: "+(res.atlas_acertou?"SIM":"NAO"));
+  }
+}
 
-  const entrada = parseFloat(pos.price)||0;
-  const resultado = entrada > 0 ? ((saida - entrada) / entrada * 100).toFixed(2) : "0";
-  const lucroReais = ((saida - entrada) * (parseFloat(pos.qty)||0)).toFixed(2);
-  const guruAcertou = parseFloat(resultado) > 0;
+async function reforcarPosicao(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+  const qtd = parseFloat(prompt("Quantas acoes de "+op.ticker+" deseja adicionar?"));
+  if (!qtd || isNaN(qtd) || qtd <= 0) return;
+  const preco = parseFloat(prompt("Preco de entrada (R$):"));
+  if (!preco || isNaN(preco)) return;
+  const d = await reforcarOperacao(id, qtd, preco);
+  if (d && d.ok) {
+    alert("Posicao reforcada!\n"+op.ticker+" | Novo preco medio: R$"+d.operacao.preco_medio.toFixed(2)+"\nQuantidade total: "+d.operacao.quantidade_atual+" acoes");
+  }
+}
 
-  // Encerra no historico
-  const opEncerrada = {
-    id: pos.id,
-    ticker: pos.ticker,
-    sinal: "COMPRA",
-    entrada,
-    qty: parseFloat(pos.qty)||0,
-    stop: pos.stop ? parseFloat(String(pos.stop).replace(/[^0-9.]/g,"")) : null,
-    alvo: pos.target ? parseFloat(String(pos.target).replace(/[^0-9.]/g,"")) : null,
-    score: null,
-    dataEntrada: pos.date ? pos.date.split("/").reverse().join("-") : new Date().toISOString().split("T")[0],
-    dataSaida: new Date().toISOString().split("T")[0],
-    saida,
-    motivo,
-    resultado,
-    lucroReais,
-    guruAcertou,
-    status: "ENCERRADA",
-    mercado: pos.market,
-  };
-  await saveOperacao(opEncerrada);
+async function editarStop(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+  const stop = parseFloat(prompt("Novo stop loss para "+op.ticker+" (atual: R$"+(op.stop_loss||"--")+"):"));
+  if (!stop || isNaN(stop)) return;
+  await editarOperacao(id, { stop });
+}
 
-  // Remove da carteira
-  portfolio = portfolio.filter(p=>p.id!==id);
-  savePortfolio();
-  renderPortfolio();
-
-  // Mostra resultado
-  const emoji = parseFloat(resultado) >= 0 ? "LUCRO" : "PREJUIZO";
-  alert(emoji+" em "+pos.ticker+"\nEntrada: R$"+entrada.toFixed(2)+" | Saida: R$"+saida.toFixed(2)+"\nResultado: "+resultado+"% | R$ "+lucroReais+"\n\nRegistrado no historico!");
+async function editarAlvo(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+  const alvo = parseFloat(prompt("Novo alvo para "+op.ticker+" (atual: R$"+(op.alvo||"--")+"):"));
+  if (!alvo || isNaN(alvo)) return;
+  await editarOperacao(id, { alvo });
 }
 
 function renderPortfolio() {
   const el = document.getElementById("portfolioContent");
   if (!el) return;
-  if (!portfolio.length) {
-    el.innerHTML = '<div class="empty">CARTEIRA VAZIA - ADICIONE SUAS POSICOES ACIMA</div>';
+  const carteira = getCarteira();
+
+  if (!carteira.length) {
+    el.innerHTML = '<div class="empty">NENHUMA POSICAO ABERTA - CLIQUE EM &quot;+ ABRIR&quot; PARA COMECAR</div>';
+    updateBenchmarkCard();
     return;
   }
-  try {
-    const total = portfolio.reduce((a,p)=>a+p.qty*(parseFloat(p.price)||0),0);
-    const totalAtual = portfolio.reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+p.qty*(q?q.price:parseFloat(p.price)||0);},0);
-    const totalPL = totalAtual - total;
-    const totalPLpct = total > 0 ? ((totalPL/total)*100).toFixed(2) : "0.00";
-    const hasQ = Object.keys(portfolioQuotes).length > 0;
-    const plC = totalPL>=0?"var(--green)":"var(--red)";
-    const plB = totalPL>=0?"rgba(0,255,136,.3)":"rgba(255,51,85,.3)";
-    el.innerHTML = '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">'
-    +'<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">POSICOES</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+portfolio.length+'</div></div>'
-    +'<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">CUSTO MEDIO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">R$ '+total.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'
-    +(hasQ?'<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+'<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+(totalPL>=0?"+":"")+totalPL.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+(parseFloat(totalPLpct)>=0?"+":"")+totalPLpct+'%)</div></div>':'<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;opacity:.5;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:monospace;font-size:10px;color:var(--dim)">Buscando...</div></div>')
-    +'<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'
-    +'</div>'
-    +'<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'
-    +["TICKER","MERCADO","QTDE","PRECO MEDIO","PRECO ATUAL","TOTAL ATUAL","RESULT.","STOP","ALVO","% CART.","DATA",""].map(h=>'<th>'+h+'</th>').join("")
-    +'</tr></thead><tbody>'
-    +portfolio.map(p=>{
-      const price = parseFloat(p.price)||0;
-      const qty = parseFloat(p.qty)||0;
-      const pt = qty * price;
-      const pct = total>0?(pt/total*100).toFixed(1):0;
-      const currency = (p.market||"B3").includes("NYSE") || (p.market||"B3").includes("NASDAQ") ? "US$" : "R$";
-      const q = portfolioQuotes[p.ticker];
-      const precoAtual = q ? q.price : null;
-      const totalAtualPos = precoAtual ? qty * precoAtual : null;
-      const plPos = precoAtual ? ((precoAtual - price) / price * 100).toFixed(2) : null;
-      const plColor = plPos !== null ? (parseFloat(plPos)>=0?"var(--green)":"var(--red)") : "var(--dim)";
-      return '<tr><td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+String(p.ticker||"")+'</td>'
-        +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+String(p.market||"B3")+'</td>'
-        +'<td>'+qty+'</td>'
-        +'<td style="color:var(--sub)">'+currency+' '+price.toFixed(2)+'</td>'
-        +'<td style="color:var(--blue);font-weight:600">'+(precoAtual?currency+' '+precoAtual.toFixed(2):'--')+'</td>'
-        +'<td style="font-weight:600;color:var(--cyan)">'+(totalAtualPos?currency+' '+totalAtualPos.toLocaleString("pt-BR",{minimumFractionDigits:2}):'--')+'</td>'
-        +'<td style="font-weight:700;color:'+plColor+'">'+(plPos!==null?(parseFloat(plPos)>=0?"+":"")+plPos+'%':'--')+'</td>'
-        +'<td style="color:var(--red);font-family:monospace;font-size:11px">'+String(p.stop||"--")+'</td>'
-        +'<td style="color:var(--green);font-family:monospace;font-size:11px">'+String(p.target||"--")+'</td>'
-        +'<td style="color:'+(pct>15?"var(--red)":"var(--green)")+';font-family:monospace">'+pct+'%'+(pct>15?" (!!)":"")+'</td>'
-        +'<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+String(p.date||"")+'</td>'
-        +'<td style="display:flex;gap:4px;">'
-        +'<button class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.35);color:var(--yellow);" onclick="venderParcial('+p.id+')">VENDA PARCIAL</button>'
-        +'<button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);" onclick="removePosition('+p.id+')">VENDA TOTAL</button>'
-        +'</td></tr>';
-    }).join("")
-    +'</tbody></table></div>';
-  } catch(e) {
-    el.innerHTML = '<div class="error-box">Erro ao renderizar carteira: ' + e.message + '</div>';
-  }
 
-  // Atualiza benchmark card
-  const benchEl = document.getElementById("benchmarkCarteira");
-  if (benchEl && benchmark) {
-    const cartVar = total > 0 ? ((totalAtual - total) / total * 100).toFixed(2) : "0.00";
-    const items = [
-      ["SUA CARTEIRA", cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "Desde entrada"],
-      ["IBOVESPA MES", (benchmark.ibovespa.var_mes>=0?"+":"")+benchmark.ibovespa.var_mes+"%", benchmark.ibovespa.var_mes>=0?"var(--green)":"var(--red)", "No mes"],
-      ["CDI MES", "+"+benchmark.cdi.var_mes+"%", "var(--yellow)", "No mes"],
-    ];
-    benchEl.innerHTML = items.map(([k,v,c,sub])=>
-      '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
-      '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
-      '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
-      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:2px;">'+sub+'</div>'+
-      '</div>'
-    ).join("");
+  try {
+    const totalInv = carteira.reduce((a,p) => a + p.quantidade_atual * p.preco_medio, 0);
+    const totalAtual = carteira.reduce((a,p) => {
+      const q = portfolioQuotes[p.ticker];
+      return a + p.quantidade_atual * (q ? q.price : p.preco_medio);
+    }, 0);
+    const totalPL = totalAtual - totalInv;
+    const totalPLpct = totalInv > 0 ? ((totalPL/totalInv)*100).toFixed(2) : "0.00";
+    const totalOntem = carteira.reduce((a,p) => {
+      const q = portfolioQuotes[p.ticker];
+      const prev = q && q.prevClose ? q.prevClose : (q ? q.price : p.preco_medio);
+      return a + p.quantidade_atual * prev;
+    }, 0);
+    const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
+    const hasQ = Object.keys(portfolioQuotes).length > 0;
+    const plC = totalPL >= 0 ? "var(--green)" : "var(--red)";
+    const plB = totalPL >= 0 ? "rgba(0,255,136,.3)" : "rgba(255,51,85,.3)";
+
+    el.innerHTML = '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">'+
+      '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">POSICOES</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+carteira.length+'</div></div>'+
+      '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">CUSTO MEDIO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">R$ '+totalInv.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
+      (hasQ
+        ? '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
+          '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+( totalPL>=0?"+":"")+totalPL.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+( parseFloat(totalPLpct)>=0?"+":"")+totalPLpct+'%)</div>'+'<div style="font-family:monospace;font-size:9px;color:'+( parseFloat(varDia)>=0?"var(--green)":"var(--red)")+'">'+( parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div></div>'
+        : '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;opacity:.5;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:monospace;font-size:10px;color:var(--dim)">Buscando...</div></div>'
+      )+
+      '<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'+
+      '</div>'+
+      '<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'+
+      ["TICKER","STATUS","QTDE","P.MEDIO","P.ATUAL","TOTAL","RESULT","HOJE","STOP","ALVO","D.STOP","D.ALVO","ACOES"].map(h=>'<th>'+h+'</th>').join("")+
+      '</tr></thead><tbody>'+
+      carteira.map(p => {
+        const pm = parseFloat(p.preco_medio)||0;
+        const qty = parseFloat(p.quantidade_atual)||0;
+        const q = portfolioQuotes[p.ticker];
+        const atual = q ? q.price : null;
+        const prev = q && q.prevClose ? q.prevClose : atual;
+        const totalP = qty * pm;
+        const totalA = atual ? qty * atual : null;
+        const plP = atual ? ((atual - pm) / pm * 100).toFixed(2) : null;
+        const plH = atual && prev ? ((atual - prev) / prev * 100).toFixed(2) : null;
+        const cur = (p.mercado||"B3").includes("NYSE") || (p.mercado||"B3").includes("NASDAQ") ? "US$" : "R$";
+        const stopN = p.stop_loss || null;
+        const alvoN = p.alvo || null;
+        const dStop = stopN && atual ? ((atual - stopN) / atual * 100).toFixed(2) : null;
+        const dAlvo = alvoN && atual ? ((alvoN - atual) / atual * 100).toFixed(2) : null;
+        const plColor = plP !== null ? (parseFloat(plP)>=0?"var(--green)":"var(--red)") : "var(--dim)";
+        const hColor = plH !== null ? (parseFloat(plH)>=0?"var(--green)":"var(--red)") : "var(--dim)";
+        const statusBadge = p.status === "PARCIAL"
+          ? '<span style="font-size:9px;color:var(--yellow);background:rgba(255,204,0,.1);padding:2px 6px;border-radius:3px;">PARCIAL</span>'
+          : '<span style="font-size:9px;color:var(--green);background:rgba(0,255,136,.1);padding:2px 6px;border-radius:3px;">ABERTA</span>';
+        return '<tr>'+
+          '<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+p.ticker+'</td>'+
+          '<td>'+statusBadge+'</td>'+
+          '<td>'+qty+'</td>'+
+          '<td style="color:var(--sub)">'+cur+' '+pm.toFixed(2)+'</td>'+
+          '<td style="color:var(--blue);font-weight:600">'+( atual?cur+' '+atual.toFixed(2):"--")+'</td>'+
+          '<td style="color:var(--cyan)">'+( totalA?"R$ "+totalA.toLocaleString("pt-BR",{minimumFractionDigits:2}):"--")+'</td>'+
+          '<td style="font-weight:700;color:'+plColor+'">'+( plP?(parseFloat(plP)>=0?"+":"")+plP+"%":"--")+'</td>'+
+          '<td style="color:'+hColor+'">'+( plH?(parseFloat(plH)>=0?"+":"")+plH+"%":"--")+'</td>'+
+          '<td style="color:var(--red);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarStop('+p.id+')">'+( stopN?"R$"+stopN.toFixed(2):"--")+'</td>'+
+          '<td style="color:var(--green);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarAlvo('+p.id+')">'+( alvoN?"R$"+alvoN.toFixed(2):"--")+'</td>'+
+          '<td style="color:'+( dStop&&parseFloat(dStop)<3?"var(--red)":"var(--dim)")+';font-family:monospace;font-size:10px;">'+( dStop?(parseFloat(dStop)>=0?"+":"")+dStop+"%":"--")+'</td>'+
+          '<td style="color:var(--dim);font-family:monospace;font-size:10px;">'+( dAlvo?(parseFloat(dAlvo)>=0?"+":"")+dAlvo+"%":"--")+'</td>'+
+          '<td style="display:flex;gap:4px;">'+
+          '<button class="btn-sm" style="background:rgba(0,170,255,.12);border:1px solid rgba(0,170,255,.3);color:var(--blue);" onclick="reforcarPosicao('+p.id+')">+</button>'+
+          '<button class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.3);color:var(--yellow);" onclick="venderParcial('+p.id+')">PARCIAL</button>'+
+          '<button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.3);color:var(--red);" onclick="removePosition('+p.id+')">TOTAL</button>'+
+          '</td></tr>';
+      }).join("")+
+      '</tbody></table></div>';
+
+  } catch(e) {
+    el.innerHTML = '<div class="error-box">Erro: '+e.message+'</div>';
   }
+  updateBenchmarkCard();
 }
 
 // ─── HISTORICO ─────────────────────────────────────────────────
-function addRegistro() {
+function registrarOperacao() {
   const ticker = document.getElementById("hTicker").value.trim().toUpperCase();
   const sinal = document.getElementById("hSinal").value;
   const entrada = parseFloat(document.getElementById("hEntrada").value);
   const qty = parseFloat(document.getElementById("hQty").value);
-  const stop = parseFloat(document.getElementById("hStop").value)||null;
-  const alvo = parseFloat(document.getElementById("hAlvo").value)||null;
-  const score = parseInt(document.getElementById("hScore").value)||null;
-  const dataEntrada = document.getElementById("hDataEntrada").value||new Date().toISOString().split("T")[0];
+  const stop = parseFloat(document.getElementById("hStop").value) || null;
+  const alvo = parseFloat(document.getElementById("hAlvo").value) || null;
+  const score = parseInt(document.getElementById("hScore").value) || null;
   if (!ticker||!entrada||!qty) { alert("Preencha Ticker, Preco de Entrada e Quantidade."); return; }
-  const op = {id:Date.now(),ticker,sinal,entrada,qty,stop,alvo,score,dataEntrada,dataSaida:null,saida:null,motivo:null,resultado:null,lucroReais:null,guruAcertou:null,status:"ABERTA"};
-  saveOperacao(op);
-  ["hTicker","hEntrada","hQty","hStop","hAlvo","hScore"].forEach(id=>document.getElementById(id).value="");
-  renderHistorico();
+  abrirOperacao({ ticker, quantidade: qty, preco: entrada, stop, alvo, mercado: "B3", score, sinal });
+  ["hTicker","hEntrada","hQty","hStop","hAlvo","hScore"].forEach(id => document.getElementById(id).value = "");
 }
 
-function registrarOperacao() { addRegistro(); }
-
-function encerrarOperacao(id) {
+async function encerrarOperacao(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
   const saida = parseFloat(prompt("Preco de saida:"));
   if (!saida||isNaN(saida)) return;
   const motivo = prompt("Motivo (ALVO ATINGIDO / STOP ATINGIDO / SAIDA MANUAL):")||"SAIDA MANUAL";
-  const idx = historico.findIndex(h=>h.id===id);
-  if (idx<0) return;
-  const op = historico[idx];
-  const resultado = ((saida-op.entrada)/op.entrada*100);
-  const lucroReais = (saida-op.entrada)*op.qty;
-  const guruAcertou = op.sinal==="COMPRA"?resultado>0:op.sinal==="VENDA"?resultado<0:null;
-  const updated = {...op,dataSaida:new Date().toISOString().split("T")[0],saida,motivo,resultado:resultado.toFixed(2),lucroReais:lucroReais.toFixed(2),guruAcertou,status:"ENCERRADA"};
-  saveOperacao(updated);
+  await venderOperacao(id, op.quantidade_atual, saida, motivo);
   renderHistorico();
 }
 
 async function deleteOperacao(id) {
-  historico = historico.filter(h=>h.id!==id);
-  localStorage.setItem("ai_historico", JSON.stringify(historico));
-  try { await fetch("/api/historico",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})}); } catch(e){}
-  renderHistorico();
+  await deletarOperacao(id);
 }
 
 function calcPerf() {
-  const enc = historico.filter(h=>h.status==="ENCERRADA");
+  const enc = getHistorico();
   if (!enc.length) return null;
-  const ac = enc.filter(h=>h.guruAcertou===true).length;
-  const lucro = enc.reduce((a,h)=>a+parseFloat(h.lucroReais||0),0);
-  const melhor = enc.reduce((a,h)=>parseFloat(h.resultado)>parseFloat(a.resultado||"-999")?h:a,enc[0]);
-  const pior = enc.reduce((a,h)=>parseFloat(h.resultado)<parseFloat(a.resultado||"999")?h:a,enc[0]);
-  return {total:enc.length,acertos:ac,taxa:((ac/enc.length)*100).toFixed(1),lucro,melhor,pior};
+  const ac = enc.filter(h => h.atlas_acertou === true).length;
+  const lucro = enc.reduce((a,h) => a + parseFloat(h.lucro_total||0), 0);
+  const melhor = enc.reduce((a,h) => parseFloat(h.resultado_pct)>parseFloat(a.resultado_pct||"-999")?h:a, enc[0]);
+  const pior = enc.reduce((a,h) => parseFloat(h.resultado_pct)<parseFloat(a.resultado_pct||"999")?h:a, enc[0]);
+  return { total:enc.length, acertos:ac, taxa:((ac/enc.length)*100).toFixed(1), lucro, melhor, pior };
 }
 
 function renderHistorico() {
@@ -1846,70 +1736,73 @@ function renderHistorico() {
       perfEl.innerHTML = '<div style="font-family:monospace;font-size:10px;color:var(--dim);text-align:center;padding:20px;">Sem operacoes encerradas ainda.</div>';
     } else {
       perfEl.innerHTML = [
-        ["OPERACOES",perf.total,"var(--txt)"],
-        ["TAXA ACERTO",perf.taxa+"%",parseFloat(perf.taxa)>=60?"var(--green)":"var(--red)"],
-        ["LUCRO TOTAL","R$ "+perf.lucro.toFixed(2),perf.lucro>=0?"var(--green)":"var(--red)"],
-        ["ACERTOS",perf.acertos+"/"+perf.total,"var(--cyan)"],
-        ["MELHOR OP",perf.melhor.ticker+" +"+perf.melhor.resultado+"%","var(--green)"],
-        ["PIOR OP",perf.pior.ticker+" "+perf.pior.resultado+"%","var(--red)"],
+        ["OPERACOES", perf.total, "var(--txt)"],
+        ["TAXA ACERTO", perf.taxa+"%", parseFloat(perf.taxa)>=60?"var(--green)":"var(--red)"],
+        ["LUCRO TOTAL", "R$ "+perf.lucro.toFixed(2), perf.lucro>=0?"var(--green)":"var(--red)"],
+        ["ACERTOS", perf.acertos+"/"+perf.total, "var(--cyan)"],
+        ["MELHOR", perf.melhor.ticker+" +"+(perf.melhor.resultado_pct||0)+"%", "var(--green)"],
+        ["PIOR", perf.pior.ticker+" "+(perf.pior.resultado_pct||0)+"%", "var(--red)"],
       ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px">'+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+c+'">'+v+'</div></div>').join("");
     }
   }
 
   const el = document.getElementById("historicoContent");
   if (!el) return;
-  const abertas = historico.filter(h=>h.status==="ABERTA");
-  const enc = historico.filter(h=>h.status==="ENCERRADA").sort((a,b)=>new Date(b.dataSaida)-new Date(a.dataSaida));
+  const abertas = getCarteira();
+  const enc = getHistorico().slice().sort((a,b)=>new Date(b.data_entrada)-new Date(a.data_entrada));
   let html = "";
 
   if (abertas.length) {
-    html += sec("POSICOES ABERTAS")
-      +'<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">'
-      +abertas.map(op=>'<div style="background:var(--card);border:1px solid rgba(0,255,136,.2);border-left:3px solid var(--green);padding:14px 18px;display:grid;grid-template-columns:80px 80px 100px 100px 100px 100px 80px 1fr;align-items:center;gap:12px;">'
-        +'<div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:var(--green)">'+op.ticker+'</div>'
-        +'<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+(op.sinal==="COMPRA"?"var(--green)":"var(--red)")+'">'+op.sinal+'</div>'
-        +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">ENTRADA</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--blue)">R$ '+op.entrada+'</div></div>'
-        +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">QTDE</div><div style="font-family:Rajdhani,sans-serif;font-size:14px">'+op.qty+'</div></div>'
-        +'<div><div style="font-family:monospace;font-size:8px;color:var(--red)">STOP</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--red)">'+String(op.stop||"--")+'</div></div>'
-        +'<div><div style="font-family:monospace;font-size:8px;color:var(--green)">ALVO</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--green)">'+String(op.alvo||"--")+'</div></div>'
-        +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">SCORE</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--yellow)">'+String(op.score||"--")+'</div></div>'
-        +'<div style="display:flex;gap:8px;justify-content:flex-end;">'
-        +'<button onclick="encerrarOperacao('+op.id+')" style="background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);color:var(--green);padding:6px 14px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ENCERRAR</button>'
-        +'<button onclick="deleteOperacao('+op.id+')" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.3);color:var(--red);padding:6px 10px;cursor:pointer;font-family:monospace;font-size:9px;">DEL</button>'
-        +'</div></div>').join("")+'</div>';
+    html += sec("POSICOES ABERTAS / PARCIAIS")+
+      '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">'+
+      abertas.map(op=>'<div style="background:var(--card);border:1px solid rgba(0,255,136,.2);border-left:3px solid var(--green);padding:14px 18px;display:grid;grid-template-columns:80px 80px 100px 100px 100px 100px 80px 1fr;align-items:center;gap:12px;">'+
+        '<div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:var(--green)">'+op.ticker+'</div>'+
+        '<div style="font-size:11px;color:'+( op.status==="PARCIAL"?"var(--yellow)":"var(--green)")+'">'+op.status+'</div>'+
+        '<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">ENTRADA</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--blue)">R$ '+op.preco_medio.toFixed(2)+'</div></div>'+
+        '<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">QTDE</div><div style="font-family:Rajdhani,sans-serif;font-size:14px">'+op.quantidade_atual+'</div></div>'+
+        '<div><div style="font-family:monospace;font-size:8px;color:var(--red)">STOP</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--red)">'+( op.stop_loss?"R$"+op.stop_loss:"--")+'</div></div>'+
+        '<div><div style="font-family:monospace;font-size:8px;color:var(--green)">ALVO</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--green)">'+( op.alvo?"R$"+op.alvo:"--")+'</div></div>'+
+        '<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">SCORE</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--yellow)">'+( op.score_atlas||"--")+'</div></div>'+
+        '<div style="display:flex;gap:8px;justify-content:flex-end;">'+
+        '<button onclick="encerrarOperacao('+op.id+')" style="background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);color:var(--green);padding:6px 14px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ENCERRAR</button>'+
+        '<button onclick="deleteOperacao('+op.id+')" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.3);color:var(--red);padding:6px 10px;cursor:pointer;font-family:monospace;font-size:9px;">DEL</button>'+
+        '</div></div>').join("")+'</div>';
   }
 
   if (enc.length) {
-    html += sec("HISTORICO DE OPERACOES")
-      +'<div style="overflow-x:auto;"><table class="portfolio-table" style="min-width:900px;">'
-      +'<thead><tr>'+["DATA","TICKER","SINAL","ENTRADA","SAIDA","RESULT%","RESULT R$","MOTIVO","GURU",""].map(h=>'<th>'+h+'</th>').join("")+'</tr></thead>'
-      +'<tbody>'+enc.map(op=>{
-        const res=parseFloat(op.resultado||0);const rc=res>=0?"var(--green)":"var(--red)";
-        const g=op.guruAcertou===true?"OK":op.guruAcertou===false?"ERRO":"--";
-        const gc=op.guruAcertou===true?"var(--green)":op.guruAcertou===false?"var(--red)":"var(--dim)";
-        return '<tr><td style="font-family:monospace;font-size:9px;color:var(--dim)">'+String(op.dataSaida||"--")+'</td>'
-          +'<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+op.ticker+'</td>'
-          +'<td style="font-size:11px;font-weight:600;color:'+(op.sinal==="COMPRA"?"var(--green)":"var(--red)")+'">'+op.sinal+'</td>'
-          +'<td style="color:var(--blue)">R$ '+op.entrada+'</td>'
-          +'<td>R$ '+String(op.saida||"--")+'</td>'
-          +'<td style="font-weight:700;color:'+rc+'">'+(res>=0?"+":"")+op.resultado+'%</td>'
-          +'<td style="font-weight:600;color:'+rc+'">R$ '+String(op.lucroReais||"--")+'</td>'
-          +'<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+String(op.motivo||"--")+'</td>'
-          +'<td style="font-weight:700;color:'+gc+'">'+g+'</td>'
-          +'<td><button onclick="deleteOperacao('+op.id+')" class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);">DEL</button></td></tr>';
+    html += sec("OPERACOES ENCERRADAS")+
+      '<div style="overflow-x:auto;"><table class="portfolio-table" style="min-width:900px;">'+
+      '<thead><tr>'+["DATA","TICKER","ENTROU","SAIU","DIAS","RESULT%","RESULT R$","MOTIVO","ATLAS",""].map(h=>'<th>'+h+'</th>').join("")+'</tr></thead>'+
+      '<tbody>'+enc.map(op => {
+        const res = parseFloat(op.resultado_pct||0);
+        const rc = res>=0?"var(--green)":"var(--red)";
+        const g = op.atlas_acertou===true?"SIM OK":op.atlas_acertou===false?"NAO X":"--";
+        const gc = op.atlas_acertou===true?"var(--green)":op.atlas_acertou===false?"var(--red)":"var(--dim)";
+        const dataEntrada = op.data_entrada || "--";
+        const dataSaida = op.saidas && op.saidas.length ? op.saidas[op.saidas.length-1].data : "--";
+        const dias = dataEntrada!=="--"&&dataSaida!=="--" ? Math.round((new Date(dataSaida)-new Date(dataEntrada))/(1000*60*60*24)) : "--";
+        const ultimoMotivo = op.saidas && op.saidas.length ? op.saidas[op.saidas.length-1].motivo : "--";
+        const precoSaida = op.saidas && op.saidas.length ? "R$"+op.saidas[op.saidas.length-1].preco.toFixed(2) : "--";
+        return '<tr>'+
+          '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+dataSaida+'</td>'+
+          '<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+op.ticker+'</td>'+
+          '<td style="color:var(--sub)">R$ '+op.preco_medio.toFixed(2)+'</td>'+
+          '<td>'+precoSaida+'</td>'+
+          '<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+dias+'d</td>'+
+          '<td style="font-weight:700;color:'+rc+'">'+( res>=0?"+":"")+res.toFixed(2)+'%</td>'+
+          '<td style="font-weight:600;color:'+rc+'">'+( op.lucro_total>=0?"+ R$ ":"- R$ ")+Math.abs(op.lucro_total).toFixed(2)+'</td>'+
+          '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+ultimoMotivo+'</td>'+
+          '<td style="font-weight:700;color:'+gc+'">'+g+'</td>'+
+          '<td><button onclick="deleteOperacao('+op.id+')" class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);">DEL</button></td></tr>';
       }).join("")+'</tbody></table></div>';
   }
 
   if (!abertas.length && !enc.length) {
-    html = '<div class="empty">Nenhuma operacao registrada ainda.<br><span style="font-size:9px;margin-top:8px;display:block">Registre sua primeira operacao acima.</span></div>';
+    html = '<div class="empty">Nenhuma operacao ainda.<br><span style="font-size:9px;margin-top:8px;display:block">Abra sua primeira operacao na aba CARTEIRA.</span></div>';
   }
-
   el.innerHTML = html;
 }
 
-// ─── INIT ─────────────────────────────────────────────────────
-loadPortfolio();
-loadHistorico();
 
 // ─── RELATORIO MENSAL ──────────────────────────────────────────
 function renderRelatorioTab() {
