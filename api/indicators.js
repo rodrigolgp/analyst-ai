@@ -401,7 +401,7 @@ export default async function handler(req, res) {
         atr_pct: atr ? parseFloat((atr / precoAtual * 100).toFixed(2)) : null,
         tamanho_posicao_recomendado: kelly.recomendado + "% do capital",
       },
-      historico_recente: validData.slice(-10),
+      historico_recente: validData,
     });
 
   } catch(e) {
