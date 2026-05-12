@@ -379,6 +379,59 @@ let benchmark = null;
   setInterval(updateTicker, 5 * 60 * 1000);
 })();
 
+// ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
+function scorePrefiltro(ticker, quote) {
+  let score = 0;
+  const var_ = parseFloat(quote.change || 0);
+  const vol = quote.volume || 0;
+
+  // Momentum positivo forte
+  if (var_ > 5) score += 35;
+  else if (var_ > 3) score += 28;
+  else if (var_ > 1.5) score += 20;
+  else if (var_ > 0.5) score += 12;
+
+  // Pullback saudavel (possivel reversao)
+  if (var_ < -2 && var_ > -6) score += 22;
+  else if (var_ < -1 && var_ > -2) score += 10;
+
+  // Mercado prestando atencao (volatilidade)
+  if (Math.abs(var_) > 4) score += 15;
+  else if (Math.abs(var_) > 2) score += 8;
+
+  // Volume como confirmador (quando disponivel)
+  if (vol > 0) {
+    // Ativos B3 com volume alto
+    if (vol > 50000000) score += 15;
+    else if (vol > 20000000) score += 10;
+    else if (vol > 5000000) score += 5;
+  }
+
+  // Bonus para ativos com preco razoavel (mais liquidos)
+  const price = quote.price || 0;
+  if (price > 5 && price < 500) score += 5;
+
+  return score;
+}
+
+function selecionarCandidatos(tickers, quotes, n) {
+  // Calcula score rapido para todos os ativos com cotacao
+  const scored = tickers
+    .filter(t => quotes[t])
+    .map(t => ({ ticker: t, score: scorePrefiltro(t, quotes[t]) }))
+    .sort((a, b) => b.score - a.score);
+
+  // Retorna top N garantindo diversificacao B3 + EUA
+  const b3 = scored.filter(x => /^[A-Z]{4}[0-9]{1,2}$/.test(x.ticker)).slice(0, Math.ceil(n * 0.6));
+  const eua = scored.filter(x => !/^[A-Z]{4}[0-9]{1,2}$/.test(x.ticker) && !/11$/.test(x.ticker)).slice(0, Math.floor(n * 0.3));
+  const fiis = scored.filter(x => /11$/.test(x.ticker)).slice(0, Math.floor(n * 0.1));
+
+  return [...b3, ...eua, ...fiis]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map(x => x.ticker);
+}
+
 // ─── BENCHMARK ────────────────────────────────────────────────
 async function updateBenchmarkCard() {
   const totalInv = portfolio.reduce((a,p)=>(a+(parseFloat(p.qty)||0)*(parseFloat(p.price)||0)),0);
@@ -983,12 +1036,29 @@ function buildAnalyzePrompt(ticker, quote, manualPrice, indicators) {
   return "Voce e ATLAS, o gestor quantitativo de elite do ATLAS WEALTH. Seu unico objetivo e maximizar o retorno mensal do investidor.\n\nPERFIL DO INVESTIDOR:\n- Capital: R$5.000 a R$20.000 + aportes mensais crescentes\n- Objetivo: RETORNO MENSAL MAXIMO - meta de +8% ao mes\n- Horizonte por operacao: 5 a 20 dias (swing trade agressivo)\n- Estrategia: girar capital rapidamente, realizar lucro, reinvestir\n- Mercados: B3 + NYSE/NASDAQ\n- Corretora: BTG Pactual\n- Perfil: aceita risco calculado para maximizar retorno\n- NAO e investidor de longo prazo - quer resultado este mes\n\nATIVO: "+ticker+"\n"+pi+"\nMERCADO: "+(quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"))+"\n\nCRITERIOS DE ANALISE (em ordem de prioridade):\n1. MOMENTUM - o ativo esta em movimento agora? Volume acima da media?\n2. CATALISADOR - ha evento proximo que pode impulsionar o preco nos proximos 5-20 dias?\n3. TECNICO - RSI, MACD, rompimento de resistencia, price action favoravel\n4. RISCO/RETORNO - minimo 1:2, ideal 1:3 ou mais\n5. FUNDAMENTALISTA - saude da empresa como suporte\n6. MACRO - setor e indice favoraveis\n\nCALCULOS OBRIGATORIOS com o preco real:\n- Alvo 7 dias: preco realista para swing de curto prazo\n- Alvo 15 dias: objetivo principal da operacao\n- Stop loss: maximo 5% abaixo da entrada\n- Upside minimo aceitavel: 8% em ate 15 dias\n- Risco/retorno minimo: 1:2\n\n7 TRAVAS DE SEGURANCA:\nrisco/retorno>=1:2, volume acima media, RSI entre 30-70, tendencia do indice favoravel, sem evento de risco iminente, alocacao max 20% por ativo, volatilidade dentro do normal\n\nSCORE (baseado em potencial de retorno nos proximos 15 dias):\n<40=VENDA | 40-59=AGUARDA | 60-74=COMPRA MODERADA | 75-89=COMPRA FORTE | 90+=COMPRA MAXIMA\n\nRetorne APENAS JSON sem texto extra:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo30\":\"\",\"alvo60\":\"\",\"stop\":\"\",\"up30\":\"\",\"up60\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54},{\"d\":60,\"a\":\"\",\"u\":\"\",\"c\":44}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"val\":\"\",\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"div\":\"\",\"cr\":\"\",\"dy\":\"\",\"moat\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"said\":{\"p50\":\"\",\"tot\":\"\",\"stop\":\"\",\"eme\":\"\"},\"aloc\":\"\",\"ok\":true,\"just\":\"\",\"res\":\"\"}";
 }
 
-function buildRadarPrompt(tickers, quotes) {
+function buildRadarPrompt(tickers, quotes, indicadoresRadar) {
   const info = tickers.slice(0,80).map(t=>{const q=quotes[t];return q?t+"("+q.currency+q.price+","+q.change+"%hoje)":t;}).join(",");
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: identificar as melhores oportunidades de RETORNO MAXIMO nos proximos 5 a 15 dias.\n\nPERFIL: Investidor agressivo de curto prazo, meta +8% ao mes, gira capital rapidamente, B3+NYSE/NASDAQ, capital R$5k-20k.\n\nATIVOS COM PRECOS REAIS DE HOJE:\n"+info+"\n\nCRITERIOS DE SELECAO (rigorosos):\n1. MOMENTUM FORTE - subindo com volume acima da media AGORA\n2. CATALISADOR IMINENTE - resultado, evento, noticia nos proximos 15 dias\n3. SETUP TECNICO PERFEITO - rompimento, pullback, suporte testado\n4. UPSIDE MINIMO - 8% em ate 15 dias\n5. RISCO/RETORNO - minimo 1:2, preferir 1:3\n6. STOP MAXIMO - 5% abaixo da entrada\n\nSelecione TOP 8 com MAIOR potencial de retorno nos proximos 5-15 dias.\nPara cada ativo, calcule alvos e stops usando os precos REAIS acima.\nListe tambem os ativos a EVITAR com motivo claro.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"evitar\":[\"\"]}";
+
+  // Adiciona indicadores dos top candidatos
+  const indInfo = Object.entries(indicadoresRadar||{}).map(([t, ind]) => {
+    const conf = ind.confluencia;
+    const candle = ind.candle_pattern;
+    const vwap = ind.indicadores?.vwap;
+    return t+": CONFLUENCIA="+conf?.score+"/"+conf?.direcao
+      +"|RSI_POND="+ind.indicadores?.rsi?.rsi_ponderado
+      +"|MACD="+ind.indicadores?.macd?.trend+(ind.indicadores?.macd?.crossover!=="NENHUM"?"("+ind.indicadores?.macd?.crossover+")":"")
+      +"|VWAP="+vwap?.sinal
+      +"|VOLUME="+ind.indicadores?.volume?.status
+      +"|CANDLE="+candle?.pattern+"("+candle?.bias+")"
+      +"|STOP_ATR="+ind.gestao_risco?.stop_sugerido
+      +"|ALVO_ATR="+ind.gestao_risco?.alvo_sugerido
+      +"|KELLY="+ind.kelly_criterion?.half_kelly+"%";
+  }).join(" | ");
+
+  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: identificar as melhores oportunidades de RETORNO MAXIMO nos proximos 5 a 15 dias.\n\nPERFIL: Investidor agressivo de curto prazo, meta +8% ao mes, gira capital rapidamente, B3+NYSE/NASDAQ, capital R$5k-20k.\n\nATIVOS COM PRECOS REAIS:\n"+info+"\n\nINDICADORES MATEMATICOS (top candidatos):\n"+indInfo+"\n\nCRITERIOS DE SELECAO (rigorosos):\n1. CONFLUENCIA alta (score >60) - multiplos sistemas confirmando\n2. MOMENTUM FORTE - subindo com volume acima da media AGORA\n3. VWAP favoravel - institucional comprando\n4. CATALISADOR IMINENTE - resultado, evento nos proximos 15 dias\n5. SETUP TECNICO - rompimento, pullback, candle de reversao\n6. UPSIDE MINIMO 8% em ate 15 dias | STOP MAXIMO 5%\n7. RISCO/RETORNO minimo 1:2, preferir 1:3\n\nSelecione TOP 8. Para ativos com indicadores matematicos disponíveis, USE OS DADOS REAIS para calcular alvos e stops.\nListe os ativos a EVITAR com motivo claro.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"evitar\":[\"\"]}";
 }
 
-function buildGuruPrompt(quotes, cap) {
+function buildGuruPrompt(quotes, cap, indicadoresGuru) {
   const info = Object.entries(quotes).slice(0,60).map(([t,q])=>t+":"+q.currency+q.price+"("+q.change+"%)").join(",");
   const temCarteira = portfolio.length > 0;
   const capitalInvestido = portfolio.reduce((a,p)=>{
@@ -1018,7 +1088,20 @@ function buildGuruPrompt(quotes, cap) {
     ? "MODO REBALANCEAMENTO - ja tenho posicoes abertas.\nPARA CADA POSICAO DECIDA:\n- MANTER: posicao saudavel, longe do stop, caminhando para o alvo\n- VENDER: atingiu alvo, proximo do stop (<2%), ou ha oportunidade muito melhor\n- REFORCAR: posicao vencedora com espaco para mais\n\nDepois, com o CAIXA LIVRE de R$"+caixaDisponivel.toFixed(2)+", sugira NOVAS ENTRADAS apenas se houver oportunidades com upside >8% em 15 dias e R/R >1:2. Se nao houver, mantenha o caixa. NAO force entradas."
     : "MODO MONTAGEM INICIAL - carteira vazia.\nSelecione 5-6 ativos com maior potencial nos proximos 15 dias.\nCapital para investir: R$"+caixaDisponivel.toFixed(2);
 
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: MAXIMIZAR RETORNO DESTE MES.\n\nCAPITAL TOTAL: R$"+cap+"\nCAPITAL INVESTIDO: R$"+capitalInvestido.toFixed(2)+"\nCAIXA LIVRE: R$"+caixaDisponivel.toFixed(2)+"\nRESERVA (20%): R$"+reserva.toFixed(2)+"\nMETA: +8% ao mes | Swing trade 5-20 dias | BTG Pactual\n\nPOSICOES ATUAIS:\n"+posicoes+"\n\nMERCADO HOJE: "+info+"\n\n"+instrucoes+"\n\nREGRAS: max 6 ativos, 20% caixa intocavel, max 20% por ativo, stop max 5%, R/R min 1:2, linguagem simples.\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"motivo\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
+  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: MAXIMIZAR RETORNO DESTE MES.\n\nCAPITAL TOTAL: R$"+cap+"\nCAPITAL INVESTIDO: R$"+capitalInvestido.toFixed(2)+"\nCAIXA LIVRE: R$"+caixaDisponivel.toFixed(2)+"\nRESERVA (20%): R$"+reserva.toFixed(2)+"\nMETA: +8% ao mes | Swing trade 5-20 dias | BTG Pactual\n\nPOSICOES ATUAIS:\n"+posicoes+"\n\nMERCADO HOJE: "+info+"\n\n"+instrucoes+("\n\nINDICADORES MATEMATICOS DOS CANDIDATOS:\n"
+    + Object.entries(indicadoresGuru||{}).map(([t,ind])=>{
+        const conf = ind.confluencia;
+        const candle = ind.candle_pattern;
+        return t+": CONFLUENCIA="+conf?.score+"/"+conf?.direcao
+          +"|RSI="+ind.indicadores?.rsi?.rsi_ponderado
+          +"|MACD="+ind.indicadores?.macd?.trend
+          +"|VWAP="+ind.indicadores?.vwap?.sinal
+          +"|CANDLE="+candle?.pattern+"("+candle?.bias+")"
+          +"|KELLY="+ind.kelly_criterion?.half_kelly+"%"
+          +"|STOP_ATR="+ind.gestao_risco?.stop_sugerido
+          +"|ALVO_ATR="+ind.gestao_risco?.alvo_sugerido;
+      }).join(" | ")
+    )+"\n\nREGRAS: max 6 ativos, 20% caixa intocavel, max 20% por ativo, stop max 5%, R/R min 1:2, linguagem simples. USE OS INDICADORES MATEMATICOS para calcular stops e alvos quando disponíveis.\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"motivo\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
 }
 
 
@@ -1084,9 +1167,72 @@ function renderHistory() {
 }
 renderHistory();
 
+// ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
+function scorePrefiltro(ticker, quote) {
+  if (!quote) return 0;
+  let score = 0;
+  const var_ = parseFloat(quote.change || 0);
+  const isB3 = /^[A-Z]{4}[0-9]{1,2}$/.test(ticker);
+
+  // 1. Momentum positivo forte
+  if (var_ > 5) score += 35;
+  else if (var_ > 3) score += 28;
+  else if (var_ > 1.5) score += 20;
+  else if (var_ > 0.5) score += 12;
+
+  // 2. Pullback saudavel (possivel reversao)
+  // Ativos caindo -2% a -5% podem estar em suporte
+  if (var_ < -2 && var_ > -5) score += 22;
+  else if (var_ < -1 && var_ > -2) score += 10;
+
+  // 3. Mercado prestando atencao (volatilidade)
+  if (Math.abs(var_) > 4) score += 15;
+  else if (Math.abs(var_) > 2) score += 8;
+
+  // 4. Bonus por tipo de ativo
+  // FIIs e ETFs - mais estabilidade
+  if (/11$/.test(ticker)) score += 5;
+  // BDRs - exposicao internacional
+  if (/34$/.test(ticker)) score += 5;
+
+  // 5. Bonus para ativos da carteira atual
+  if (portfolio.some(p => p.ticker === ticker)) score += 30;
+
+  return score;
+}
+
+function selecionarCandidatos(tickers, quotes, maxCandidatos = 30) {
+  // Calcula score para todos e ordena
+  const scored = tickers
+    .filter(t => quotes[t])
+    .map(t => ({ ticker: t, score: scorePrefiltro(t, quotes[t]), quote: quotes[t] }))
+    .sort((a, b) => b.score - a.score);
+
+  // Garante diversificacao: max 40% de um mesmo mercado
+  const result = [];
+  const b3Count = { count: 0, max: Math.ceil(maxCandidatos * 0.6) };
+  const usaCount = { count: 0, max: Math.ceil(maxCandidatos * 0.5) };
+
+  for (const item of scored) {
+    if (result.length >= maxCandidatos) break;
+    const isB3 = /^[A-Z]{4}[0-9]{1,2}$/.test(item.ticker);
+    if (isB3 && b3Count.count >= b3Count.max) continue;
+    if (!isB3 && usaCount.count >= usaCount.max) continue;
+    result.push(item.ticker);
+    if (isB3) b3Count.count++; else usaCount.count++;
+  }
+
+  // Sempre inclui ativos da carteira
+  portfolio.forEach(p => {
+    if (!result.includes(p.ticker)) result.unshift(p.ticker);
+  });
+
+  return [...new Set(result)].slice(0, maxCandidatos);
+}
+
 // ─── RADAR ────────────────────────────────────────────────────
 const RADAR_TICKERS = ["PETR4","VALE3","ITUB4","BBDC4","WEGE3","RENT3","BBAS3","ABEV3","ELET3","SUZB3","CSAN3","PRIO3","VBBR3","BRFS3","JBSS3","CMIG4","CPFE3","EGIE3","ENGI11","TAEE11","TIMS3","VIVT3","AZUL4","EMBR3","RADL3","HAPV3","RDOR3","HYPE3","LREN3","MGLU3","EQTL3","BPAC11","ITSA4","SANB11","KLBN11","CYRE3","MRVE3","PETZ3","BLAU3","INTER3","CRFB3","ASAI3","KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","BTLG11","KNCR11","AAPL","MSFT","GOOGL","AMZN","META","NVDA","JPM","V","MA","AVGO","MRK","ABBV","AMD","ADBE","CRM","MCD","BAC","DDOG","NET","CRWD","PANW","COIN","UBER","SPY","QQQ","GLD"];
-const STEPS_R = ["Iniciando scanner...","Buscando cotacoes B3...","Buscando cotacoes NYSE/NASDAQ...","Filtrando por perfil...","Calculando scores...","Rankeando oportunidades...","Gerando relatorio..."];
+const STEPS_R = ["Iniciando scanner...","Buscando cotacoes B3...","Buscando cotacoes NYSE/NASDAQ...","Score de pre-filtro (100+ ativos)...","Indicadores matematicos (top 30)...","Score de confluencia...","ATLAS gerando relatorio..."];
 
 async function runRadar() {
   document.getElementById("emptyR").style.display = "none";
@@ -1105,10 +1251,33 @@ async function runRadar() {
   }
   si = 3; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
 
+  // NIVEL 1: Score de pre-filtro para todos os ativos
+  si = 3; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
+  const top30 = selecionarCandidatos(RADAR_TICKERS, quotes, 30);
+  console.log("Top 30 selecionados:", top30);
+
+  // NIVEL 2: Indicadores matematicos dos top 30 em paralelo
+  si = 4; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
+  const indicadoresRadar = {};
+  await Promise.all(top30.map(async t => {
+    const ind = await fetchIndicators(t);
+    if (ind) indicadoresRadar[t] = ind;
+  }));
+
+  // Enriquece quotes com score de confluencia real
+  top30.forEach(t => {
+    if (indicadoresRadar[t] && quotes[t]) {
+      quotes[t].confluencia = indicadoresRadar[t].confluencia?.score;
+      quotes[t].sinal_tecnico = indicadoresRadar[t].confluencia?.direcao;
+    }
+  });
+
+  si = 5; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
+
   try {
-    const data = await callClaude(buildRadarPrompt(RADAR_TICKERS, quotes));
+    const data = await callClaude(buildRadarPrompt(RADAR_TICKERS, quotes, indicadoresRadar));
     document.getElementById("loadR").style.display = "none";
-    document.getElementById("resR").innerHTML = renderRadar(data, quotes);
+    document.getElementById("resR").innerHTML = renderRadar(data, quotes, indicadoresRadar);
     document.getElementById("resR").style.display = "block";
   } catch(e) {
     document.getElementById("loadR").style.display = "none";
@@ -1284,8 +1453,42 @@ async function guruMontar() {
   }
   si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
 
+  // NIVEL 1: Pre-filtro quantitativo — seleciona top 25
+  si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
+  const carteiraTickers = portfolio.map(p => p.ticker);
+  const top25Base = selecionarCandidatos(GURU_TICKERS, quotes, 25);
+  // Garante que ativos da carteira sempre entram
+  const top25Guru = [...new Set([...carteiraTickers, ...top25Base])].slice(0, 28);
+
+  // NIVEL 2: Indicadores matematicos em paralelo
+  si = 4; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
+  const indicadoresGuru = {};
+  await Promise.all(top25Guru.map(async t => {
+    const ind = await fetchIndicators(t);
+    if (ind) indicadoresGuru[t] = ind;
+  }));
+
+  // NIVEL 3: Ordena por score de confluencia real
+  top25Guru.sort((a, b) => {
+    // Ativos da carteira sempre primeiro
+    const aCart = carteiraTickers.includes(a) ? 1000 : 0;
+    const bCart = carteiraTickers.includes(b) ? 1000 : 0;
+    const sa = (indicadoresGuru[a]?.confluencia?.score || 0) + aCart;
+    const sb = (indicadoresGuru[b]?.confluencia?.score || 0) + bCart;
+    return sb - sa;
+  });
+
+  // Enriquece quotes com confluencia real
+  top25Guru.forEach(t => {
+    if (indicadoresGuru[t] && quotes[t]) {
+      quotes[t].confluencia = indicadoresGuru[t].confluencia?.score;
+      quotes[t].sinal_tecnico = indicadoresGuru[t].confluencia?.direcao;
+    }
+  });
+  si = 5; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
+
   try {
-    const data = await callClaude(buildGuruPrompt(quotes, cap));
+    const data = await callClaude(buildGuruPrompt(quotes, cap, indicadoresGuru));
     si = 6; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
     document.getElementById("loadG").style.display = "none";
     document.getElementById("resG").innerHTML = renderGuruResult(data);
