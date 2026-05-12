@@ -354,28 +354,6 @@ let benchmark = null;
   document.getElementById("tickerInner").innerHTML = html;
 
   // Busca precos reais em background
-  async function updateBenchmarkCard() {
-    const benchEl = document.getElementById("benchmarkCarteira");
-    if (!benchEl || !benchmark) return;
-    const totalInv = portfolio.reduce((a,p)=>(a+(parseFloat(p.qty)||0)*(parseFloat(p.price)||0)),0);
-    const totalAtual = portfolio.reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+(parseFloat(p.qty)||0)*(q?q.price:parseFloat(p.price)||0);},0);
-    const cartVar = totalInv > 0 ? ((totalAtual - totalInv) / totalInv * 100).toFixed(2) : "0.00";
-    const ibovMes = parseFloat(benchmark.ibovespa.var_mes).toFixed(2);
-    const cdiMes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
-    const items = [
-      ["SUA CARTEIRA", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "Desde entrada"],
-      ["IBOVESPA MES", (parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%", parseFloat(ibovMes)>=0?"var(--green)":"var(--red)", "Mai/2026"],
-      ["CDI MES", "+"+cdiMes+"%", "var(--yellow)", "Mai/2026"],
-    ];
-    benchEl.innerHTML = items.map(([k,v,c,sub])=>
-      '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
-      '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
-      '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
-      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:2px;">'+sub+'</div>'+
-      '</div>'
-    ).join("");
-  }
-
   async function updateTicker() {
     try {
       const r = await fetch("/api/tickers");
@@ -401,6 +379,28 @@ let benchmark = null;
 })();
 
 // ─── BENCHMARK ────────────────────────────────────────────────
+async function updateBenchmarkCard() {
+  const benchEl = document.getElementById("benchmarkCarteira");
+  if (!benchEl || !benchmark) return;
+  const totalInv = portfolio.reduce((a,p)=>(a+(parseFloat(p.qty)||0)*(parseFloat(p.price)||0)),0);
+  const totalAtual = portfolio.reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+(parseFloat(p.qty)||0)*(q?q.price:parseFloat(p.price)||0);},0);
+  const cartVar = totalInv > 0 ? ((totalAtual - totalInv) / totalInv * 100).toFixed(2) : "0.00";
+  const ibovMes = parseFloat(benchmark.ibovespa.var_mes).toFixed(2);
+  const cdiMes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
+  const items = [
+    ["SUA CARTEIRA", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "Desde entrada"],
+    ["IBOVESPA MES", (parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%", parseFloat(ibovMes)>=0?"var(--green)":"var(--red)", "Mai/2026"],
+    ["CDI MES", "+"+cdiMes+"%", "var(--yellow)", "Mai/2026"],
+  ];
+  benchEl.innerHTML = items.map(([k,v,c,sub])=>
+    '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
+    '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
+    '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:2px;">'+sub+'</div>'+
+    '</div>'
+  ).join("");
+}
+
 async function fetchBenchmark() {
   try {
     const r = await fetch("/api/benchmark");
