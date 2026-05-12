@@ -844,10 +844,11 @@ function atualizarInfoCapital() {
   const aporte = parseFloat(document.getElementById("guruAporte")?.value) || 0;
 
   // Valor atual da carteira com cotacoes reais
-  const valorCarteira = portfolio.reduce((a,p)=>{
+  const carteira = getCarteira();
+  const valorCarteira = carteira.reduce((a,p)=>{
     const q = portfolioQuotes[p.ticker];
-    const preco = q ? q.price : parseFloat(p.price)||0;
-    return a + (parseFloat(p.qty)||0) * preco;
+    const preco = q ? q.price : parseFloat(p.preco_medio)||0;
+    return a + (parseFloat(p.quantidade_atual)||0) * preco;
   }, 0);
 
   // Capital total = carteira atual + aporte
@@ -1675,10 +1676,11 @@ function renderBriefing(d) {
 async function guruMontar() {
   // Capital total = valor atual da carteira + novo aporte
   const aporte = parseFloat(document.getElementById("guruAporte").value) || 0;
-  const valorCarteira = portfolio.reduce((a,p)=>{
+  const carteira = getCarteira();
+  const valorCarteira = carteira.reduce((a,p)=>{
     const q = portfolioQuotes[p.ticker];
-    const preco = q ? q.price : parseFloat(p.price)||0;
-    return a + (parseFloat(p.qty)||0) * preco;
+    const preco = q ? q.price : parseFloat(p.preco_medio)||0;
+    return a + (parseFloat(p.quantidade_atual)||0) * preco;
   }, 0);
   const cap = valorCarteira + aporte;
   // Atualiza info visual
@@ -1752,10 +1754,11 @@ async function guruMontar() {
 
 async function guruBriefing() {
   const aporte = parseFloat(document.getElementById("guruAporte").value) || 0;
-  const valorCarteira = portfolio.reduce((a,p)=>{
+  const carteira = getCarteira();
+  const valorCarteira = carteira.reduce((a,p)=>{
     const q = portfolioQuotes[p.ticker];
-    const preco = q ? q.price : parseFloat(p.price)||0;
-    return a + (parseFloat(p.qty)||0) * preco;
+    const preco = q ? q.price : parseFloat(p.preco_medio)||0;
+    return a + (parseFloat(p.quantidade_atual)||0) * preco;
   }, 0);
   const cap = valorCarteira + aporte;
   document.getElementById("emptyG").style.display = "none";
