@@ -3704,16 +3704,20 @@ async function reforcarPosicao(id) {
 async function editarStop(id) {
   const op = operacoes.find(o => o.id === id);
   if (!op) return;
-  const stop = parseFloat(prompt("Novo stop loss para "+op.ticker+" (atual: R$"+(op.stop_loss||"--")+"):"));
-  if (!stop || isNaN(stop)) return;
+  const input = prompt("Novo stop loss para "+op.ticker+" (atual: R$"+(op.stop_loss ? parseFloat(op.stop_loss).toFixed(2) : "--")+"):");
+  if (!input || input.trim() === "") return;
+  const stop = parseFloat(input.replace(",","."));
+  if (isNaN(stop)) { alert("Valor inválido"); return; }
   await editarOperacao(id, { stop });
 }
 
 async function editarAlvo(id) {
   const op = operacoes.find(o => o.id === id);
   if (!op) return;
-  const alvo = parseFloat(prompt("Novo alvo para "+op.ticker+" (atual: R$"+(op.alvo||"--")+"):"));
-  if (!alvo || isNaN(alvo)) return;
+  const input = prompt("Novo alvo para "+op.ticker+" (atual: R$"+(op.alvo ? parseFloat(op.alvo).toFixed(2) : "--")+"):");
+  if (!input || input.trim() === "") return;
+  const alvo = parseFloat(input.replace(",","."));
+  if (isNaN(alvo)) { alert("Valor inválido"); return; }
   await editarOperacao(id, { alvo });
 }
 
