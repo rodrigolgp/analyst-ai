@@ -890,16 +890,16 @@ function selecionarCandidatos(tickers, quotes, n) {
 
 // ─── BENCHMARK ────────────────────────────────────────────────
 async function updateBenchmarkCard() {
-  const totalInv = portfolio.reduce((a,p)=>(a+(parseFloat(p.qty)||0)*(parseFloat(p.price)||0)),0);
-  const totalAtual = portfolio.reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+(parseFloat(p.qty)||0)*(q?q.price:parseFloat(p.price)||0);},0);
+  const totalInv = getCarteira().reduce((a,p)=>(a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0)),0);
+  const totalAtual = getCarteira().reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+(parseFloat(p.quantidade_atual)||0)*(q?q.price:parseFloat(p.preco_medio)||0);},0);
   const cartVar = totalInv > 0 ? ((totalAtual - totalInv) / totalInv * 100).toFixed(2) : "0.00";
   const cartPL = (totalAtual - totalInv).toFixed(2);
 
   // Calcula resultado do dia (vs fechamento de ontem)
-  const totalOntem = portfolio.reduce((a,p)=>{
+  const totalOntem = getCarteira().reduce((a,p)=>{
     const q = portfolioQuotes[p.ticker];
-    const prevClose = q && q.prevClose ? q.prevClose : (q ? q.price : parseFloat(p.price)||0);
-    return a + (parseFloat(p.qty)||0) * prevClose;
+    const prevClose = q && q.prevClose ? q.prevClose : (q ? q.price : parseFloat(p.preco_medio)||0);
+    return a + (parseFloat(p.quantidade_atual)||0) * prevClose;
   }, 0);
   const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
   const plDia = (totalAtual - totalOntem).toFixed(2);
@@ -1556,28 +1556,1605 @@ function buildRadarPrompt(tickers, quotes, indicadoresRadar) {
 
 function buildGuruPrompt(quotes, cap, indicadoresGuru) {
   const info = Object.entries(quotes).slice(0,60).map(([t,q])=>t+":"+q.currency+q.price+"("+q.change+"%)").join(",");
-  const temCarteira = portfolio.length > 0;
-  const capitalInvestido = portfolio.reduce((a,p)=>{
+  const temCarteira = getCarteira().length > 0;
+  const capitalInvestido = getCarteira().reduce((a,p)=>{
     const q = quotes[p.ticker];
-    const precoAtual = q ? q.price : parseFloat(p.price)||0;
-    return a + (parseFloat(p.qty)||0) * precoAtual;
+    const precoAtual = q ? q.price : parseFloat(p.preco_medio)||0;
+    return a + (parseFloat(p.quantidade_atual)||0) * precoAtual;
   }, 0);
   const reserva = cap * 0.2;
   const caixaDisponivel = Math.max(0, cap - capitalInvestido - reserva);
-  const modo = temCarteira ? "REBALANCEAMENTO" : "MONTAGEM_INICIAL";
+  const modo = getCarteira().length > 0 ? "REBALANCEAMENTO" : "MONTAGEM_INICIAL";
 
-  const posicoes = temCarteira ? portfolio.map(p => {
+  const posicoes = temCarteira ? getCarteira().map(p => {
     const q = quotes[p.ticker];
-    const atual = q ? q.price : parseFloat(p.price)||0;
-    const entrada = parseFloat(p.price)||0;
-    const qty = parseFloat(p.qty)||0;
+    const atual = q ? q.price : parseFloat(p.preco_medio)||0;
+    const entrada = parseFloat(p.preco_medio)||0;
+    const qty = parseFloat(p.quantidade_atual)||0;
     const pl = entrada > 0 ? (((atual - entrada) / entrada) * 100).toFixed(2) : "0";
     const valorAtual = (qty * atual).toFixed(2);
-    const stopN = p.stop ? parseFloat(String(p.stop).replace(/[^0-9.]/g,"")) : null;
-    const alvoN = p.target ? parseFloat(String(p.target).replace(/[^0-9.]/g,"")) : null;
+    const stopN = p.stop_loss || null;
+    const alvoN = p.alvo || null;
     const dStop = stopN && atual ? (((atual - stopN) / atual) * 100).toFixed(2) : "?";
     const dAlvo = alvoN && atual ? (((alvoN - atual) / atual) * 100).toFixed(2) : "?";
-    return p.ticker+":entrada=R$"+entrada+",atual=R$"+atual.toFixed(2)+",qty="+qty+",valor=R$"+valorAtual+",PL="+pl+"%,stop="+(p.stop||"nao definido")+",alvo="+(p.target||"nao definido")+",dist_stop="+dStop+"%,dist_alvo="+dAlvo+"%";
+    return p.ticker+":entrada=R$"+entrada.toFixed(2)+",atual=R$"+atual.toFixed(2)+",qty="+qty+",valor=R$"+valorAtual+",PL="+pl+"%,stop="+(stopN?"R$"+stopN:"nao definido")+",alvo="+(alvoN?"R$"+alvoN:"nao definido")+",dist_stop="+dStop+"%,dist_alvo="+dAlvo+"%";
+  }).join(" | ") : "Nenhuma posicao aberta";<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AnalystAI</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600;700&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --green:#00ff88;--red:#ff3355;--yellow:#ffcc00;--blue:#00aaff;--cyan:#00ffee;
+  --bg:#030508;--card:#090f18;--border:#0f2035;--hi:#1a3a5c;
+  --txt:#e8f4f8;--sub:#7a9bb5;--dim:#3a5570;
+}
+body{background:var(--bg);color:var(--txt);font-family:'Exo 2',sans-serif;min-height:100vh;}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+@keyframes tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.header{border-bottom:1px solid var(--hi);padding:13px 22px;display:flex;align-items:center;
+  justify-content:space-between;background:rgba(7,12,18,.97);position:sticky;top:0;z-index:100;}
+.logo-box{width:34px;height:34px;border:1.5px solid var(--green);display:flex;align-items:center;
+  justify-content:center;font-family:monospace;font-size:11px;color:var(--green);}
+.logo-text{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;letter-spacing:3px;}
+.logo-text span{color:var(--green);}
+.logo-sub{font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:2px;}
+.status{display:flex;align-items:center;gap:6px;font-family:monospace;font-size:10px;color:var(--green);}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;}
+.ticker-wrap{background:rgba(0,255,136,.04);border-bottom:1px solid var(--border);padding:5px 0;overflow:hidden;white-space:nowrap;}
+.ticker-inner{display:inline-block;animation:tick 40s linear infinite;font-family:monospace;font-size:10px;}
+.main{max-width:1380px;margin:0 auto;padding:22px;}
+.profile-bar{background:var(--card);border:1px solid var(--border);padding:11px 18px;display:flex;gap:24px;margin-bottom:18px;flex-wrap:wrap;}
+.pf-key{font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:2px;}
+.pf-val{font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;color:var(--cyan);letter-spacing:1px;}
+.pf-val.green{color:var(--green);}
+.tabs{display:flex;gap:2px;margin-bottom:22px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
+.tab{padding:9px 18px;font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:600;letter-spacing:2px;
+  cursor:pointer;border:none;background:transparent;text-transform:uppercase;color:var(--dim);
+  border-bottom:2px solid transparent;transition:color .2s;}
+.tab.active{color:var(--green);border-bottom-color:var(--green);}
+.field-label{font-family:monospace;font-size:9px;letter-spacing:2px;margin-bottom:5px;}
+.field-label.cyan{color:var(--cyan);}
+.field-label.yellow{color:var(--yellow);}
+input[type=text],input[type=number],input[type=date]{background:var(--card);border:1px solid var(--hi);
+  color:var(--txt);padding:10px 14px;font-family:monospace;font-size:13px;outline:none;width:100%;}
+input[type=text]{letter-spacing:2px;text-transform:uppercase;}
+input::placeholder{color:var(--dim);font-size:11px;text-transform:none;letter-spacing:0;}
+select{background:var(--card);border:1px solid var(--hi);color:var(--txt);padding:10px 14px;
+  font-family:monospace;font-size:13px;outline:none;width:100%;}
+.btn{background:var(--green);color:#000;border:none;padding:12px 24px;font-family:'Rajdhani',sans-serif;
+  font-size:13px;font-weight:700;letter-spacing:3px;cursor:pointer;transition:opacity .2s;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+.btn-outline{background:transparent;color:var(--cyan);border:1px solid var(--cyan);padding:12px 24px;
+  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:3px;cursor:pointer;}
+.loading{display:flex;flex-direction:column;align-items:center;padding:50px;gap:16px;}
+.spinner{width:40px;height:40px;border:2px solid var(--border);border-top-color:var(--green);
+  border-radius:50%;animation:spin .8s linear infinite;}
+.load-steps{font-family:monospace;font-size:10px;line-height:2.4;}
+.error-box{background:rgba(255,51,85,.06);border:1px solid rgba(255,51,85,.4);padding:20px;
+  color:var(--red);font-family:monospace;font-size:11px;line-height:1.8;word-break:break-all;margin-top:10px;}
+.empty{text-align:center;padding:50px;color:var(--dim);font-family:monospace;font-size:11px;
+  letter-spacing:1px;border:1px dashed var(--border);margin-top:16px;}
+.kv{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--border);}
+.kv:last-child{border-bottom:none;padding-bottom:0;margin-bottom:0;}
+.kv-label{font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:1px;}
+.kv-val{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;}
+.sec{display:flex;align-items:center;gap:10px;margin-bottom:10px;margin-top:14px;}
+.sec-label{font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase;white-space:nowrap;}
+.sec-line{flex:1;height:1px;background:var(--border);}
+.bar-wrap{width:100%;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.bar-fill{height:100%;border-radius:2px;transition:width 1.2s ease;}
+.form-field label{font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;display:block;margin-bottom:4px;}
+.portfolio-table{width:100%;border-collapse:collapse;}
+.portfolio-table th{font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);}
+.portfolio-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;}
+.btn-sm{padding:4px 10px;cursor:pointer;font-family:monospace;font-size:9px;border:none;}
+.disclaimer{background:rgba(255,204,0,.03);border:1px solid rgba(255,204,0,.18);padding:12px 16px;
+  margin-top:20px;font-family:monospace;font-size:9px;color:var(--yellow);letter-spacing:.5px;line-height:1.8;opacity:.7;}
+@media(max-width:768px){
+  .main{padding:12px;}
+  .tabs{gap:0;}
+  .tab{padding:8px 10px;font-size:9px;letter-spacing:1px;}
+}
+</style>
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js">
+// ─── GRAFICOS INTERATIVOS ──────────────────────────────────────
+let currentChartData = null;
+let currentChartTicker = null;
+let mainChart = null;
+let rsiChart = null;
+let macdChart = null;
+
+function destroyCharts() {
+  if (mainChart) { try { mainChart.remove(); } catch(e) {} mainChart = null; }
+  if (rsiChart) { try { rsiChart.remove(); } catch(e) {} rsiChart = null; }
+  if (macdChart) { try { macdChart.remove(); } catch(e) {} macdChart = null; }
+}
+
+function renderCharts(indicatorData, period) {
+  if (!indicatorData || !indicatorData.historico_recente) return;
+  currentChartData = indicatorData;
+  period = period || 60;
+
+  destroyCharts();
+
+  const hist = indicatorData.historico_recente || [];
+  if (!hist.length) return;
+
+  // Slice para o periodo selecionado
+  const data = hist.slice(-period);
+
+  const chartOpts = {
+    layout: {
+      background: { color: "#090f18" },
+      textColor: "#7a9bb5",
+    },
+    grid: {
+      vertLines: { color: "#0f2035" },
+      horzLines: { color: "#0f2035" },
+    },
+    crosshair: { mode: 1 },
+    rightPriceScale: { borderColor: "#0f2035" },
+    timeScale: { borderColor: "#0f2035", timeVisible: true },
+    handleScroll: true,
+    handleScale: true,
+  };
+
+  // ── GRAFICO PRINCIPAL — Candlestick + Volume + MMs ──────────
+  const mainEl = document.getElementById("chartMain");
+  mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
+
+  const candleSeries = mainChart.addCandlestickSeries({
+    upColor: "#00ff88",
+    downColor: "#ff3355",
+    borderUpColor: "#00ff88",
+    borderDownColor: "#ff3355",
+    wickUpColor: "#00ff88",
+    wickDownColor: "#ff3355",
+  });
+
+  const candleData = data.map(d => ({
+    time: d.date,
+    open: parseFloat(d.open||d.close),
+    high: parseFloat(d.high),
+    low: parseFloat(d.low),
+    close: parseFloat(d.close),
+  })).filter(d => d.open && d.high && d.low && d.close);
+
+  candleSeries.setData(candleData);
+
+  // Volume como histograma
+  const volumeSeries = mainChart.addHistogramSeries({
+    color: "rgba(0,170,255,0.3)",
+    priceFormat: { type: "volume" },
+    priceScaleId: "volume",
+    scaleMargins: { top: 0.85, bottom: 0 },
+  });
+
+  const volumeData = data.map(d => ({
+    time: d.date,
+    value: d.volume || 0,
+    color: parseFloat(d.close) >= parseFloat(d.open||d.close) ? "rgba(0,255,136,0.3)" : "rgba(255,51,85,0.3)",
+  }));
+  volumeSeries.setData(volumeData);
+
+  // Medias moveis — dados reais historicos
+  const ind = indicatorData.indicadores;
+  const mmDefs = [
+    { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
+    { key: "historico_mm21", color: "#00aaff", label: "MM21", width: 1 },
+    { key: "historico_mm50", color: "#ff8800", label: "MM50", width: 1.5 },
+  ];
+  mmDefs.forEach(mm => {
+    const hist = (indicatorData[mm.key] || []).slice(-period);
+    if (!hist.length) return;
+    const mmSeries = mainChart.addLineSeries({
+      color: mm.color, lineWidth: mm.width,
+      priceLineVisible: false, lastValueVisible: true,
+      title: mm.label,
+    });
+    mmSeries.setData(hist.map(d => ({ time: d.date, value: d.value })));
+  });
+
+  // Suporte e Resistencia como linhas horizontais
+  if (indicatorData.suporte_resistencia) {
+    const sup = indicatorData.suporte_resistencia.suporte;
+    const res = indicatorData.suporte_resistencia.resistencia;
+    if (sup) candleSeries.createPriceLine({ price: sup, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Suporte" });
+    if (res) candleSeries.createPriceLine({ price: res, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Resistencia" });
+    if (indicatorData.gestao_risco?.stop_sugerido) {
+      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.stop_sugerido, color: "#ff3355", lineWidth: 1, lineStyle: 3, title: "Stop ATR" });
+    }
+    if (indicatorData.gestao_risco?.alvo_sugerido) {
+      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.alvo_sugerido, color: "#00ff88", lineWidth: 1, lineStyle: 3, title: "Alvo ATR" });
+    }
+  }
+
+  mainChart.timeScale().fitContent();
+
+  // ── RSI REAL ──────────────────────────────────────────────────
+  const rsiEl = document.getElementById("chartRSI");
+  rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
+
+  const rsiSeries = rsiChart.addLineSeries({
+    color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
+  });
+
+  // Usa dados historicos reais do indicators.js
+  const rsiHistData = (indicatorData.historico_rsi || []).slice(-period);
+  if (rsiHistData.length) {
+    rsiSeries.setData(rsiHistData.map(d => ({ time: d.date, value: d.value })));
+  }
+
+  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomp." });
+  rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
+  rsiSeries.createPriceLine({ price: 50, color: "#3a5570", lineWidth: 1, lineStyle: 2 });
+  rsiChart.timeScale().fitContent();
+
+  // ── MACD REAL ─────────────────────────────────────────────────
+  const macdEl = document.getElementById("chartMACD");
+  macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
+
+  const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
+  const signalSeries = macdChart.addLineSeries({ color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
+  const histSeries = macdChart.addHistogramSeries({ priceLineVisible: false, title: "Hist" });
+
+  const macdHistData = indicatorData.historico_macd || {};
+  const macdLineData = (macdHistData.macdLine || []).slice(-period);
+  const signalLineData = (macdHistData.signalLine || []).slice(-period);
+  const histData = (macdHistData.histogram || []).slice(-period);
+
+  if (macdLineData.length) macdSeries.setData(macdLineData.map(d => ({ time: d.date, value: d.value })));
+  if (signalLineData.length) signalSeries.setData(signalLineData.map(d => ({ time: d.date, value: d.value })));
+  if (histData.length) histSeries.setData(histData.map(d => ({
+    time: d.date, value: d.value,
+    color: d.value >= 0 ? "rgba(0,255,136,0.6)" : "rgba(255,51,85,0.6)"
+  })));
+
+  macdChart.timeScale().fitContent();
+
+  // Sincroniza zoom entre os 3 graficos
+  mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+    if (range) {
+      rsiChart.timeScale().setVisibleLogicalRange(range);
+      macdChart.timeScale().setVisibleLogicalRange(range);
+    }
+  });
+
+  document.getElementById("chartContainer").style.display = "block";
+}
+
+function setChartPeriod(period) {
+  ["btn30","btn60","btn90","btn200"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.color = "var(--dim)";
+  });
+  const map = {30:"btn30",60:"btn60",90:"btn90",200:"btn200"};
+  const el = document.getElementById(map[period]);
+  if (el) el.style.color = "var(--cyan)";
+  if (currentChartData) renderCharts(currentChartData, period);
+}
+
+
+// ─── MAPA DE CALOR ────────────────────────────────────────────
+const MAPA_SETORES = {
+  "Energia": ["PETR4","PRIO3","VBBR3","CSAN3","BRFS3"],
+  "Bancos": ["ITUB4","BBDC4","BBAS3","SANB11","BPAC11"],
+  "Mineracao": ["VALE3","KLBN11","SUZB3"],
+  "Consumo": ["ABEV3","LREN3","CRFB3","ASAI3","PETZ3"],
+  "Industria": ["WEGE3","EMBR3","RDOR3"],
+  "Energia Elet.": ["EGIE3","ENGI11","CMIG4","CPFE3","EQTL3","TAEE11"],
+  "Telecom": ["TIMS3","VIVT3"],
+  "Saude": ["HAPV3","HYPE3","RADL3"],
+  "Construcao": ["CYRE3","MRVE3"],
+  "FIIs": ["KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","KNCR11","BTLG11"],
+  "Tech EUA": ["NVDA","AMD","AAPL","MSFT","GOOGL","META","AMZN","ADBE","CRM"],
+  "Finan. EUA": ["JPM","BAC","V","MA"],
+  "Saude EUA": ["MRK","ABBV"],
+  "ETFs": ["SPY","QQQ","IVVB11"],
+};
+
+function varColor(v) {
+  const n = parseFloat(v);
+  if (n >= 3) return "#00ff88";
+  if (n >= 1.5) return "#44ff99";
+  if (n >= 0.5) return "#88ffbb";
+  if (n >= 0) return "#aaffcc";
+  if (n >= -0.5) return "#ffaaaa";
+  if (n >= -1.5) return "#ff7777";
+  if (n >= -3) return "#ff4444";
+  return "#ff1111";
+}
+
+function varBg(v) {
+  const n = parseFloat(v);
+  if (n >= 3) return "rgba(0,255,136,.25)";
+  if (n >= 1.5) return "rgba(0,255,136,.15)";
+  if (n >= 0.5) return "rgba(0,255,136,.08)";
+  if (n >= 0) return "rgba(0,255,136,.04)";
+  if (n >= -0.5) return "rgba(255,51,85,.04)";
+  if (n >= -1.5) return "rgba(255,51,85,.08)";
+  if (n >= -3) return "rgba(255,51,85,.15)";
+  return "rgba(255,51,85,.25)";
+}
+
+async function renderMapa() {
+  document.getElementById("mapaLoading").style.display = "flex";
+  document.getElementById("mapaContent").innerHTML = "";
+  document.getElementById("btnMapa").disabled = true;
+
+  // Busca todas as cotacoes em paralelo
+  const allTickers = Object.values(MAPA_SETORES).flat();
+  const quotes = {};
+  await Promise.all(allTickers.map(async t => {
+    const q = await fetchQuote(t);
+    if (q) quotes[t] = q;
+  }));
+
+  document.getElementById("mapaLoading").style.display = "none";
+  document.getElementById("btnMapa").disabled = false;
+
+  // Calcula sentimento geral do mercado
+  const variacoes = Object.values(quotes).map(q => parseFloat(q.change||0)).filter(v => !isNaN(v));
+  const mediaGeral = variacoes.length ? (variacoes.reduce((a,b)=>a+b,0)/variacoes.length).toFixed(2) : 0;
+  const emAlta = variacoes.filter(v => v > 0).length;
+  const emBaixa = variacoes.filter(v => v < 0).length;
+  const sentimento = parseFloat(mediaGeral) > 1 ? "OTIMISTA" : parseFloat(mediaGeral) > 0 ? "NEUTRO POSITIVO" : parseFloat(mediaGeral) > -1 ? "NEUTRO NEGATIVO" : "PESSIMISTA";
+  const sentCor = parseFloat(mediaGeral) > 0 ? "var(--green)" : "var(--red)";
+
+  let html = "";
+
+  // Header — sentimento geral
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">'+
+    [
+      ["SENTIMENTO", sentimento, sentCor],
+      ["VARIACAO MEDIA", (parseFloat(mediaGeral)>=0?"+":"")+mediaGeral+"%", sentCor],
+      ["EM ALTA", emAlta+" ativos", "var(--green)"],
+      ["EM BAIXA", emBaixa+" ativos", "var(--red)"],
+    ].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:'+c+'">'+v+'</div>'+
+      '</div>'
+    ).join("")+'</div>';
+
+  // Setores
+  Object.entries(MAPA_SETORES).forEach(([setor, tickers]) => {
+    const tickersComQuote = tickers.filter(t => quotes[t]);
+    if (!tickersComQuote.length) return;
+
+    const vars = tickersComQuote.map(t => parseFloat(quotes[t].change||0));
+    const mediaSetor = (vars.reduce((a,b)=>a+b,0)/vars.length).toFixed(2);
+    const setorCor = parseFloat(mediaSetor) >= 0 ? "var(--green)" : "var(--red)";
+
+    html += '<div style="margin-bottom:16px;">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--dim);">'+setor+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+setorCor+'">'+
+        (parseFloat(mediaSetor)>=0?"+":"")+mediaSetor+"%"+'</div>'+
+      '<div style="flex:1;height:1px;background:var(--border);"></div>'+
+      '</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+
+      tickersComQuote.map(t => {
+        const q = quotes[t];
+        const v = parseFloat(q.change||0);
+        const vStr = (v>=0?"+":"")+v.toFixed(2)+"%";
+        const isCart = getCarteira().some(p => p.ticker === t);
+        return '<div onclick="showTab(\'analisar\');document.getElementById(\'tickerInput\').value=\''+t+'\';analyze(\''+t+'\')" '+
+          'style="background:'+varBg(v)+';border:1px solid '+varColor(v)+'44;padding:10px 14px;cursor:pointer;min-width:90px;position:relative;">'+
+          (isCart ? '<div style="position:absolute;top:3px;right:4px;font-size:7px;color:var(--cyan);">NA CART.</div>' : "")+
+          '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+varColor(v)+'">'+t+'</div>'+
+          '<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+varColor(v)+'">'+vStr+'</div>'+
+          '<div style="font-family:monospace;font-size:9px;color:var(--dim);">'+q.currency+q.price.toFixed(2)+'</div>'+
+          '</div>';
+      }).join("")+'</div></div>';
+  });
+
+  document.getElementById("mapaContent").innerHTML = html;
+}
+
+
+// ─── MOTOR DE CORRELACAO ──────────────────────────────────────
+const CORRELACOES_SETOR = {
+  "PETR4":["PRIO3","VBBR3","CSAN3"],"PRIO3":["PETR4","VBBR3"],"VBBR3":["PETR4","PRIO3"],
+  "ITUB4":["BBDC4","BBAS3","SANB11","BPAC11"],"BBDC4":["ITUB4","BBAS3","SANB11"],"BBAS3":["ITUB4","BBDC4"],
+  "VALE3":["KLBN11","SUZB3"],"KLBN11":["VALE3","SUZB3"],"SUZB3":["VALE3","KLBN11"],
+  "EGIE3":["ENGI11","CMIG4","CPFE3","EQTL3","TAEE11"],"ENGI11":["EGIE3","CMIG4","TAEE11"],
+  "NVDA":["AMD","AAPL","MSFT"],"AMD":["NVDA","AAPL"],"AAPL":["NVDA","MSFT","GOOGL"],
+  "JPM":["BAC","V","MA"],"BAC":["JPM","V"],"V":["JPM","BAC","MA"],"MA":["JPM","V"],
+};
+
+function calcCorrelacaoCarteira() {
+  const carteira = getCarteira();
+  if (carteira.length < 2) return null;
+
+  const alertas = [];
+  const setoresPresentes = {};
+
+  carteira.forEach(p => {
+    // Detecta setor pelo ticker
+    for (const [setor, tickers] of Object.entries(MAPA_SETORES || {})) {
+      if (tickers.includes(p.ticker)) {
+        if (!setoresPresentes[setor]) setoresPresentes[setor] = [];
+        setoresPresentes[setor].push(p.ticker);
+      }
+    }
+    // Verifica correlacoes diretas
+    const correlatos = CORRELACOES_SETOR[p.ticker] || [];
+    const correlNaCart = correlatos.filter(t => carteira.some(c => c.ticker === t));
+    if (correlNaCart.length > 0) {
+      alertas.push({
+        tipo: "CORRELACAO_ALTA",
+        msg: p.ticker+" e "+correlNaCart.join(", ")+" sao altamente correlacionados",
+        nivel: "ATENCAO"
+      });
+    }
+  });
+
+  // Alerta concentracao por setor
+  Object.entries(setoresPresentes).forEach(([setor, tickers]) => {
+    if (tickers.length >= 2) {
+      const pct = (tickers.length / carteira.length * 100).toFixed(0);
+      alertas.push({
+        tipo: "CONCENTRACAO_SETOR",
+        msg: pct+"% da carteira no setor "+setor+" ("+tickers.join(", ")+")",
+        nivel: tickers.length >= 3 ? "RISCO" : "ATENCAO"
+      });
+    }
+  });
+
+  return { alertas, setoresPresentes };
+}
+
+function renderCorrelacaoAlert() {
+  const result = calcCorrelacaoCarteira();
+  if (!result || !result.alertas.length) return "";
+  return '<div style="background:rgba(255,204,0,.04);border:1px solid rgba(255,204,0,.2);padding:14px 18px;margin-bottom:12px;">'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:10px;">ANALISE DE CORRELACAO E RISCO</div>'+
+    result.alertas.map(a => {
+      const c = a.nivel === "RISCO" ? "var(--red)" : "var(--yellow)";
+      return '<div style="display:flex;gap:8px;margin-bottom:6px;font-size:11px;">'+
+        '<span style="color:'+c+';font-weight:700;">!'+a.tipo.replace(/_/g," ")+'</span>'+
+        '<span style="color:var(--sub);">'+a.msg+'</span></div>';
+    }).join("")+'</div>';
+}
+
+// ─── ATLAS JOURNAL ────────────────────────────────────────────
+async function gerarJournal(operacao) {
+  if (!operacao || operacao.status !== "ENCERRADA") return;
+  try {
+    const diasOp = operacao.data_entrada && operacao.saidas?.length
+      ? Math.round((new Date(operacao.saidas[operacao.saidas.length-1].data) - new Date(operacao.data_entrada)) / (1000*60*60*24))
+      : null;
+
+    const prompt = "Voce e ATLAS, gestor quantitativo. Analise esta operacao encerrada e gere um journal de aprendizado:\n\n"
+      + "TICKER: "+operacao.ticker+"\n"
+      + "ENTRADA: R$"+operacao.preco_medio+" em "+operacao.data_entrada+"\n"
+      + "SAIDA: R$"+operacao.saidas[operacao.saidas.length-1]?.preco+" em "+operacao.saidas[operacao.saidas.length-1]?.data+"\n"
+      + "RESULTADO: "+operacao.resultado_pct+"% | R$"+operacao.lucro_total+"\n"
+      + "MOTIVO SAIDA: "+operacao.saidas[operacao.saidas.length-1]?.motivo+"\n"
+      + "DIAS NA OPERACAO: "+(diasOp||"?")+"\n"
+      + "SCORE ATLAS NA ENTRADA: "+(operacao.score_atlas||"nao registrado")+"\n"
+      + "SINAL ATLAS: "+(operacao.sinal_atlas||"nao registrado")+"\n"
+      + "ATLAS ACERTOU: "+(operacao.atlas_acertou?"SIM":"NAO")+"\n\n"
+      + "Gere uma analise de aprendizado honesta e concisa. O que funcionou, o que falhou, o que aprender.\n\n"
+      + "Retorne APENAS JSON: {"acertou":true,"resumo":"","o_que_funcionou":"","o_que_falhou":"","licao_principal":"","setup_ideal_para_proximo":"","nota_operacao":"A"}";
+
+    const data = await callClaude(prompt);
+
+    // Salva journal na operacao
+    const idx = operacoes.findIndex(o => o.id === operacao.id);
+    if (idx >= 0) {
+      operacoes[idx].journal = data;
+      localStorage.setItem("operacoes_v1", JSON.stringify(operacoes));
+      await apiOperacoes("POST", { acao: "EDITAR", id: operacao.id, journal: data });
+    }
+    return data;
+  } catch(e) {
+    console.log("Journal erro:", e.message);
+    return null;
+  }
+}
+
+function renderJournalCard(operacao) {
+  const j = operacao.journal;
+  if (!j) return "";
+  const notaCor = j.nota_operacao === "A" ? "var(--green)" : j.nota_operacao === "B" ? "var(--cyan)" : j.nota_operacao === "C" ? "var(--yellow)" : "var(--red)";
+  return '<div style="background:rgba(0,170,255,.04);border:1px solid rgba(0,170,255,.2);padding:14px 18px;margin-top:8px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--blue);">ATLAS JOURNAL</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+notaCor+'">NOTA '+j.nota_operacao+'</div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--sub);line-height:1.7;margin-bottom:8px;">'+j.resumo+'</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;">'+
+    '<div><span style="color:var(--green);">OK: </span><span style="color:var(--sub);">'+j.o_que_funcionou+'</span></div>'+
+    '<div><span style="color:var(--red);">FALHOU: </span><span style="color:var(--sub);">'+j.o_que_falhou+'</span></div>'+
+    '</div>'+
+    '<div style="margin-top:8px;padding:8px;background:rgba(255,204,0,.06);border:1px solid rgba(255,204,0,.15);">'+
+    '<span style="font-family:monospace;font-size:8px;color:var(--yellow);">LICAO: </span>'+
+    '<span style="font-size:10px;color:var(--sub);">'+j.licao_principal+'</span>'+
+    '</div>'+
+    '<div style="margin-top:6px;font-size:10px;color:var(--dim);">Proximo setup ideal: '+j.setup_ideal_para_proximo+'</div>'+
+    '</div>';
+}
+
+</script>
+</head>
+<body>
+
+<div class="header">
+  <div style="display:flex;align-items:center;gap:11px;">
+    <div class="logo-box">AI</div>
+    <div>
+      <div class="logo-text">ANALYST<span>AI</span></div>
+      <div class="logo-sub">ANALISE DE INVESTIMENTOS - PERFIL MODERADO</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div class="status"><div class="dot"></div><span>ONLINE</span></div>
+    <button onclick="showTab('config')" title="Configuracoes" style="background:transparent;border:1px solid var(--border);color:var(--dim);width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--dim)'">⚙</button>
+  </div>
+</div>
+
+<div class="ticker-wrap">
+  <div class="ticker-inner" id="tickerInner"></div>
+</div>
+
+<div class="main">
+  <div class="profile-bar">
+    <div><div class="pf-key">RISCO</div><div class="pf-val">Moderado</div></div>
+    <div><div class="pf-key">MERCADOS</div><div class="pf-val">B3 + NYSE/NASDAQ</div></div>
+    <div><div class="pf-key">HORIZONTE</div><div class="pf-val">Curto prazo</div></div>
+    <div><div class="pf-key">CAPITAL</div><div class="pf-val">R$5k-R$20k + aportes</div></div>
+    <div><div class="pf-key">META</div><div class="pf-val green">+8% ao mes</div></div>
+    <div><div class="pf-key">COTACOES</div><div class="pf-val green">Yahoo Finance OK</div></div>
+    <div id="benchCarteiraBar"><div class="pf-key">MINHA CARTEIRA</div><div class="pf-val" style="color:var(--dim)">---</div></div>
+    <div id="benchIBOV"><div class="pf-key">IBOV HOJE</div><div class="pf-val" style="color:var(--dim)">Carregando...</div></div>
+    <div id="benchCDI"><div class="pf-key">CDI MES</div><div class="pf-val" style="color:var(--dim)">Carregando...</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('analisar')">ANALISAR</button>
+    <button class="tab" onclick="showTab('radar')">RADAR</button>
+    <button class="tab" onclick="showTab('guru')">GURU</button>
+    <button class="tab" onclick="showTab('portfolio')">CARTEIRA</button>
+    <button class="tab" onclick="showTab('historico')">HISTORICO</button>
+    <button class="tab" onclick="showTab('relatorio')">RELATORIO</button>
+    <button class="tab" onclick="showTab('mapa')">MAPA</button>
+  </div>
+
+  <!-- ANALISAR -->
+  <div id="tab-analisar">
+    <div style="display:flex;gap:10px;margin-bottom:8px;align-items:flex-end;flex-wrap:wrap;">
+      <div style="flex:1;min-width:200px;">
+        <div class="field-label cyan">TICKER DO ATIVO</div>
+        <input type="text" id="tickerInput" placeholder="ex: PETR4, VALE3, AAPL, NVDA, BLAU3" onkeydown="if(event.key==='Enter')analyze()"/>
+      </div>
+      <div style="width:180px;">
+        <div class="field-label yellow">PRECO MANUAL (opcional)</div>
+        <input type="number" id="manualPrice" placeholder="ex: 10.66" step="0.01"/>
+      </div>
+      <div style="align-self:flex-end;">
+        <button class="btn" id="btnAnalyze" onclick="analyze()">ANALISAR</button>
+      </div>
+    </div>
+    <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:16px;line-height:1.8;">
+      Cotacao automatica via Yahoo Finance. Se o preco estiver errado, informe no campo amarelo.
+    </div>
+    <div class="loading" id="loadA" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsA"></div></div>
+    <div class="error-box" id="errA" style="display:none;"></div>
+    <div id="resA" style="display:none;"></div>
+    <div id="chartContainer" style="display:none;margin-bottom:20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--cyan);">GRAFICO INTERATIVO</div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="setChartPeriod(30)" id="btn30" class="btn-outline" style="padding:5px 12px;font-size:10px;">1M</button>
+          <button onclick="setChartPeriod(60)" id="btn60" class="btn-outline" style="padding:5px 12px;font-size:10px;">2M</button>
+          <button onclick="setChartPeriod(90)" id="btn90" class="btn-outline" style="padding:5px 12px;font-size:10px;">3M</button>
+          <button onclick="setChartPeriod(200)" id="btn200" class="btn-outline" style="padding:5px 12px;font-size:10px;">MAX</button>
+        </div>
+      </div>
+      <!-- Candlestick + Volume -->
+      <div id="chartMain" style="width:100%;height:380px;background:var(--card);border:1px solid var(--border);"></div>
+      <!-- RSI -->
+      <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;padding:6px 0 4px;">RSI PONDERADO</div>
+      <div id="chartRSI" style="width:100%;height:100px;background:var(--card);border:1px solid var(--border);"></div>
+      <!-- MACD -->
+      <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;padding:6px 0 4px;">MACD</div>
+      <div id="chartMACD" style="width:100%;height:100px;background:var(--card);border:1px solid var(--border);"></div>
+    </div>
+    <div id="emptyA" class="empty">DIGITE UM TICKER E PRESSIONE ANALISAR<br><span style="font-size:9px;margin-top:8px;display:block;color:var(--green)">B3 - NYSE/NASDAQ - FIIs - ETFs - BDRs</span></div>
+    <div class="loading" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:16px;" id="histRow"></div>
+  </div>
+
+  <!-- RADAR -->
+  <div id="tab-radar" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;letter-spacing:2px;margin-bottom:4px;">RADAR DE OPORTUNIDADES</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--dim);">Varre 100+ ativos com cotacoes reais - B3 + NYSE/NASDAQ + FIIs + ETFs</div>
+      </div>
+      <button class="btn" id="btnRadar" onclick="runRadar()">ESCANEAR MERCADO</button>
+    </div>
+    <div class="loading" id="loadR" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsR"></div></div>
+    <div class="error-box" id="errR" style="display:none;"></div>
+    <div id="resR" style="display:none;"></div>
+    <div id="emptyR" class="empty">CLIQUE EM ESCANEAR MERCADO PARA IDENTIFICAR AS MELHORES OPORTUNIDADES</div>
+  </div>
+
+  <!-- GURU -->
+  <div id="tab-guru" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div style="background:var(--card);border:1px solid var(--hi);padding:22px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:6px;">GURU INVESTIDOR</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--dim);line-height:1.8;margin-bottom:16px;">Seu gestor pessoal. Decide o que comprar, quanto, quando vender.</div>
+        <div style="margin-bottom:12px;">
+          <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">NOVO APORTE (R$) — deixe 0 se nao vai aportar agora</div>
+          <input type="number" id="guruAporte" value="0" step="100"
+            oninput="atualizarInfoCapital()"
+            style="width:100%;background:var(--card);border:1px solid var(--hi);padding:10px 14px;outline:none;font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--green);"/>
+        </div>
+        <div id="guruCapitalInfo" style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:12px;padding:10px;background:var(--bg);border:1px solid var(--border);line-height:2;">
+          Carregando carteira...
+        </div>
+        <button class="btn" id="btnGuruMontar" onclick="guruMontar()" style="width:100%;margin-bottom:8px;">MONTAR MINHA CARTEIRA</button>
+        <button class="btn-outline" id="btnGuruBriefing" onclick="guruBriefing()" style="width:100%;">BRIEFING DO DIA</button>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--border);padding:22px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">COMO FUNCIONA</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--sub);line-height:2.2;">
+          <div>1. Informe seu capital disponivel</div>
+          <div>2. Clique em MONTAR MINHA CARTEIRA</div>
+          <div>3. O Guru varra o mercado e monta o plano</div>
+          <div>4. Execute as ordens no BTG Pactual</div>
+          <div>5. Todo dia, clique em BRIEFING DO DIA</div>
+          <div>6. O Guru avisa quando agir</div>
+        </div>
+        <div style="margin-top:14px;padding:12px;background:rgba(255,204,0,.06);border:1px solid rgba(255,204,0,.2);">
+          <div style="font-family:monospace;font-size:8px;color:var(--yellow);letter-spacing:1px;margin-bottom:4px;">REGRAS DO GURU</div>
+          <div style="font-family:monospace;font-size:9px;color:var(--sub);line-height:1.8;">Max 6 ativos - 20% sempre em caixa<br>Max 25% por ativo - Score minimo 75<br>Stop loss obrigatorio em tudo</div>
+        </div>
+      </div>
+    </div>
+    <div class="loading" id="loadG" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsG"></div></div>
+    <div class="error-box" id="errG" style="display:none;"></div>
+    <div id="resG" style="display:none;"></div>
+    <div id="emptyG" class="empty">INFORME SEU CAPITAL E CLIQUE EM MONTAR MINHA CARTEIRA</div>
+  </div>
+
+  <!-- CARTEIRA -->
+  <div id="tab-portfolio" style="display:none;">
+    <!-- Benchmark card -->
+    <div id="benchmarkCarteira" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;"></div>
+    <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);margin-bottom:12px;">CADASTRAR POSICAO</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px;align-items:end;">
+      <div class="form-field"><label>TICKER</label><input type="text" id="pTicker" placeholder="PETR4"/></div>
+      <div class="form-field"><label>QTDE</label><input type="number" id="pQty" placeholder="100"/></div>
+      <div class="form-field"><label>PRECO MEDIO</label><input type="number" id="pPrice" placeholder="38.50" step="0.01"/></div>
+      <div class="form-field"><label>STOP LOSS</label><input type="number" id="pStop" placeholder="36.00" step="0.01"/></div>
+      <div class="form-field"><label>ALVO</label><input type="number" id="pTarget" placeholder="42.00" step="0.01"/></div>
+      <div class="form-field"><label>MERCADO</label><select id="pMarket"><option>B3</option><option>NYSE/NASDAQ</option></select></div>
+      <button class="btn" onclick="addPosition()" style="align-self:flex-end;">+ ADICIONAR</button>
+    </div>
+    <div id="portfolioContent"></div>
+  </div>
+
+  <!-- HISTORICO -->
+  <div id="tab-historico" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div style="background:var(--card);border:1px solid var(--border);padding:16px 20px;">
+        <div style="font-family:monospace;font-size:9px;color:var(--dim);line-height:2;">
+          As operacoes sao registradas automaticamente pela aba <span style="color:var(--cyan);">CARTEIRA</span>.<br>
+          Abra uma posicao com <span style="color:var(--green);">+ ABRIR</span> e ela aparece aqui automaticamente.<br>
+          Ao vender, o historico e o P&L sao calculados e o <span style="color:var(--blue);">ATLAS JOURNAL</span> e gerado.
+        </div>
+      </div>
+      <div style="background:var(--card);border:1px solid var(--hi);padding:20px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--green);">PERFORMANCE DO GURU</div>
+        <div id="perfSummary"></div>
+      </div>
+    </div>
+    <div id="historicoContent"></div>
+  </div>
+
+  <!-- CONFIG -->
+  <div id="tab-config" style="display:none;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+
+      <!-- Telegram -->
+      <div style="background:var(--card);border:1px solid var(--hi);padding:22px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;margin-bottom:6px;color:var(--cyan);">TELEGRAM</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--dim);line-height:1.8;margin-bottom:16px;">
+          Bot: @Atlaswealth_bot<br>
+          Alertas de stop, alvo, briefing e oportunidades.
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button onclick="testarTelegram()" class="btn" style="width:100%;">TESTAR CONEXAO TELEGRAM</button>
+          <button onclick="verificarAlertas()" class="btn-outline" style="width:100%;">VERIFICAR ALERTAS AGORA</button>
+        </div>
+        <div style="margin-top:14px;padding:12px;background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.2);">
+          <div style="font-family:monospace;font-size:8px;color:var(--green);letter-spacing:1px;margin-bottom:6px;">ALERTAS AUTOMATICOS</div>
+          <div style="font-family:monospace;font-size:9px;color:var(--sub);line-height:2;">
+            A cada 30min (seg-sex 10h-18h)<br>
+            Stop loss atingido<br>
+            Alvo atingido<br>
+            Queda maior que 3% no dia<br>
+            Resumo a cada hora cheia
+          </div>
+        </div>
+      </div>
+
+      <!-- Perfil -->
+      <div style="background:var(--card);border:1px solid var(--hi);padding:22px;">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;margin-bottom:6px;color:var(--cyan);">PERFIL DO INVESTIDOR</div>
+        <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
+          <div style="background:var(--bg);border:1px solid var(--border);padding:14px;">
+            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">RISCO</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--green);">Moderado</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);padding:14px;">
+            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">MERCADOS</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--green);">B3 + NYSE/NASDAQ</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);padding:14px;">
+            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">HORIZONTE</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--green);">Curto prazo</div>
+          </div>
+          <div style="background:var(--bg);border:1px solid var(--border);padding:14px;">
+            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">OBJETIVO</div>
+            <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--green);">Multiplicar Capital</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- App Info -->
+    <div style="background:var(--card);border:1px solid var(--border);padding:20px;">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--cyan);">ATLAS WEALTH — INFORMACOES DO SISTEMA</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+        <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">VERSAO</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--txt)">1.0.0</div></div>
+        <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">COTACOES</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--green)">Yahoo Finance</div></div>
+        <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">BANCO</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--green)">Upstash Redis</div></div>
+        <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">TELEGRAM</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--green)">Ativo</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RELATORIO -->
+  <div id="tab-relatorio" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:4px;">RELATORIO MENSAL</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--dim);">Analise completa da performance do ATLAS este mes</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="relatorioMes" style="background:var(--card);border:1px solid var(--hi);color:var(--txt);padding:8px 14px;font-family:monospace;font-size:12px;outline:none;">
+        </select>
+        <button class="btn" onclick="gerarRelatorio()">GERAR RELATORIO</button>
+      </div>
+    </div>
+    <div class="loading" id="loadRelatorio" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsRelatorio"></div></div>
+    <div class="error-box" id="errRelatorio" style="display:none;"></div>
+    <div id="resultRelatorio" style="display:none;"></div>
+    <div id="emptyRelatorio" class="empty">
+      CLIQUE EM "GERAR RELATORIO" PARA VER A ANALISE COMPLETA DO MES<br>
+      <span style="font-size:9px;margin-top:8px;display:block;color:var(--green)">
+        Taxa de acerto - Resultado - Licoes - Estrategia - Nota do ATLAS
+      </span>
+    </div>
+  </div>
+
+  <!-- MAPA DE CALOR -->
+  <div id="tab-mapa" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;letter-spacing:2px;">MAPA DE CALOR</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--dim);">Performance em tempo real por setor — B3 + NYSE/NASDAQ</div>
+      </div>
+      <button class="btn" id="btnMapa" onclick="renderMapa()">ATUALIZAR</button>
+    </div>
+    <div id="mapaLoading" style="display:none;" class="loading"><div class="spinner"></div><div style="font-family:monospace;font-size:10px;color:var(--dim);">Buscando cotacoes...</div></div>
+    <div id="mapaContent"></div>
+  </div>
+
+  <div class="disclaimer">
+    DISCLAIMER: Ferramenta de apoio a decisao baseada em IA. Nao constitui recomendacao de investimento.
+    Rentabilidade passada nao garante resultados futuros. Renda variavel envolve risco de perda.
+    Consulte assessor certificado. Use stop loss sempre.
+  </div>
+</div>
+
+<script>
+// ─── ESTADO ───────────────────────────────────────────────────
+let historyArr = JSON.parse(localStorage.getItem("ai_history") || "[]");
+let operacoes = [];
+let portfolioQuotes = {};
+let benchmark = null;
+
+// Atalhos para compatibilidade com codigo existente
+function getCarteira() { return operacoes.filter(o => o.status === "ABERTA" || o.status === "PARCIAL"); }
+function getHistorico() { return operacoes.filter(o => o.status === "ENCERRADA"); }
+// portfolio e historico como aliases para compatibilidade
+Object.defineProperty(window, "portfolio", { get: () => getCarteira() });
+Object.defineProperty(window, "historico", { get: () => getHistorico() });
+
+// ─── TICKER STRIP ─────────────────────────────────────────────
+(function(){
+  // Inicia com placeholders
+  const items = ["PETR4","VALE3","ITUB4","BBAS3","WEGE3","AAPL","NVDA","MSFT","AMZN","META","TSLA","BBDC4","PRIO3","BPAC11","GOOGL","JPM"];
+  const html = [...items,...items].map(t => '<span style="margin:0 28px;color:var(--dim);font-family:monospace;font-size:10px;">@ '+t+'</span>').join("");
+  document.getElementById("tickerInner").innerHTML = html;
+
+  // Busca precos reais em background
+  async function updateTicker() {
+    try {
+      const r = await fetch("/api/tickers");
+      if (!r.ok) return;
+      const d = await r.json();
+      if (!d.tickers || !d.tickers.length) return;
+      const html = [...d.tickers, ...d.tickers].map(t => {
+        const color = t.up ? "var(--green)" : "var(--red)";
+        const arrow = t.up ? "+" : "";
+        return '<span style="margin:0 28px;font-family:monospace;font-size:10px;">'+
+          '<span style="color:var(--cyan);">'+t.ticker+'</span> '+
+          '<span style="color:var(--txt);">'+t.currency+t.price.toFixed(2)+'</span> '+
+          '<span style="color:'+color+';">'+arrow+t.change+'%</span>'+
+          '</span>';
+      }).join("");
+      document.getElementById("tickerInner").innerHTML = html;
+    } catch(e) {}
+  }
+
+  // Atualiza imediatamente e a cada 5 minutos
+  setTimeout(updateTicker, 2000);
+  setInterval(updateTicker, 5 * 60 * 1000);
+})();
+
+// ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
+function scorePrefiltro(ticker, quote) {
+  let score = 0;
+  const var_ = parseFloat(quote.change || 0);
+  const vol = quote.volume || 0;
+
+  // Momentum positivo forte
+  if (var_ > 5) score += 35;
+  else if (var_ > 3) score += 28;
+  else if (var_ > 1.5) score += 20;
+  else if (var_ > 0.5) score += 12;
+
+  // Pullback saudavel (possivel reversao)
+  if (var_ < -2 && var_ > -6) score += 22;
+  else if (var_ < -1 && var_ > -2) score += 10;
+
+  // Mercado prestando atencao (volatilidade)
+  if (Math.abs(var_) > 4) score += 15;
+  else if (Math.abs(var_) > 2) score += 8;
+
+  // Volume como confirmador (quando disponivel)
+  if (vol > 0) {
+    // Ativos B3 com volume alto
+    if (vol > 50000000) score += 15;
+    else if (vol > 20000000) score += 10;
+    else if (vol > 5000000) score += 5;
+  }
+
+  // Bonus para ativos com preco razoavel (mais liquidos)
+  const price = quote.price || 0;
+  if (price > 5 && price < 500) score += 5;
+
+  return score;
+}
+
+function selecionarCandidatos(tickers, quotes, n) {
+  // Calcula score rapido para todos os ativos com cotacao
+  const scored = tickers
+    .filter(t => quotes[t])
+    .map(t => ({ ticker: t, score: scorePrefiltro(t, quotes[t]) }))
+    .sort((a, b) => b.score - a.score);
+
+  // Retorna top N garantindo diversificacao B3 + EUA
+  const b3 = scored.filter(x => /^[A-Z]{4}[0-9]{1,2}$/.test(x.ticker)).slice(0, Math.ceil(n * 0.6));
+  const eua = scored.filter(x => !/^[A-Z]{4}[0-9]{1,2}$/.test(x.ticker) && !/11$/.test(x.ticker)).slice(0, Math.floor(n * 0.3));
+  const fiis = scored.filter(x => /11$/.test(x.ticker)).slice(0, Math.floor(n * 0.1));
+
+  return [...b3, ...eua, ...fiis]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, n)
+    .map(x => x.ticker);
+}
+
+// ─── BENCHMARK ────────────────────────────────────────────────
+async function updateBenchmarkCard() {
+  const totalInv = getCarteira().reduce((a,p)=>(a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0)),0);
+  const totalAtual = getCarteira().reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+(parseFloat(p.quantidade_atual)||0)*(q?q.price:parseFloat(p.preco_medio)||0);},0);
+  const cartVar = totalInv > 0 ? ((totalAtual - totalInv) / totalInv * 100).toFixed(2) : "0.00";
+  const cartPL = (totalAtual - totalInv).toFixed(2);
+
+  // Calcula resultado do dia (vs fechamento de ontem)
+  const totalOntem = getCarteira().reduce((a,p)=>{
+    const q = portfolioQuotes[p.ticker];
+    const prevClose = q && q.prevClose ? q.prevClose : (q ? q.price : parseFloat(p.preco_medio)||0);
+    return a + (parseFloat(p.quantidade_atual)||0) * prevClose;
+  }, 0);
+  const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
+  const plDia = (totalAtual - totalOntem).toFixed(2);
+
+  // Atualiza barra de perfil
+  const barEl = document.getElementById("benchCarteiraBar");
+  if (barEl && totalInv > 0) {
+    const cTotal = parseFloat(cartVar) >= 0 ? "var(--green)" : "var(--red)";
+    const cDia = parseFloat(varDia) >= 0 ? "var(--green)" : "var(--red)";
+    barEl.innerHTML = '<div class="pf-key">MINHA CARTEIRA</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+cTotal+'">'+
+      (parseFloat(cartVar)>=0?"+":"")+cartVar+'% total</div>'
+      +'<div style="font-family:monospace;font-size:9px;color:'+cDia+'">'+
+      (parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div>';
+  }
+
+  const benchEl = document.getElementById("benchmarkCarteira");
+  if (!benchEl || !benchmark) return;
+  const ibovMes = parseFloat(benchmark.ibovespa.var_mes).toFixed(2);
+  const ibovDia = parseFloat(benchmark.ibovespa.var_dia).toFixed(2);
+  const cdiMes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
+  const items = [
+    ["SUA CARTEIRA", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", (parseFloat(varDia)>=0?"+":"")+varDia+"% hoje"],
+    ["IBOVESPA", (parseFloat(ibovMes)>=0?"+":"")+ibovMes+"% mes", parseFloat(ibovMes)>=0?"var(--green)":"var(--red)", (parseFloat(ibovDia)>=0?"+":"")+ibovDia+"% hoje"],
+    ["CDI", "+"+cdiMes+"% mes", "var(--yellow)", "+"+parseFloat(benchmark.cdi.var_dia).toFixed(4)+"% hoje"],
+  ];
+  benchEl.innerHTML = items.map(([k,v,c,sub])=>
+    '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
+    '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
+    '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:2px;">'+sub+'</div>'+
+    '</div>'
+  ).join("");
+}
+
+async function fetchBenchmark() {
+  try {
+    const r = await fetch("/api/benchmark");
+    if (!r.ok) return;
+    benchmark = await r.json();
+    updateProfileBar();
+    updateBenchmarkCard();
+  } catch(e) {}
+}
+
+function updateProfileBar() {
+  if (!benchmark) return;
+  const ibovEl = document.getElementById("benchIBOV");
+  const cdiEl = document.getElementById("benchCDI");
+  if (ibovEl) {
+    const v = parseFloat(benchmark.ibovespa.var_dia).toFixed(2);
+    const c = parseFloat(v) >= 0 ? "var(--green)" : "var(--red)";
+    ibovEl.innerHTML = '<span style="color:var(--dim);font-size:8px;">IBOV HOJE</span><br>'
+      +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+c+'">'
+      +(parseFloat(v)>=0?"+":"")+v+'%</span>';
+  }
+  if (cdiEl) {
+    const mes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
+    // CDI acumulado real do ano: calcula meses decorridos desde jan/1
+    const agora = new Date();
+    const diasAno = Math.floor((agora - new Date(agora.getFullYear(),0,1)) / (1000*60*60*24));
+    const cdiDia = benchmark.cdi.var_dia || 0.0405;
+    const anoReal = parseFloat(((Math.pow(1 + cdiDia/100, diasAno) - 1) * 100).toFixed(2));
+    cdiEl.innerHTML = '<span style="color:var(--dim);font-size:8px;">CDI ACUMULADO</span><br>'
+      +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--yellow)">+'
+      +mes+'% mes</span><br>'
+      +'<span style="font-family:monospace;font-size:9px;color:var(--dim)">+'
+      +anoReal+'% no ano (jan-hoje)</span>';
+  }
+}
+
+// Busca benchmark ao carregar
+setTimeout(fetchBenchmark, 3000);
+setInterval(fetchBenchmark, 30 * 60 * 1000); // atualiza a cada 30 min
+
+// ─── TABS ─────────────────────────────────────────────────────
+function showTab(name) {
+  ["analisar","radar","guru","portfolio","historico","relatorio","mapa","config"].forEach(t => {
+    document.getElementById("tab-"+t).style.display = t===name ? "" : "none";
+  });
+  document.querySelectorAll(".tab").forEach((el,i) => {
+    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","relatorio","mapa","config"][i]===name);
+  });
+  if (name === "relatorio") renderRelatorioTab();
+  if (name === "mapa") renderMapa();
+  if (name === "historico") renderHistorico();
+  if (name === "portfolio") {
+    renderPortfolio();
+    loadPortfolio();
+    // Busca cotacoes e depois atualiza benchmark
+    atualizarCotacoesCarteira().then(() => updateBenchmarkCard());
+  }
+}
+
+// ─── API ──────────────────────────────────────────────────────
+async function fetchQuote(ticker) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const r = await fetch("/api/quote?ticker="+ticker, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+async function callClaude(prompt) {
+  const r = await fetch("/api/analyze", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ prompt }),
+  });
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error("API "+r.status+": "+err);
+  }
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  const text = d.text || "";
+  const i = text.indexOf("{");
+  const j = text.lastIndexOf("}");
+  if (i === -1) throw new Error("JSON nao encontrado: "+text.slice(0,200));
+  return JSON.parse(text.slice(i, j+1));
+}
+
+// ─── CLOUD DB ─────────────────────────────────────────────────
+// ─── OPERACOES — API unificada ────────────────────────────────
+async function apiOperacoes(method, body) {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    const opts = { method, headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" }, signal: controller.signal };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch("/api/operacoes", opts);
+    clearTimeout(timer);
+    if (!r.ok) throw new Error("HTTP "+r.status);
+    return await r.json();
+  } catch(e) { console.log("apiOperacoes erro:", e.message); return null; }
+}
+
+async function loadOperacoes() {
+  const local = JSON.parse(localStorage.getItem("operacoes_v1") || "[]");
+  if (local.length > 0) { operacoes = local; renderPortfolio(); renderHistorico(); }
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const d = await apiOperacoes("GET");
+    if (d !== null) {
+      if (d.operacoes && d.operacoes.length >= operacoes.length) {
+        operacoes = d.operacoes;
+        localStorage.setItem("operacoes_v1", JSON.stringify(operacoes));
+        renderPortfolio(); renderHistorico();
+      }
+      return;
+    }
+    if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
+  }
+}
+
+async function abrirOperacao(dados) {
+  const d = await apiOperacoes("POST", { acao: "ABRIR", ...dados });
+  if (d && d.ok) { operacoes.push(d.operacao); localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); renderHistorico(); }
+  return d;
+}
+
+async function venderOperacao(id, quantidade, preco, motivo) {
+  const d = await apiOperacoes("POST", { acao: "VENDER", id, quantidade, preco, motivo });
+  if (d && d.ok) {
+    const idx = operacoes.findIndex(o=>o.id===id);
+    if(idx>=0) operacoes[idx]=d.operacao;
+    localStorage.setItem("operacoes_v1", JSON.stringify(operacoes));
+    renderPortfolio();
+    renderHistorico();
+    // Gera Journal automaticamente se operacao encerrada
+    if (d.operacao.status === "ENCERRADA") {
+      setTimeout(() => gerarJournal(d.operacao), 1000);
+    }
+  }
+  return d;
+}
+
+async function reforcarOperacao(id, quantidade, preco) {
+  const d = await apiOperacoes("POST", { acao: "REFORCAR", id, quantidade, preco });
+  if (d && d.ok) { const idx = operacoes.findIndex(o=>o.id===id); if(idx>=0) operacoes[idx]=d.operacao; localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); }
+  return d;
+}
+
+async function editarOperacao(id, campos) {
+  const d = await apiOperacoes("POST", { acao: "EDITAR", id, ...campos });
+  if (d && d.ok) { const idx = operacoes.findIndex(o=>o.id===id); if(idx>=0) operacoes[idx]=d.operacao; localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); }
+  return d;
+}
+
+async function deletarOperacao(id) {
+  if (!confirm("Deletar esta operação?")) return;
+  const d = await apiOperacoes("DELETE", { id });
+  if (d && d.ok) { operacoes = operacoes.filter(o=>o.id!==id); localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); renderHistorico(); }
+  return d;
+}
+
+// ─── INFO CAPITAL GURU ────────────────────────────────────────
+function atualizarInfoCapital() {
+  const infoEl = document.getElementById("guruCapitalInfo");
+  if (!infoEl) return;
+
+  const aporte = parseFloat(document.getElementById("guruAporte")?.value) || 0;
+
+  // Valor atual da carteira com cotacoes reais
+  const carteira = getCarteira();
+  const valorCarteira = carteira.reduce((a,p)=>{
+    const q = portfolioQuotes[p.ticker];
+    const preco = q ? q.price : parseFloat(p.preco_medio)||0;
+    return a + (parseFloat(p.quantidade_atual)||0) * preco;
+  }, 0);
+
+  // Capital total = carteira atual + aporte
+  const total = valorCarteira + aporte;
+
+  // Reserva obrigatoria = 20% do total
+  const reserva = total * 0.2;
+
+  // Caixa livre = total - investido - reserva
+  const caixaLivre = Math.max(0, total - valorCarteira - reserva);
+
+  if (!portfolio.length) {
+    infoEl.innerHTML = "Carteira vazia - o ATLAS vai montar do zero.<br>"
+      + "Informe o capital inicial no campo acima.";
+    return;
+  }
+
+  infoEl.innerHTML =
+    "Carteira atual: <span style='color:var(--blue)'>R$ "+valorCarteira.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+    + "Novo aporte: <span style='color:var(--green)'>R$ "+aporte.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+    + "Reserva (20%): <span style='color:var(--yellow)'>R$ "+reserva.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+    + "Caixa livre para investir: <span style='color:var(--green);font-weight:700'>R$ "+caixaLivre.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
+    + "Capital total: <span style='color:var(--cyan);font-weight:700'>R$ "+total.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span>";
+}
+
+// ─── INDICADORES MATEMATICOS ──────────────────────────────────
+async function fetchIndicators(ticker) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const r = await fetch("/api/indicators?ticker="+ticker, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) {
+    console.log("Indicators error:", e.message);
+    return null;
+  }
+}
+
+function buildIndicatorsContext(ind) {
+  if (!ind) return "INDICADORES: nao disponivel";
+  const i = ind.indicadores;
+  const conf = ind.confluencia;
+  const kelly = ind.kelly_criterion;
+  const candle = ind.candle_pattern;
+
+  // Calcula tendencia temporal dos indicadores (narrativa historica)
+  function tendenciaRSI(hist, janela) {
+    if (!hist || hist.length < janela) return null;
+    const atual = hist[hist.length-1].value;
+    const anterior = hist[hist.length-janela].value;
+    const diff = parseFloat((atual - anterior).toFixed(2));
+    const dir = diff > 5 ? "SUBINDO FORTE" : diff > 2 ? "SUBINDO" : diff < -5 ? "CAINDO FORTE" : diff < -2 ? "CAINDO" : "LATERAL";
+    return { atual, anterior, diff, dir };
+  }
+
+  function tendenciaMACD(hist) {
+    if (!hist || !hist.histogram || hist.histogram.length < 5) return null;
+    const h = hist.histogram;
+    const atual = h[h.length-1].value;
+    const h3d = h[h.length-3]?.value || 0;
+    const h5d = h[h.length-5]?.value || 0;
+    const acelerando = Math.abs(atual) > Math.abs(h3d);
+    const virando = (atual > 0 && h5d < 0) ? "CRUZOU_POSITIVO_RECENTE" : (atual < 0 && h5d > 0) ? "CRUZOU_NEGATIVO_RECENTE" : "SEM_CRUZAMENTO_RECENTE";
+    return { atual, h3d, h5d, acelerando, virando };
+  }
+
+  function tendenciaMM(hist9, hist21, preco) {
+    if (!hist9 || !hist21 || hist9.length < 5) return null;
+    const mm9atual = hist9[hist9.length-1].value;
+    const mm9_3d = hist9[hist9.length-3]?.value;
+    const mm21atual = hist21[hist21.length-1]?.value;
+    const cruzouRecente = hist9.slice(-5).some((d,i,arr) => {
+      if (i === 0) return false;
+      const m21 = hist21[hist21.length-5+i]?.value;
+      const m21prev = hist21[hist21.length-5+i-1]?.value;
+      return m21 && m21prev && ((arr[i-1].value < m21prev && d.value > m21) || (arr[i-1].value > m21prev && d.value < m21));
+    });
+    const precoAcimaMM9 = preco > mm9atual;
+    const mm9Subindo = mm9_3d ? mm9atual > mm9_3d : null;
+    return { mm9atual, mm21atual, cruzouRecente, precoAcimaMM9, mm9Subindo };
+  }
+
+  const rsiTend = tendenciaRSI(ind.historico_rsi, 5);
+  const macdTend = tendenciaMACD(ind.historico_macd);
+  const mmTend = tendenciaMM(ind.historico_mm9, ind.historico_mm21, ind.preco_atual);
+
+  return "=== INDICADORES MATEMATICOS COM DIMENSAO TEMPORAL (200 dias reais) ===\n"
+    + "PRECO ATUAL: "+ind.preco_atual+" | VARIACAO HOJE: "+ind.variacao_hoje+"%\n"
+    + "TENDENCIA GERAL: "+ind.tendencia+"\n"
+    + "\n--- SCORE DE CONFLUENCIA ---\n"
+    + "SCORE: "+conf?.score+"/100 | DIRECAO: "+conf?.direcao+"\n"
+    + "Sinais confirmadores ("+conf?.pontos_alta+" pts): "+conf?.sinais_confirmadores?.join(", ")+"\n"
+    + "Sinais negativos ("+conf?.pontos_baixa+" pts): "+conf?.sinais_negativos?.join(", ")+"\n"
+    + "\n--- RSI — TENDENCIA TEMPORAL ---\n"
+    + "RSI(5)="+i.rsi.rsi5+" | RSI(9)="+i.rsi.rsi9+" | RSI(14)="+i.rsi.rsi14+"\n"
+    + "RSI PONDERADO ATUAL: "+i.rsi.rsi_ponderado+" ("+i.rsi.zona+")\n"
+    + (rsiTend ? "RSI HA 5 DIAS: "+rsiTend.anterior+" → HOJE: "+rsiTend.atual+" | MOVIMENTO: "+rsiTend.diff+" pts | DIRECAO: "+rsiTend.dir+"\n" : "")
+    + (rsiTend && rsiTend.diff > 10 ? "*** RSI ACELEROU FORTEMENTE — sinal de momentum crescente ***\n" : "")
+    + (rsiTend && rsiTend.atual < 35 && rsiTend.dir.includes("SUBINDO") ? "*** RSI SAINDO DE ZONA SOBREVENDIDA — possivel reversao ***\n" : "")
+    + "\n--- MACD — TENDENCIA TEMPORAL ---\n"
+    + "MACD atual: "+i.macd?.macd+" | Signal: "+i.macd?.signal+" | Histograma: "+i.macd?.histogram+"\n"
+    + "Tendencia: "+i.macd?.trend+" | Cruzamento atual: "+i.macd?.crossover+"\n"
+    + (macdTend ? "Histograma 5d atras: "+macdTend.h5d+" → 3d atras: "+macdTend.h3d+" → hoje: "+macdTend.atual+"\n" : "")
+    + (macdTend ? "Histograma acelerando: "+macdTend.acelerando+" | Status cruzamento: "+macdTend.virando+"\n" : "")
+    + (macdTend?.virando === "CRUZOU_POSITIVO_RECENTE" ? "*** MACD CRUZOU PARA POSITIVO NOS ULTIMOS 5 DIAS — sinal forte de compra ***\n" : "")
+    + "\n--- MEDIAS MOVEIS — TENDENCIA TEMPORAL ---\n"
+    + "MM9="+i.medias.mm9+" | MM21="+i.medias.mm21+" | MM50="+i.medias.mm50+" | MM200="+i.medias.mm200+"\n"
+    + "Preco acima MM50: "+i.medias.acimaMM50+" | Preco acima MM200: "+i.medias.acimaMM200+"\n"
+    + (mmTend ? "MM9 subindo nos ultimos 3 dias: "+mmTend.mm9Subindo+" | Preco acima MM9: "+mmTend.precoAcimaMM9+"\n" : "")
+    + (mmTend?.cruzouRecente ? "*** MM9 CRUZOU MM21 NOS ULTIMOS 5 DIAS — cruzamento dourado/mortifero recente ***\n" : "")
+    + "\n--- BOLLINGER BANDS ---\n"
+    + "Superior="+i.bollinger?.upper+" | Medio="+i.bollinger?.middle+" | Inferior="+i.bollinger?.lower+"\n"
+    + "%B="+i.bollinger?.pctB+" | Bandwidth="+i.bollinger?.bandwidth+"% | Posicao: "+i.bollinger?.position+"\n"
+    + (i.bollinger?.squeeze ? "*** BOLLINGER SQUEEZE — volatilidade comprimida, movimento explosivo iminente ***\n" : "")
+    + "\n--- VWAP (FLUXO INSTITUCIONAL) ---\n"
+    + "VWAP(20d)="+i.vwap?.vwap+" | Diferenca: "+i.vwap?.diferenca_pct+"% | Sinal: "+i.vwap?.sinal+"\n"
+    + "\n--- VOLUME E ATR ---\n"
+    + "Volume: Atual="+i.volume?.atual?.toLocaleString()+" | Media20="+i.volume?.media20?.toLocaleString()+" | Ratio="+i.volume?.ratio+"x | Status: "+i.volume?.status+"\n"
+    + "ATR(14): "+i.atr+" ("+ind.gestao_risco.atr_pct+"% do preco)\n"
+    + "\n--- PADRAO DE CANDLESTICK ---\n"
+    + "Padrao: "+candle?.pattern+" | Bias: "+candle?.bias+" | Confianca historica: "+candle?.confianca+"%\n"
+    + "\n--- SUPORTE E RESISTENCIA ---\n"
+    + "Suporte: "+ind.suporte_resistencia.suporte+" ("+ind.suporte_resistencia.distSuport+"% abaixo)\n"
+    + "Resistencia: "+ind.suporte_resistencia.resistencia+" ("+ind.suporte_resistencia.distResist+"% acima)\n"
+    + "R/R Natural suporte/resistencia: 1:"+ind.suporte_resistencia.rr_natural+"\n"
+    + "\n--- KELLY CRITERION ---\n"
+    + "Half Kelly recomendado: "+kelly?.half_kelly+"% do capital | Classificacao: "+kelly?.explicacao+"\n"
+    + "\n--- GESTAO DE RISCO ---\n"
+    + "Stop matematico (2xATR): "+ind.gestao_risco.stop_sugerido+"\n"
+    + "Alvo matematico (3xATR): "+ind.gestao_risco.alvo_sugerido+"\n"
+    + "\nINSTRUCAO: Use os dados temporais (tendencias, cruzamentos recentes, aceleracoes) como peso adicional na sua decisao. Sinais marcados com *** sao especialmente relevantes.";
+}
+
+// ─── COTACOES DA CARTEIRA ─────────────────────────────────────
+async function atualizarCotacoesCarteira() {
+  const carteira = getCarteira();
+  if (!carteira.length) return;
+  const results = await Promise.all(
+    carteira.map(async p => {
+      const q = await fetchQuote(p.ticker);
+      return { ticker: p.ticker, quote: q };
+    })
+  );
+  results.forEach(r => {
+    if (r.quote) portfolioQuotes[r.ticker] = r.quote;
+  });
+  renderPortfolio();
+  updateBenchmarkCard();
+}
+
+// ─── TELEGRAM ────────────────────────────────────────────────
+async function sendTelegram(type, data) {
+  try {
+    await fetch("/api/telegram", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, data }),
+    });
+  } catch(e) {
+    console.log("Telegram erro:", e.message);
+  }
+}
+
+async function testarTelegram() {
+  await sendTelegram("TESTE", {});
+}
+
+// Verifica stops e alvos e notifica via Telegram
+async function verificarAlertas() {
+  const carteira = getCarteira();
+  if (!carteira.length) return;
+  for (const p of carteira) {
+    const quote = await fetchQuote(p.ticker);
+    if (!quote) continue;
+    const atual = quote.price;
+    const stopNum = p.stop_loss || null;
+    const alvoNum = p.alvo || null;
+    if (stopNum && atual <= stopNum) {
+      await sendTelegram("STOP_ATINGIDO", {
+        ticker: p.ticker,
+        preco: quote.currency + atual.toFixed(2),
+        stop: p.stop_loss ? "R$"+p.stop_loss : "--",
+      });
+    } else if (alvoNum && atual >= alvoNum) {
+      await sendTelegram("ALVO_ATINGIDO", {
+        ticker: p.ticker,
+        preco: quote.currency + atual.toFixed(2),
+        alvo: p.alvo ? "R$"+p.alvo : "--",
+        lucro: "+" + (((atual - p.preco_medio) / p.preco_medio) * 100).toFixed(2) + "%",
+      });
+    }
+  }
+}
+
+// Aliases de compatibilidade
+async function loadPortfolio() { await loadOperacoes(); }
+async function savePortfolio() { /* incluido em abrirOperacao/venderOperacao */ }
+async function loadHistoricoFn() { /* incluido em loadOperacoes */ }
+
+// ─── HELPERS ──────────────────────────────────────────────────
+const sigCol = s => s==="COMPRA"?"var(--green)":s==="VENDA"?"var(--red)":"var(--yellow)";
+const numCol = n => n>=75?"var(--green)":n>=60?"#88ff44":n>=40?"var(--yellow)":"var(--red)";
+const bar = (v,c) => '<div class="bar-wrap"><div class="bar-fill" style="width:'+Math.min(100,v)+'%;background:linear-gradient(90deg,'+c+',var(--cyan))"></div></div>';
+const kv = (l,v,c) => '<div class="kv"><span class="kv-label">'+l+'</span><span class="kv-val" style="color:'+(c||"var(--txt)")+'">'+String(v||"--")+'</span></div>';
+const sec = l => '<div class="sec"><span class="sec-label">'+l+'</span><div class="sec-line"></div></div>';
+const steps = (arr,cur) => arr.map((s,i) => '<div style="color:'+(i<cur?"var(--dim)":i===cur?"var(--green)":"var(--border)")+'">'+( i<cur?"v":i===cur?">":".")+" "+s+'</div>').join("");
+
+// ─── RENDER ANALISE ───────────────────────────────────────────
+function renderResult(d, quote, indicators) {
+  const sig = d.sinal||"AGUARDA";
+  const sigC = sigCol(sig);
+  const cons = d.sis ? Object.values(d.sis).filter(s=>s.v===sig).length : 0;
+  const travOk = d.trav ? Object.values(d.trav).filter(Boolean).length : 0;
+  const SIS = {tec:"TECNICO",pa:"PRICE ACTION",fun:"FUNDAMENTOS",mac:"MACRO",not:"NOTICIAS"};
+  const TRAV = {rr:"RISCO\nRETORNO",vol:"VOLUME",rsi:"RSI",idx:"TEND\nINDICE",evt:"SEM\nEVENTO",conc:"CONCENTR",atr:"VOLATIL"};
+
+  let qBadge = "";
+  if (quote) {
+    const up = parseFloat(quote.change) >= 0;
+    const isMan = quote.source === "Manual";
+    qBadge = '<div style="display:inline-flex;align-items:center;gap:16px;padding:10px 18px;background:var(--card);margin-bottom:14px;border:1px solid '+(isMan?"rgba(255,204,0,.3)":"rgba(0,255,136,.3)")+'">'
+      +'<div><div style="font-family:monospace;font-size:8px;color:'+(isMan?"var(--yellow)":"var(--green)")+'">'+(isMan?"PRECO MANUAL":"COTACAO REAL - "+quote.source)+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:var(--blue)">'+quote.currency+" "+quote.price.toFixed(2)+'</div></div>'
+      +'<div><div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+(up?"var(--green)":"var(--red)")+'">'+(up?"+":"")+quote.change+'%</div><div style="font-family:monospace;font-size:8px;color:var(--dim)">HOJE</div></div>'
+      +'<div><div style="font-family:monospace;font-size:9px;color:var(--dim)">MAX '+quote.currency+(quote.high||0).toFixed(2)+'</div>'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--dim)">MIN '+quote.currency+(quote.low||0).toFixed(2)+'</div>'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--dim)">ANT '+quote.currency+(quote.prevClose||0).toFixed(2)+'</div></div></div>';
+  }
+
+  const hero = '<div style="display:grid;grid-template-columns:1fr 170px 1fr;gap:10px;margin-bottom:10px;animation:fadeUp .4s ease">'
+    +'<div style="background:var(--card);border:1px solid var(--hi);border-top:2px solid '+sigC+';padding:22px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:30px;font-weight:700;letter-spacing:2px">'+d.ticker+'</div>'
+    +'<div style="font-size:12px;color:var(--sub);margin-bottom:14px">'+d.nome+' - '+d.setor+' - '+d.mercado+'</div>'
+    +'<div style="display:inline-flex;align-items:center;gap:10px;padding:10px 18px;font-family:Rajdhani,sans-serif;font-size:24px;font-weight:700;letter-spacing:3px;color:'+sigC+';background:'+sigC+'15;border:1px solid '+sigC+'44">'+sig+'</div>'
+    +'<div style="margin-top:10px;font-family:monospace;font-size:9px;color:var(--dim)">CONSENSO '+cons+'/5 - '+travOk+'/7 TRAVAS OK</div>'
+    +(d.variacao_hoje?'<div style="margin-top:6px;font-family:monospace;font-size:9px;color:'+(String(d.variacao_hoje).startsWith("-")?"var(--red)":"var(--green)")+'">HOJE: '+d.variacao_hoje+'</div>':"")
+    +'</div>'
+    +'<div style="background:var(--card);border:1px solid var(--hi);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:18px;">'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:2px">SCORE</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:52px;font-weight:700;color:'+numCol(d.score)+';line-height:1">'+d.score+'</div>'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--sub)">/100</div>'
+    +bar(d.score,numCol(d.score))
+    +'<div style="font-family:monospace;font-size:8px;color:var(--dim);text-align:center;margin-top:4px">FORCA '+d.forca+'/10 - '+d.confianca+'% CONF.</div>'
+    +'<div>'+[...Array(10)].map((_,i)=>'<span style="color:'+(i<d.forca?numCol(d.score):"var(--border)")+'">|</span>').join("")+'</div>'
+    +'</div>'
+    +'<div style="background:var(--card);border:1px solid var(--hi);padding:18px;">'
+    +kv("PRECO REAL",d.preco,"var(--blue)")
+    +kv("ALVO 30D",d.alvo30,"var(--green)")
+    +kv("ALVO 60D",d.alvo60,"var(--green)")
+    +kv("STOP LOSS",d.stop,"var(--red)")
+    +kv("UPSIDE 30D",d.up30,"var(--green)")
+    +kv("DOWNSIDE",d.downside,"var(--red)")
+    +kv("RISCO/RETORNO",d.rr,"var(--yellow)")
+    +'<div class="kv"><span class="kv-label">ALOCACAO MAX</span><span class="kv-val">'+String(d.aloc||"--")+'</span></div>'
+    +'</div></div>';
+
+  const sis = sec("5 SISTEMAS DE CONFIRMACAO")
+    +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;">'
+    +(d.sis?Object.entries(d.sis).map(([k,s])=>{const vc=sigCol(s.v);return '<div style="background:var(--card);border:1px solid var(--border);border-bottom:2px solid '+vc+';padding:12px 8px;text-align:center;">'
+      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:5px">'+(SIS[k]||k)+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;color:'+vc+';margin-bottom:3px">'+s.v+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+numCol(s.s)+'">'+s.s+'</div>'
+      +'<div style="font-size:9px;color:var(--sub);margin-top:5px;line-height:1.4">'+String(s.r||"")+'</div></div>';}).join(""):"")
+    +'</div>';
+
+  const trav = sec("7 TRAVAS DE SEGURANCA")
+    +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:10px;">'
+    +(d.trav?Object.entries(d.trav).map(([k,ok])=>'<div style="background:var(--card);border:1px solid '+(ok?"rgba(0,255,136,.25)":"rgba(255,51,85,.25)")+';padding:10px 6px;text-align:center;">'
+      +'<div style="font-size:16px;margin-bottom:4px">'+(ok?"OK":"X")+'</div>'
+      +'<div style="font-family:monospace;font-size:7px;color:var(--dim);line-height:1.4;white-space:pre-wrap">'+(TRAV[k]||k)+'</div></div>').join(""):"")
+    +'</div>';
+
+  const temp = sec("PREVISAO TEMPORAL DE VALORIZACAO")
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">'
+    +(d.prev||[]).map(p=>'<div style="background:var(--card);border:1px solid var(--border);padding:16px;">'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:5px">'+p.d+' DIAS</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:'+(String(p.u).startsWith("-")?"var(--red)":"var(--green)")+'">'+p.u+'</div>'
+      +'<div style="font-family:monospace;font-size:10px;color:var(--sub);margin-bottom:8px">Alvo: '+p.a+'</div>'
+      +bar(p.c,"var(--green)")
+      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:4px">Conf: '+p.c+'%</div></div>').join("")
+    +'</div>';
+
+  const tecFun = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:12px">ANALISE TECNICA</div>'
+    +(d.tec?[["TENDENCIA",d.tec.tend],["RSI",d.tec.rsi],["MACD",d.tec.macd],["MEDIAS",d.tec.mm],["BOLLINGER",d.tec.bol],["VOLUME",d.tec.volume],["SUPORTE",d.tec.sup],["RESISTENCIA",d.tec.res],["CANDLE",d.tec.candle]].map(([k,v])=>'<div style="display:flex;justify-content:space-between;gap:6px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;font-size:11px;"><span style="font-family:monospace;font-size:8px;color:var(--dim);min-width:75px;margin-top:2px">'+k+'</span><span style="color:var(--sub);text-align:right">'+String(v||"--")+'</span></div>').join(""):"")
+    +'</div>'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:12px">FUNDAMENTALISTA</div>'
+    +(d.fun?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">'
+      +[["VALUATION",d.fun.val],["P/L",d.fun.pl],["ROE",d.fun.roe],["DY",d.fun.dy]].map(([k,v])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:8px 10px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">'+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:600;color:'+(k==="VALUATION"&&v==="Barato"?"var(--green)":k==="VALUATION"&&v==="Caro"?"var(--red)":"var(--txt)")+'">'+String(v||"--")+'</div></div>').join("")
+      +'</div>'
+      +[["MARGEM",d.fun.mg],["DIV/EBITDA",d.fun.div],["CRESCIMENTO",d.fun.cr],["MOAT",d.fun.moat]].map(([k,v])=>'<div style="display:flex;justify-content:space-between;gap:6px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;font-size:11px;"><span style="font-family:monospace;font-size:8px;color:var(--dim);min-width:75px;margin-top:2px">'+k+'</span><span style="color:var(--sub);text-align:right">'+String(v||"--")+'</span></div>').join(""):"")
+    +'</div></div>';
+
+  const catRis = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px">CATALISADORES</div>'
+    +(d.cat||[]).map(c=>'<div style="display:flex;gap:8px;font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:7px"><span style="color:var(--green);font-weight:700">&gt;</span>'+c+'</div>').join("")
+    +'</div>'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px">RISCOS</div>'
+    +(d.ris||[]).map(r=>'<div style="display:flex;gap:8px;font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:7px"><span style="color:var(--red)">!</span>'+r+'</div>').join("")
+    +'</div></div>';
+
+  const cen = sec("CENARIOS DE PROBABILIDADE")
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">'
+    +(d.cen?[["oti","OTIMISTA","var(--green)"],["bas","BASE","var(--blue)"],["pes","PESSIMISTA","var(--red)"]].map(([k,lbl,col])=>'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:'+col+';margin-bottom:6px">'+lbl+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:'+col+';margin-bottom:8px">'+String(d.cen[k]&&d.cen[k].p||0)+'%</div>'
+      +'<div style="font-size:11px;color:var(--sub);line-height:1.5">'+String(d.cen[k]&&d.cen[k].d||"")+'</div></div>').join(""):"")
+    +'</div>';
+
+  const said = sec("GESTAO DE SAIDA")
+    +'<div style="background:var(--card);border:1px solid var(--hi);padding:20px;margin-bottom:10px;">'
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">'
+    +(d.said?[["SAIDA PARCIAL 50%",d.said.p50,"var(--green)"],["SAIDA TOTAL 100%",d.said.tot,"var(--cyan)"],["STOP LOSS",d.said.stop,"var(--red)"],["EMERGENCIA",d.said.eme,"var(--yellow)"]].map(([t,a,c])=>'<div style="border-left:2px solid '+c+';padding-left:12px;">'
+      +'<div style="font-family:monospace;font-size:8px;color:'+c+';letter-spacing:1px;margin-bottom:5px">'+t+'</div>'
+      +'<div style="font-size:11px;color:var(--sub);line-height:1.5">'+String(a||"--")+'</div></div>').join(""):"")
+    +'</div></div>';
+
+  const prof = '<div style="padding:14px 18px;margin-bottom:10px;background:'+(d.ok?"rgba(0,255,136,.06)":"rgba(255,51,85,.06)")+';border:1px solid '+(d.ok?"rgba(0,255,136,.3)":"rgba(255,51,85,.3)")+'">'
+    +'<div style="font-family:monospace;font-size:9px;color:'+(d.ok?"var(--green)":"var(--red)")+';letter-spacing:1px;margin-bottom:6px">'+(d.ok?"OK - ADEQUADO AO SEU PERFIL":"ATENCAO - FORA DO PERFIL")+'</div>'
+    +'<div style="font-size:12px;color:var(--sub);line-height:1.6">'+String(d.just||"")+'</div></div>';
+
+  // Indicadores matematicos card
+  const indCard = indicators ? (function() {
+    const i = indicators.indicadores;
+    const conf = indicators.confluencia;
+    const candle = indicators.candle_pattern;
+    const kelly = indicators.kelly_criterion;
+    const confColor = conf?.score >= 65 ? "var(--green)" : conf?.score >= 50 ? "var(--yellow)" : "var(--red)";
+    return '<div style="background:var(--card);border:1px solid var(--hi);padding:20px;margin-bottom:10px;">'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">INDICADORES MATEMATICOS CALCULADOS</div>'+
+
+    // Score de confluencia
+    '<div style="background:var(--bg);border:1px solid '+confColor+'44;padding:12px;margin-bottom:12px;display:grid;grid-template-columns:120px 1fr 1fr;">'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">SCORE CONFLUENCIA</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:32px;font-weight:700;color:'+confColor+'">'+conf?.score+'</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:13px;color:'+confColor+'">'+conf?.direcao+'</div></div>'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--green);margin-bottom:6px;">CONFIRMADORES</div>'+
+    (conf?.sinais_confirmadores||[]).map(s=>'<div style="font-size:9px;color:var(--green);margin-bottom:2px;">> '+s+'</div>').join("")+'</div>'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--red);margin-bottom:6px;">NEGATIVOS</div>'+
+    (conf?.sinais_negativos||[]).map(s=>'<div style="font-size:9px;color:var(--red);margin-bottom:2px;">x '+s+'</div>').join("")+'</div>'+
+    '</div>'+
+
+    // Grid indicadores
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'+
+    [
+      ["RSI PONDERADO", i.rsi.rsi_ponderado, i.rsi.zona==="SOBRECOMPRADO"?"var(--red)":i.rsi.zona==="SOBREVENDIDO"?"var(--green)":"var(--yellow)"],
+      ["TENDENCIA", indicators.tendencia, indicators.tendencia.includes("ALTA")?"var(--green)":indicators.tendencia.includes("BAIXA")?"var(--red)":"var(--yellow)"],
+      ["VWAP", i.vwap?.sinal?.replace(/_/g," "), i.vwap?.acima?"var(--green)":"var(--red)"],
+      ["VOLUME", i.volume?.status, i.volume?.status==="EXPLOSIVO"||i.volume?.status==="MUITO_ACIMA"?"var(--green)":i.volume?.status==="ABAIXO"?"var(--red)":"var(--dim)"],
+      ["MACD", i.macd?.crossover==="NENHUM"?i.macd?.trend:i.macd?.crossover?.replace(/_/g," "), i.macd?.trend==="ALTA"?"var(--green)":"var(--red)"],
+      ["BOLLINGER", i.bollinger?.position?.replace(/_/g," "), i.bollinger?.position==="DENTRO_DAS_BANDAS"?"var(--green)":"var(--yellow)"],
+      ["CANDLE", candle?.pattern?.replace(/_/g," "), candle?.bias==="ALTA"?"var(--green)":candle?.bias==="BAIXA"?"var(--red)":"var(--dim)"],
+      ["ACIMA MM50", i.medias.acimaMM50?"SIM":"NAO", i.medias.acimaMM50?"var(--green)":"var(--red)"],
+    ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+c+'">'+String(v||"--")+'</div></div>'
+    ).join("")+'</div>'+
+
+    // Medias e gestao de risco
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'+
+    [
+      ["MM9", i.medias.mm9,"var(--sub)"],["MM21", i.medias.mm21,"var(--sub)"],
+      ["MM50", i.medias.mm50,"var(--sub)"],["MM200", i.medias.mm200,"var(--sub)"],
+      ["SUPORTE", indicators.suporte_resistencia.suporte,"var(--green)"],
+      ["RESISTENCIA", indicators.suporte_resistencia.resistencia,"var(--red)"],
+      ["STOP ATR", indicators.gestao_risco.stop_sugerido,"var(--red)"],
+      ["ALVO ATR", indicators.gestao_risco.alvo_sugerido,"var(--green)"],
+    ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:600;color:'+c+'">'+String(v||"--")+'</div></div>'
+    ).join("")+'</div>'+
+
+    // Kelly Criterion
+    '<div style="background:rgba(255,204,0,.05);border:1px solid rgba(255,204,0,.2);padding:12px;display:grid;grid-template-columns:1fr 1fr 1fr;">'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--yellow);margin-bottom:4px;">KELLY CRITERION</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--yellow)">'+kelly?.half_kelly+'%</div>'+
+    '<div style="font-family:monospace;font-size:8px;color:var(--dim)">do capital (half kelly)</div></div>'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">CLASSIFICACAO</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:13px;color:var(--yellow)">'+String(kelly?.explicacao||"--").replace(/_/g," ")+'</div></div>'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">R/R NATURAL</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:13px;color:var(--txt)">1:'+indicators.suporte_resistencia.rr_natural+'</div>'+
+    '<div style="font-size:9px;color:var(--dim)">suporte/resistencia</div></div>'+
+    '</div></div>';
+  })() : "";
+
+  const res = '<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:20px;margin-bottom:20px;font-size:13px;color:var(--sub);line-height:1.8;font-style:italic;">'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;font-style:normal">RESUMO EXECUTIVO</div>'
+    +'"'+String(d.res||"")+'"\n</div>';
+
+  return qBadge + hero + sis + trav + temp + indCard + tecFun + catRis + cen + said + prof + res;
+}
+
+// ─── PROMPTS ──────────────────────────────────────────────────
+function buildAnalyzePrompt(ticker, quote, manualPrice, indicators) {
+  const pi = manualPrice
+    ? "PRECO ATUAL (manual): "+(quote&&quote.currency||"R$")+" "+manualPrice
+    : quote
+      ? "PRECO REAL (Yahoo Finance): "+quote.currency+" "+quote.price+" | Variacao hoje: "+quote.change+"% | Max: "+quote.high+" | Min: "+quote.low+" | Vol: "+(quote.volume||0).toLocaleString()+" | Fech.ant.: "+quote.prevClose
+      : "PRECO: nao disponivel - use conhecimento mais recente";
+
+  return "Voce e ATLAS, o gestor quantitativo de elite do ATLAS WEALTH. Seu unico objetivo e maximizar o retorno mensal do investidor.\n\nPERFIL DO INVESTIDOR:\n- Capital: R$5.000 a R$20.000 + aportes mensais crescentes\n- Objetivo: RETORNO MENSAL MAXIMO - meta de +8% ao mes\n- Horizonte por operacao: 5 a 20 dias (swing trade agressivo)\n- Estrategia: girar capital rapidamente, realizar lucro, reinvestir\n- Mercados: B3 + NYSE/NASDAQ\n- Corretora: BTG Pactual\n- Perfil: aceita risco calculado para maximizar retorno\n- NAO e investidor de longo prazo - quer resultado este mes\n\nATIVO: "+ticker+"\n"+pi+"\nMERCADO: "+(quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"))+"\n\nCRITERIOS DE ANALISE (em ordem de prioridade):\n1. MOMENTUM - o ativo esta em movimento agora? Volume acima da media?\n2. CATALISADOR - ha evento proximo que pode impulsionar o preco nos proximos 5-20 dias?\n3. TECNICO - RSI, MACD, rompimento de resistencia, price action favoravel\n4. RISCO/RETORNO - minimo 1:2, ideal 1:3 ou mais\n5. FUNDAMENTALISTA - saude da empresa como suporte\n6. MACRO - setor e indice favoraveis\n\nCALCULOS OBRIGATORIOS com o preco real:\n- Alvo 7 dias: preco realista para swing de curto prazo\n- Alvo 15 dias: objetivo principal da operacao\n- Stop loss: maximo 5% abaixo da entrada\n- Upside minimo aceitavel: 8% em ate 15 dias\n- Risco/retorno minimo: 1:2\n\n7 TRAVAS DE SEGURANCA:\nrisco/retorno>=1:2, volume acima media, RSI entre 30-70, tendencia do indice favoravel, sem evento de risco iminente, alocacao max 20% por ativo, volatilidade dentro do normal\n\nSCORE (baseado em potencial de retorno nos proximos 15 dias):\n<40=VENDA | 40-59=AGUARDA | 60-74=COMPRA MODERADA | 75-89=COMPRA FORTE | 90+=COMPRA MAXIMA\n\nRetorne APENAS JSON sem texto extra:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo30\":\"\",\"alvo60\":\"\",\"stop\":\"\",\"up30\":\"\",\"up60\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54},{\"d\":60,\"a\":\"\",\"u\":\"\",\"c\":44}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"val\":\"\",\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"div\":\"\",\"cr\":\"\",\"dy\":\"\",\"moat\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"said\":{\"p50\":\"\",\"tot\":\"\",\"stop\":\"\",\"eme\":\"\"},\"aloc\":\"\",\"ok\":true,\"just\":\"\",\"res\":\"\"}";
+}
+
+function buildRadarPrompt(tickers, quotes, indicadoresRadar) {
+  const info = tickers.slice(0,80).map(t=>{const q=quotes[t];return q?t+"("+q.currency+q.price+","+q.change+"%hoje)":t;}).join(",");
+
+  // Adiciona indicadores dos top candidatos
+  // Usa buildIndicatorsContext para contexto completo com dimensao temporal
+  const indInfo = Object.entries(indicadoresRadar||{}).map(([t, ind]) => {
+    const ctx = buildIndicatorsContext(ind);
+    // Extrai apenas o essencial para nao sobrecarregar o prompt
+    const conf = ind.confluencia;
+    const candle = ind.candle_pattern;
+    const rsiHist = ind.historico_rsi;
+    const macdHist = ind.historico_macd;
+    const rsiAtual = ind.indicadores?.rsi?.rsi_ponderado;
+    const rsi5dAtras = rsiHist && rsiHist.length >= 5 ? rsiHist[rsiHist.length-5]?.value : null;
+    const macdH = macdHist?.histogram;
+    const macdAcelerou = macdH && macdH.length >= 3 ? Math.abs(macdH[macdH.length-1]?.value) > Math.abs(macdH[macdH.length-3]?.value) : false;
+    const macdCruzouRecente = macdH && macdH.length >= 5 ? (macdH[macdH.length-1]?.value > 0 && macdH[macdH.length-5]?.value < 0) : false;
+    return "["+t+"]"
+      +" CONFLUENCIA="+conf?.score+"/"+conf?.direcao
+      +" RSI="+rsiAtual+(rsi5dAtras?" (era "+rsi5dAtras.toFixed(1)+" ha 5d"+(rsiAtual>rsi5dAtras?" SUBINDO":" CAINDO")+")":"")
+      +" MACD="+ind.indicadores?.macd?.trend+(macdCruzouRecente?" CRUZOU_POSITIVO_RECENTE":"")+(macdAcelerou?" ACELERANDO":"")
+      +" VWAP="+ind.indicadores?.vwap?.sinal
+      +" VOLUME="+ind.indicadores?.volume?.status
+      +" CANDLE="+candle?.pattern+"("+candle?.bias+","+candle?.confianca+"%)"
+      +(ind.indicadores?.bollinger?.squeeze?" BOLLINGER_SQUEEZE":"")
+      +" STOP="+ind.gestao_risco?.stop_sugerido
+      +" ALVO="+ind.gestao_risco?.alvo_sugerido
+      +" KELLY="+ind.kelly_criterion?.half_kelly+"%"
+      +(conf?.score >= 65 ? " ***ALTA_CONFLUENCIA***" : "");
+  }).join("\n");
+
+  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: identificar as melhores oportunidades de RETORNO MAXIMO nos proximos 5 a 15 dias.\n\nPERFIL: Investidor agressivo de curto prazo, meta +8% ao mes, gira capital rapidamente, B3+NYSE/NASDAQ, capital R$5k-20k.\n\nATIVOS COM PRECOS REAIS:\n"+info+"\n\nINDICADORES MATEMATICOS (top candidatos):\n"+indInfo+"\n\nCRITERIOS DE SELECAO (rigorosos):\n1. CONFLUENCIA alta (score >60) - multiplos sistemas confirmando\n2. MOMENTUM FORTE - subindo com volume acima da media AGORA\n3. VWAP favoravel - institucional comprando\n4. CATALISADOR IMINENTE - resultado, evento nos proximos 15 dias\n5. SETUP TECNICO - rompimento, pullback, candle de reversao\n6. UPSIDE MINIMO 8% em ate 15 dias | STOP MAXIMO 5%\n7. RISCO/RETORNO minimo 1:2, preferir 1:3\n\nSelecione TOP 8. Para ativos com indicadores matematicos disponíveis, USE OS DADOS REAIS para calcular alvos e stops.\nListe os ativos a EVITAR com motivo claro.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"evitar\":[\"\"]}";
+}
+
+function buildGuruPrompt(quotes, cap, indicadoresGuru) {
+  const info = Object.entries(quotes).slice(0,60).map(([t,q])=>t+":"+q.currency+q.price+"("+q.change+"%)").join(",");
+  const temCarteira = getCarteira().length > 0;
+  const capitalInvestido = getCarteira().reduce((a,p)=>{
+    const q = quotes[p.ticker];
+    const precoAtual = q ? q.price : parseFloat(p.preco_medio)||0;
+    return a + (parseFloat(p.quantidade_atual)||0) * precoAtual;
+  }, 0);
+  const reserva = cap * 0.2;
+  const caixaDisponivel = Math.max(0, cap - capitalInvestido - reserva);
+  const modo = getCarteira().length > 0 ? "REBALANCEAMENTO" : "MONTAGEM_INICIAL";
+
+  const posicoes = temCarteira ? getCarteira().map(p => {
+    const q = quotes[p.ticker];
+    const atual = q ? q.price : parseFloat(p.preco_medio)||0;
+    const entrada = parseFloat(p.preco_medio)||0;
+    const qty = parseFloat(p.quantidade_atual)||0;
+    const pl = entrada > 0 ? (((atual - entrada) / entrada) * 100).toFixed(2) : "0";
+    const valorAtual = (qty * atual).toFixed(2);
+    const stopN = p.stop_loss || null;
+    const alvoN = p.alvo || null;
+    const dStop = stopN && atual ? (((atual - stopN) / atual) * 100).toFixed(2) : "?";
+    const dAlvo = alvoN && atual ? (((alvoN - atual) / atual) * 100).toFixed(2) : "?";
+    return p.ticker+":entrada=R$"+entrada.toFixed(2)+",atual=R$"+atual.toFixed(2)+",qty="+qty+",valor=R$"+valorAtual+",PL="+pl+"%,stop="+(stopN?"R$"+stopN:"nao definido")+",alvo="+(alvoN?"R$"+alvoN:"nao definido")+",dist_stop="+dStop+"%,dist_alvo="+dAlvo+"%";
   }).join(" | ") : "Nenhuma posicao aberta";
 
   const instrucoes = temCarteira
@@ -1613,12 +3190,14 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru) {
 
 function buildBriefingPrompt(quotes, cap) {
   const hoje = Object.entries(quotes).slice(0,30).map(([t,q])=>t+":"+q.change+"%").join(",");
-  const pos = portfolio.length>0?portfolio.map(p=>{
+  const cartBriefing = getCarteira();
+  const pos = cartBriefing.length>0?cartBriefing.map(p=>{
     const q=quotes[p.ticker];const atual=q?q.price:null;
-    const v=atual?(((atual-p.price)/p.price)*100).toFixed(2):"?";
-    const sn=p.stop?parseFloat(String(p.stop).replace("R$","").replace(",",".")):null;
-    const an=p.target?parseFloat(String(p.target).replace("R$","").replace(",",".")):null;
-    return p.ticker+":entrada="+p.price+",atual="+(atual||"?")+",var="+v+"%,stop="+(p.stop||"?")+",alvo="+(p.target||"?")+",STOP_ATING="+(atual&&sn&&atual<=sn)+",ALVO_ATING="+(atual&&an&&atual>=an);
+    const entrada=parseFloat(p.preco_medio)||0;
+    const v=atual&&entrada?(((atual-entrada)/entrada)*100).toFixed(2):"?";
+    const sn=p.stop_loss||null;
+    const an=p.alvo||null;
+    return p.ticker+":entrada=R$"+entrada.toFixed(2)+",atual="+(atual?"R$"+atual.toFixed(2):"?")+",var="+v+"%,stop="+(sn?"R$"+sn:"nao definido")+",alvo="+(an?"R$"+an:"nao definido")+",STOP_ATING="+(atual&&sn&&atual<=sn)+",ALVO_ATING="+(atual&&an&&atual>=an);
   }).join(" | "):"Sem posicoes abertas";
   return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Faca o briefing diario focado em MAXIMIZAR O RETORNO DO MES.\n\nCARTEIRA: "+pos+"\nCAPITAL TOTAL: R$"+cap+"\nMETA DO MES: +8% = R$"+(cap*0.08).toFixed(2)+"\nMERCADO HOJE: "+hoje+"\n\nPARA CADA POSICAO ANALISE:\n1. Esta perto do stop? Risco de perda?\n2. Esta perto do alvo? Hora de realizar?\n3. Deveria reforcar a posicao?\n4. Ha motivo para sair antes do alvo?\n\nIDENTIFIQUE:\n- Oportunidade do dia com maior potencial de retorno rapido\n- Ativos da carteira que devem ser vendidos hoje\n- Proxima entrada recomendada quando houver caixa disponivel\n\nLinguagem direta e objetiva. Foco em ACAO - o que fazer AGORA.\n\nRetorne APENAS JSON:\n{\"situacao_carteira\":\"VERDE\",\"resumo\":\"\",\"alertas\":[{\"tipo\":\"INFO\",\"ticker\":\"\",\"mensagem\":\"\",\"acao_recomendada\":\"\"}],\"posicoes\":[{\"ticker\":\"\",\"status\":\"LUCRO\",\"variacao_hoje\":\"0%\",\"variacao_desde_entrada\":\"0%\",\"distancia_stop\":\"\",\"distancia_alvo\":\"\",\"recomendacao\":\"MANTER\"}],\"oportunidade_do_dia\":{\"ticker\":\"\",\"motivo\":\"\",\"acao\":\"\"},\"mensagem_guru\":\"\"}";
 }
@@ -2211,8 +3790,8 @@ function renderPortfolio() {
           '<td style="color:var(--cyan)">'+( totalA?"R$ "+totalA.toLocaleString("pt-BR",{minimumFractionDigits:2}):"--")+'</td>'+
           '<td style="font-weight:700;color:'+plColor+'">'+( plP?(parseFloat(plP)>=0?"+":"")+plP+"%":"--")+'</td>'+
           '<td style="color:'+hColor+'">'+( plH?(parseFloat(plH)>=0?"+":"")+plH+"%":"--")+'</td>'+
-          '<td style="color:var(--red);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarStop('+p.id+')">'+( stopN?"R$"+stopN.toFixed(2):"--")+'</td>'+
-          '<td style="color:var(--green);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarAlvo('+p.id+')">'+( alvoN?"R$"+alvoN.toFixed(2):"--")+'</td>'+
+          '<td style="color:var(--red);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarStop('+p.id+')">'+( stopN?"R$"+(typeof stopN==="number"?stopN.toFixed(2):parseFloat(stopN).toFixed(2)):"--")+'</td>'+
+          '<td style="color:var(--green);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarAlvo('+p.id+')">'+( alvoN?"R$"+(typeof alvoN==="number"?alvoN.toFixed(2):parseFloat(alvoN).toFixed(2)):"--")+'</td>'+
           '<td style="color:'+( dStop&&parseFloat(dStop)<3?"var(--red)":"var(--dim)")+';font-family:monospace;font-size:10px;">'+( dStop?(parseFloat(dStop)>=0?"+":"")+dStop+"%":"--")+'</td>'+
           '<td style="color:var(--dim);font-family:monospace;font-size:10px;">'+( dAlvo?(parseFloat(dAlvo)>=0?"+":"")+dAlvo+"%":"--")+'</td>'+
           '<td style="display:flex;gap:4px;">'+
@@ -2566,7 +4145,7 @@ async function gerarRelatorio() {
   ].map((s,i)=>'<div style="color:var(--green);font-family:monospace;font-size:10px;">'+( i===0?">":".")+" "+s+'</div>').join("");
 
   // Calcula capital inicial (valor da carteira no inicio do mes)
-  const capitalInicial = portfolio.reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.price)||0),0) || 5000;
+  const capitalInicial = getCarteira().reduce((a,p)=>a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0),0) || 5000;
 
   try {
     const data = await callClaude(buildRelatorioPrompt(mesNome, opsDoMes, capitalInicial));
