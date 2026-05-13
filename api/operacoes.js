@@ -65,8 +65,8 @@ export default async function handler(req, res) {
           quantidade_total: parseFloat(quantidade),
           quantidade_atual: parseFloat(quantidade),
           mercado: mercado || "B3",
-          stop_loss: stop ? parseFloat(stop) : null,
-          alvo: alvo ? parseFloat(alvo) : null,
+          stop_loss: stop ? Math.round(parseFloat(stop) * 100) / 100 : null,
+          alvo: alvo ? Math.round(parseFloat(alvo) * 100) / 100 : null,
           score_atlas: score ? parseInt(score) : null,
           sinal_atlas: sinal || null,
           saidas: [],
@@ -151,8 +151,8 @@ export default async function handler(req, res) {
         const ops = await redisGet();
         const idx = ops.findIndex(o => o.id === id);
         if (idx < 0) return res.status(404).json({ error: "Operação não encontrada" });
-        if (stop !== undefined) ops[idx].stop_loss = parseFloat(stop);
-        if (alvo !== undefined) ops[idx].alvo = parseFloat(alvo);
+        if (stop !== undefined) ops[idx].stop_loss = Math.round(parseFloat(stop) * 10000) / 10000;
+        if (alvo !== undefined) ops[idx].alvo = Math.round(parseFloat(alvo) * 10000) / 10000;
         if (score !== undefined) ops[idx].score_atlas = parseInt(score);
         await redisSet(ops);
         return res.status(200).json({ ok: true, operacao: ops[idx] });
