@@ -514,7 +514,10 @@ function renderJournalCard(operacao) {
       <div class="logo-sub">ANALISE DE INVESTIMENTOS - PERFIL MODERADO</div>
     </div>
   </div>
-  <div class="status"><div class="dot"></div><span>ONLINE</span></div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <div class="status"><div class="dot"></div><span>ONLINE</span></div>
+    <button onclick="showTab('config')" title="Configuracoes" style="background:transparent;border:1px solid var(--border);color:var(--dim);width:32px;height:32px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:color .2s;" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='var(--dim)'">⚙</button>
+  </div>
 </div>
 
 <div class="ticker-wrap">
@@ -540,7 +543,6 @@ function renderJournalCard(operacao) {
     <button class="tab" onclick="showTab('guru')">GURU</button>
     <button class="tab" onclick="showTab('portfolio')">CARTEIRA</button>
     <button class="tab" onclick="showTab('historico')">HISTORICO</button>
-    <button class="tab" onclick="showTab('config')">CONFIG</button>
     <button class="tab" onclick="showTab('relatorio')">RELATORIO</button>
     <button class="tab" onclick="showTab('mapa')">MAPA</button>
   </div>
@@ -664,19 +666,12 @@ function renderJournalCard(operacao) {
   <!-- HISTORICO -->
   <div id="tab-historico" style="display:none;">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-      <div style="background:var(--card);border:1px solid var(--hi);padding:20px;">
-        <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--cyan);">+ REGISTRAR OPERACAO</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-          <div class="form-field"><label>TICKER</label><input type="text" id="hTicker" placeholder="PETR4"/></div>
-          <div class="form-field"><label>SINAL DO GURU</label><select id="hSinal"><option>COMPRA</option><option>VENDA</option><option>AGUARDA</option></select></div>
-          <div class="form-field"><label>PRECO ENTRADA</label><input type="number" id="hEntrada" placeholder="38.50" step="0.01"/></div>
-          <div class="form-field"><label>QUANTIDADE</label><input type="number" id="hQty" placeholder="100"/></div>
-          <div class="form-field"><label>STOP LOSS</label><input type="number" id="hStop" placeholder="36.00" step="0.01"/></div>
-          <div class="form-field"><label>ALVO</label><input type="number" id="hAlvo" placeholder="42.00" step="0.01"/></div>
-          <div class="form-field"><label>SCORE DO GURU</label><input type="number" id="hScore" placeholder="78" min="0" max="100"/></div>
-          <div class="form-field"><label>DATA ENTRADA</label><input type="date" id="hDataEntrada"/></div>
+      <div style="background:var(--card);border:1px solid var(--border);padding:16px 20px;">
+        <div style="font-family:monospace;font-size:9px;color:var(--dim);line-height:2;">
+          As operacoes sao registradas automaticamente pela aba <span style="color:var(--cyan);">CARTEIRA</span>.<br>
+          Abra uma posicao com <span style="color:var(--green);">+ ABRIR</span> e ela aparece aqui automaticamente.<br>
+          Ao vender, o historico e o P&L sao calculados e o <span style="color:var(--blue);">ATLAS JOURNAL</span> e gerado.
         </div>
-        <button class="btn" onclick="registrarOperacao()" style="width:100%;">+ REGISTRAR</button>
       </div>
       <div style="background:var(--card);border:1px solid var(--hi);padding:20px;">
         <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--green);">PERFORMANCE DO GURU</div>
@@ -982,11 +977,11 @@ setInterval(fetchBenchmark, 30 * 60 * 1000); // atualiza a cada 30 min
 
 // ─── TABS ─────────────────────────────────────────────────────
 function showTab(name) {
-  ["analisar","radar","guru","portfolio","historico","config","relatorio","mapa"].forEach(t => {
+  ["analisar","radar","guru","portfolio","historico","relatorio","mapa","config"].forEach(t => {
     document.getElementById("tab-"+t).style.display = t===name ? "" : "none";
   });
   document.querySelectorAll(".tab").forEach((el,i) => {
-    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","config","relatorio","mapa"][i]===name);
+    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","relatorio","mapa","config"][i]===name);
   });
   if (name === "relatorio") renderRelatorioTab();
   if (name === "mapa") renderMapa();
