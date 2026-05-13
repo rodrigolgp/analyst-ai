@@ -2965,7 +2965,7 @@ async function gerarJournal(operacao) {
       + "SINAL ATLAS: "+(operacao.sinal_atlas||"nao registrado")+"\n"
       + "ATLAS ACERTOU: "+(operacao.atlas_acertou?"SIM":"NAO")+"\n\n"
       + "Gere uma analise de aprendizado honesta e concisa. O que funcionou, o que falhou, o que aprender.\n\n"
-      + "Retorne APENAS JSON: {"acertou":true,"resumo":"","o_que_funcionou":"","o_que_falhou":"","licao_principal":"","setup_ideal_para_proximo":"","nota_operacao":"A"}";
+      + 'Retorne APENAS JSON: {"acertou":true,"resumo":"","o_que_funcionou":"","o_que_falhou":"","licao_principal":"","setup_ideal_para_proximo":"","nota_operacao":"A"}';
 
     const data = await callClaude(prompt);
 
