@@ -260,6 +260,248 @@ function setChartPeriod(period) {
   if (currentChartData) renderCharts(currentChartData, period);
 }
 
+
+// ─── MAPA DE CALOR ────────────────────────────────────────────
+const MAPA_SETORES = {
+  "Energia": ["PETR4","PRIO3","VBBR3","CSAN3","BRFS3"],
+  "Bancos": ["ITUB4","BBDC4","BBAS3","SANB11","BPAC11"],
+  "Mineracao": ["VALE3","KLBN11","SUZB3"],
+  "Consumo": ["ABEV3","LREN3","CRFB3","ASAI3","PETZ3"],
+  "Industria": ["WEGE3","EMBR3","RDOR3"],
+  "Energia Elet.": ["EGIE3","ENGI11","CMIG4","CPFE3","EQTL3","TAEE11"],
+  "Telecom": ["TIMS3","VIVT3"],
+  "Saude": ["HAPV3","HYPE3","RADL3"],
+  "Construcao": ["CYRE3","MRVE3"],
+  "FIIs": ["KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","KNCR11","BTLG11"],
+  "Tech EUA": ["NVDA","AMD","AAPL","MSFT","GOOGL","META","AMZN","ADBE","CRM"],
+  "Finan. EUA": ["JPM","BAC","V","MA"],
+  "Saude EUA": ["MRK","ABBV"],
+  "ETFs": ["SPY","QQQ","IVVB11"],
+};
+
+function varColor(v) {
+  const n = parseFloat(v);
+  if (n >= 3) return "#00ff88";
+  if (n >= 1.5) return "#44ff99";
+  if (n >= 0.5) return "#88ffbb";
+  if (n >= 0) return "#aaffcc";
+  if (n >= -0.5) return "#ffaaaa";
+  if (n >= -1.5) return "#ff7777";
+  if (n >= -3) return "#ff4444";
+  return "#ff1111";
+}
+
+function varBg(v) {
+  const n = parseFloat(v);
+  if (n >= 3) return "rgba(0,255,136,.25)";
+  if (n >= 1.5) return "rgba(0,255,136,.15)";
+  if (n >= 0.5) return "rgba(0,255,136,.08)";
+  if (n >= 0) return "rgba(0,255,136,.04)";
+  if (n >= -0.5) return "rgba(255,51,85,.04)";
+  if (n >= -1.5) return "rgba(255,51,85,.08)";
+  if (n >= -3) return "rgba(255,51,85,.15)";
+  return "rgba(255,51,85,.25)";
+}
+
+async function renderMapa() {
+  document.getElementById("mapaLoading").style.display = "flex";
+  document.getElementById("mapaContent").innerHTML = "";
+  document.getElementById("btnMapa").disabled = true;
+
+  // Busca todas as cotacoes em paralelo
+  const allTickers = Object.values(MAPA_SETORES).flat();
+  const quotes = {};
+  await Promise.all(allTickers.map(async t => {
+    const q = await fetchQuote(t);
+    if (q) quotes[t] = q;
+  }));
+
+  document.getElementById("mapaLoading").style.display = "none";
+  document.getElementById("btnMapa").disabled = false;
+
+  // Calcula sentimento geral do mercado
+  const variacoes = Object.values(quotes).map(q => parseFloat(q.change||0)).filter(v => !isNaN(v));
+  const mediaGeral = variacoes.length ? (variacoes.reduce((a,b)=>a+b,0)/variacoes.length).toFixed(2) : 0;
+  const emAlta = variacoes.filter(v => v > 0).length;
+  const emBaixa = variacoes.filter(v => v < 0).length;
+  const sentimento = parseFloat(mediaGeral) > 1 ? "OTIMISTA" : parseFloat(mediaGeral) > 0 ? "NEUTRO POSITIVO" : parseFloat(mediaGeral) > -1 ? "NEUTRO NEGATIVO" : "PESSIMISTA";
+  const sentCor = parseFloat(mediaGeral) > 0 ? "var(--green)" : "var(--red)";
+
+  let html = "";
+
+  // Header — sentimento geral
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">'+
+    [
+      ["SENTIMENTO", sentimento, sentCor],
+      ["VARIACAO MEDIA", (parseFloat(mediaGeral)>=0?"+":"")+mediaGeral+"%", sentCor],
+      ["EM ALTA", emAlta+" ativos", "var(--green)"],
+      ["EM BAIXA", emBaixa+" ativos", "var(--red)"],
+    ].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:'+c+'">'+v+'</div>'+
+      '</div>'
+    ).join("")+'</div>';
+
+  // Setores
+  Object.entries(MAPA_SETORES).forEach(([setor, tickers]) => {
+    const tickersComQuote = tickers.filter(t => quotes[t]);
+    if (!tickersComQuote.length) return;
+
+    const vars = tickersComQuote.map(t => parseFloat(quotes[t].change||0));
+    const mediaSetor = (vars.reduce((a,b)=>a+b,0)/vars.length).toFixed(2);
+    const setorCor = parseFloat(mediaSetor) >= 0 ? "var(--green)" : "var(--red)";
+
+    html += '<div style="margin-bottom:16px;">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--dim);">'+setor+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+setorCor+'">'+
+        (parseFloat(mediaSetor)>=0?"+":"")+mediaSetor+"%"+'</div>'+
+      '<div style="flex:1;height:1px;background:var(--border);"></div>'+
+      '</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+
+      tickersComQuote.map(t => {
+        const q = quotes[t];
+        const v = parseFloat(q.change||0);
+        const vStr = (v>=0?"+":"")+v.toFixed(2)+"%";
+        const isCart = getCarteira().some(p => p.ticker === t);
+        return '<div onclick="showTab(\'analisar\');document.getElementById(\'tickerInput\').value=\''+t+'\';analyze(\''+t+'\')" '+
+          'style="background:'+varBg(v)+';border:1px solid '+varColor(v)+'44;padding:10px 14px;cursor:pointer;min-width:90px;position:relative;">'+
+          (isCart ? '<div style="position:absolute;top:3px;right:4px;font-size:7px;color:var(--cyan);">NA CART.</div>' : "")+
+          '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+varColor(v)+'">'+t+'</div>'+
+          '<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+varColor(v)+'">'+vStr+'</div>'+
+          '<div style="font-family:monospace;font-size:9px;color:var(--dim);">'+q.currency+q.price.toFixed(2)+'</div>'+
+          '</div>';
+      }).join("")+'</div></div>';
+  });
+
+  document.getElementById("mapaContent").innerHTML = html;
+}
+
+
+// ─── MOTOR DE CORRELACAO ──────────────────────────────────────
+const CORRELACOES_SETOR = {
+  "PETR4":["PRIO3","VBBR3","CSAN3"],"PRIO3":["PETR4","VBBR3"],"VBBR3":["PETR4","PRIO3"],
+  "ITUB4":["BBDC4","BBAS3","SANB11","BPAC11"],"BBDC4":["ITUB4","BBAS3","SANB11"],"BBAS3":["ITUB4","BBDC4"],
+  "VALE3":["KLBN11","SUZB3"],"KLBN11":["VALE3","SUZB3"],"SUZB3":["VALE3","KLBN11"],
+  "EGIE3":["ENGI11","CMIG4","CPFE3","EQTL3","TAEE11"],"ENGI11":["EGIE3","CMIG4","TAEE11"],
+  "NVDA":["AMD","AAPL","MSFT"],"AMD":["NVDA","AAPL"],"AAPL":["NVDA","MSFT","GOOGL"],
+  "JPM":["BAC","V","MA"],"BAC":["JPM","V"],"V":["JPM","BAC","MA"],"MA":["JPM","V"],
+};
+
+function calcCorrelacaoCarteira() {
+  const carteira = getCarteira();
+  if (carteira.length < 2) return null;
+
+  const alertas = [];
+  const setoresPresentes = {};
+
+  carteira.forEach(p => {
+    // Detecta setor pelo ticker
+    for (const [setor, tickers] of Object.entries(MAPA_SETORES || {})) {
+      if (tickers.includes(p.ticker)) {
+        if (!setoresPresentes[setor]) setoresPresentes[setor] = [];
+        setoresPresentes[setor].push(p.ticker);
+      }
+    }
+    // Verifica correlacoes diretas
+    const correlatos = CORRELACOES_SETOR[p.ticker] || [];
+    const correlNaCart = correlatos.filter(t => carteira.some(c => c.ticker === t));
+    if (correlNaCart.length > 0) {
+      alertas.push({
+        tipo: "CORRELACAO_ALTA",
+        msg: p.ticker+" e "+correlNaCart.join(", ")+" sao altamente correlacionados",
+        nivel: "ATENCAO"
+      });
+    }
+  });
+
+  // Alerta concentracao por setor
+  Object.entries(setoresPresentes).forEach(([setor, tickers]) => {
+    if (tickers.length >= 2) {
+      const pct = (tickers.length / carteira.length * 100).toFixed(0);
+      alertas.push({
+        tipo: "CONCENTRACAO_SETOR",
+        msg: pct+"% da carteira no setor "+setor+" ("+tickers.join(", ")+")",
+        nivel: tickers.length >= 3 ? "RISCO" : "ATENCAO"
+      });
+    }
+  });
+
+  return { alertas, setoresPresentes };
+}
+
+function renderCorrelacaoAlert() {
+  const result = calcCorrelacaoCarteira();
+  if (!result || !result.alertas.length) return "";
+  return '<div style="background:rgba(255,204,0,.04);border:1px solid rgba(255,204,0,.2);padding:14px 18px;margin-bottom:12px;">'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:10px;">ANALISE DE CORRELACAO E RISCO</div>'+
+    result.alertas.map(a => {
+      const c = a.nivel === "RISCO" ? "var(--red)" : "var(--yellow)";
+      return '<div style="display:flex;gap:8px;margin-bottom:6px;font-size:11px;">'+
+        '<span style="color:'+c+';font-weight:700;">!'+a.tipo.replace(/_/g," ")+'</span>'+
+        '<span style="color:var(--sub);">'+a.msg+'</span></div>';
+    }).join("")+'</div>';
+}
+
+// ─── ATLAS JOURNAL ────────────────────────────────────────────
+async function gerarJournal(operacao) {
+  if (!operacao || operacao.status !== "ENCERRADA") return;
+  try {
+    const diasOp = operacao.data_entrada && operacao.saidas?.length
+      ? Math.round((new Date(operacao.saidas[operacao.saidas.length-1].data) - new Date(operacao.data_entrada)) / (1000*60*60*24))
+      : null;
+
+    const prompt = "Voce e ATLAS, gestor quantitativo. Analise esta operacao encerrada e gere um journal de aprendizado:\n\n"
+      + "TICKER: "+operacao.ticker+"\n"
+      + "ENTRADA: R$"+operacao.preco_medio+" em "+operacao.data_entrada+"\n"
+      + "SAIDA: R$"+operacao.saidas[operacao.saidas.length-1]?.preco+" em "+operacao.saidas[operacao.saidas.length-1]?.data+"\n"
+      + "RESULTADO: "+operacao.resultado_pct+"% | R$"+operacao.lucro_total+"\n"
+      + "MOTIVO SAIDA: "+operacao.saidas[operacao.saidas.length-1]?.motivo+"\n"
+      + "DIAS NA OPERACAO: "+(diasOp||"?")+"\n"
+      + "SCORE ATLAS NA ENTRADA: "+(operacao.score_atlas||"nao registrado")+"\n"
+      + "SINAL ATLAS: "+(operacao.sinal_atlas||"nao registrado")+"\n"
+      + "ATLAS ACERTOU: "+(operacao.atlas_acertou?"SIM":"NAO")+"\n\n"
+      + "Gere uma analise de aprendizado honesta e concisa. O que funcionou, o que falhou, o que aprender.\n\n"
+      + "Retorne APENAS JSON: {"acertou":true,"resumo":"","o_que_funcionou":"","o_que_falhou":"","licao_principal":"","setup_ideal_para_proximo":"","nota_operacao":"A"}";
+
+    const data = await callClaude(prompt);
+
+    // Salva journal na operacao
+    const idx = operacoes.findIndex(o => o.id === operacao.id);
+    if (idx >= 0) {
+      operacoes[idx].journal = data;
+      localStorage.setItem("operacoes_v1", JSON.stringify(operacoes));
+      await apiOperacoes("POST", { acao: "EDITAR", id: operacao.id, journal: data });
+    }
+    return data;
+  } catch(e) {
+    console.log("Journal erro:", e.message);
+    return null;
+  }
+}
+
+function renderJournalCard(operacao) {
+  const j = operacao.journal;
+  if (!j) return "";
+  const notaCor = j.nota_operacao === "A" ? "var(--green)" : j.nota_operacao === "B" ? "var(--cyan)" : j.nota_operacao === "C" ? "var(--yellow)" : "var(--red)";
+  return '<div style="background:rgba(0,170,255,.04);border:1px solid rgba(0,170,255,.2);padding:14px 18px;margin-top:8px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--blue);">ATLAS JOURNAL</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+notaCor+'">NOTA '+j.nota_operacao+'</div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--sub);line-height:1.7;margin-bottom:8px;">'+j.resumo+'</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;">'+
+    '<div><span style="color:var(--green);">OK: </span><span style="color:var(--sub);">'+j.o_que_funcionou+'</span></div>'+
+    '<div><span style="color:var(--red);">FALHOU: </span><span style="color:var(--sub);">'+j.o_que_falhou+'</span></div>'+
+    '</div>'+
+    '<div style="margin-top:8px;padding:8px;background:rgba(255,204,0,.06);border:1px solid rgba(255,204,0,.15);">'+
+    '<span style="font-family:monospace;font-size:8px;color:var(--yellow);">LICAO: </span>'+
+    '<span style="font-size:10px;color:var(--sub);">'+j.licao_principal+'</span>'+
+    '</div>'+
+    '<div style="margin-top:6px;font-size:10px;color:var(--dim);">Proximo setup ideal: '+j.setup_ideal_para_proximo+'</div>'+
+    '</div>';
+}
+
 </script>
 </head>
 <body>
@@ -300,6 +542,7 @@ function setChartPeriod(period) {
     <button class="tab" onclick="showTab('historico')">HISTORICO</button>
     <button class="tab" onclick="showTab('config')">CONFIG</button>
     <button class="tab" onclick="showTab('relatorio')">RELATORIO</button>
+    <button class="tab" onclick="showTab('mapa')">MAPA</button>
   </div>
 
   <!-- ANALISAR -->
@@ -531,6 +774,19 @@ function setChartPeriod(period) {
     </div>
   </div>
 
+  <!-- MAPA DE CALOR -->
+  <div id="tab-mapa" style="display:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+      <div>
+        <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;letter-spacing:2px;">MAPA DE CALOR</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--dim);">Performance em tempo real por setor — B3 + NYSE/NASDAQ</div>
+      </div>
+      <button class="btn" id="btnMapa" onclick="renderMapa()">ATUALIZAR</button>
+    </div>
+    <div id="mapaLoading" style="display:none;" class="loading"><div class="spinner"></div><div style="font-family:monospace;font-size:10px;color:var(--dim);">Buscando cotacoes...</div></div>
+    <div id="mapaContent"></div>
+  </div>
+
   <div class="disclaimer">
     DISCLAIMER: Ferramenta de apoio a decisao baseada em IA. Nao constitui recomendacao de investimento.
     Rentabilidade passada nao garante resultados futuros. Renda variavel envolve risco de perda.
@@ -726,13 +982,14 @@ setInterval(fetchBenchmark, 30 * 60 * 1000); // atualiza a cada 30 min
 
 // ─── TABS ─────────────────────────────────────────────────────
 function showTab(name) {
-  ["analisar","radar","guru","portfolio","historico","config","relatorio"].forEach(t => {
+  ["analisar","radar","guru","portfolio","historico","config","relatorio","mapa"].forEach(t => {
     document.getElementById("tab-"+t).style.display = t===name ? "" : "none";
   });
   document.querySelectorAll(".tab").forEach((el,i) => {
-    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","config","relatorio"][i]===name);
+    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","config","relatorio","mapa"][i]===name);
   });
   if (name === "relatorio") renderRelatorioTab();
+  if (name === "mapa") renderMapa();
   if (name === "historico") renderHistorico();
   if (name === "portfolio") {
     renderPortfolio();
@@ -813,7 +1070,17 @@ async function abrirOperacao(dados) {
 
 async function venderOperacao(id, quantidade, preco, motivo) {
   const d = await apiOperacoes("POST", { acao: "VENDER", id, quantidade, preco, motivo });
-  if (d && d.ok) { const idx = operacoes.findIndex(o=>o.id===id); if(idx>=0) operacoes[idx]=d.operacao; localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); renderHistorico(); }
+  if (d && d.ok) {
+    const idx = operacoes.findIndex(o=>o.id===id);
+    if(idx>=0) operacoes[idx]=d.operacao;
+    localStorage.setItem("operacoes_v1", JSON.stringify(operacoes));
+    renderPortfolio();
+    renderHistorico();
+    // Gera Journal automaticamente se operacao encerrada
+    if (d.operacao.status === "ENCERRADA") {
+      setTimeout(() => gerarJournal(d.operacao), 1000);
+    }
+  }
   return d;
 }
 
@@ -1886,6 +2153,8 @@ function renderPortfolio() {
     updateBenchmarkCard();
     return;
   }
+  // Adiciona alerta de correlacao no topo se houver
+  const corrAlert = renderCorrelacaoAlert();
 
   try {
     const totalInv = carteira.reduce((a,p) => a + p.quantidade_atual * p.preco_medio, 0);
@@ -2058,6 +2327,7 @@ function renderHistorico() {
         const dias = dataEntrada!=="--"&&dataSaida!=="--" ? Math.round((new Date(dataSaida)-new Date(dataEntrada))/(1000*60*60*24)) : "--";
         const ultimoMotivo = op.saidas && op.saidas.length ? op.saidas[op.saidas.length-1].motivo : "--";
         const precoSaida = op.saidas && op.saidas.length ? "R$"+op.saidas[op.saidas.length-1].preco.toFixed(2) : "--";
+        const journalCard = renderJournalCard(op);
         return '<tr>'+
           '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+dataSaida+'</td>'+
           '<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+op.ticker+'</td>'+
@@ -2068,7 +2338,11 @@ function renderHistorico() {
           '<td style="font-weight:600;color:'+rc+'">'+( op.lucro_total>=0?"+ R$ ":"- R$ ")+Math.abs(op.lucro_total).toFixed(2)+'</td>'+
           '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+ultimoMotivo+'</td>'+
           '<td style="font-weight:700;color:'+gc+'">'+g+'</td>'+
-          '<td><button onclick="deleteOperacao('+op.id+')" class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);">DEL</button></td></tr>';
+          '<td style="display:flex;gap:4px;">'+
+          (op.journal ? '<button onclick="toggleJournal('+op.id+')" class="btn-sm" style="background:rgba(0,170,255,.12);border:1px solid rgba(0,170,255,.3);color:var(--blue);">LOG</button>' : '<button onclick="gerarJournalBtn('+op.id+')" class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.3);color:var(--yellow);">JOURNAL</button>')+
+          '<button onclick="deleteOperacao('+op.id+')" class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);">DEL</button>'+
+          '</td></tr>'+
+          (op.journal ? '<tr id="journal_'+op.id+'" style="display:none;"><td colspan="10">'+journalCard+'</td></tr>' : '');
       }).join("")+'</tbody></table></div>';
   }
 
@@ -2078,6 +2352,21 @@ function renderHistorico() {
   el.innerHTML = html;
 }
 
+
+function toggleJournal(id) {
+  const el = document.getElementById("journal_"+id);
+  if (el) el.style.display = el.style.display === "none" ? "" : "none";
+}
+
+async function gerarJournalBtn(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+  const btn = event.target;
+  btn.textContent = "...";
+  btn.disabled = true;
+  await gerarJournal(op);
+  renderHistorico();
+}
 
 // ─── RELATORIO MENSAL ──────────────────────────────────────────
 function renderRelatorioTab() {
@@ -2472,6 +2761,248 @@ function setChartPeriod(period) {
   const el = document.getElementById(map[period]);
   if (el) el.style.color = "var(--cyan)";
   if (currentChartData) renderCharts(currentChartData, period);
+}
+
+
+// ─── MAPA DE CALOR ────────────────────────────────────────────
+const MAPA_SETORES = {
+  "Energia": ["PETR4","PRIO3","VBBR3","CSAN3","BRFS3"],
+  "Bancos": ["ITUB4","BBDC4","BBAS3","SANB11","BPAC11"],
+  "Mineracao": ["VALE3","KLBN11","SUZB3"],
+  "Consumo": ["ABEV3","LREN3","CRFB3","ASAI3","PETZ3"],
+  "Industria": ["WEGE3","EMBR3","RDOR3"],
+  "Energia Elet.": ["EGIE3","ENGI11","CMIG4","CPFE3","EQTL3","TAEE11"],
+  "Telecom": ["TIMS3","VIVT3"],
+  "Saude": ["HAPV3","HYPE3","RADL3"],
+  "Construcao": ["CYRE3","MRVE3"],
+  "FIIs": ["KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","KNCR11","BTLG11"],
+  "Tech EUA": ["NVDA","AMD","AAPL","MSFT","GOOGL","META","AMZN","ADBE","CRM"],
+  "Finan. EUA": ["JPM","BAC","V","MA"],
+  "Saude EUA": ["MRK","ABBV"],
+  "ETFs": ["SPY","QQQ","IVVB11"],
+};
+
+function varColor(v) {
+  const n = parseFloat(v);
+  if (n >= 3) return "#00ff88";
+  if (n >= 1.5) return "#44ff99";
+  if (n >= 0.5) return "#88ffbb";
+  if (n >= 0) return "#aaffcc";
+  if (n >= -0.5) return "#ffaaaa";
+  if (n >= -1.5) return "#ff7777";
+  if (n >= -3) return "#ff4444";
+  return "#ff1111";
+}
+
+function varBg(v) {
+  const n = parseFloat(v);
+  if (n >= 3) return "rgba(0,255,136,.25)";
+  if (n >= 1.5) return "rgba(0,255,136,.15)";
+  if (n >= 0.5) return "rgba(0,255,136,.08)";
+  if (n >= 0) return "rgba(0,255,136,.04)";
+  if (n >= -0.5) return "rgba(255,51,85,.04)";
+  if (n >= -1.5) return "rgba(255,51,85,.08)";
+  if (n >= -3) return "rgba(255,51,85,.15)";
+  return "rgba(255,51,85,.25)";
+}
+
+async function renderMapa() {
+  document.getElementById("mapaLoading").style.display = "flex";
+  document.getElementById("mapaContent").innerHTML = "";
+  document.getElementById("btnMapa").disabled = true;
+
+  // Busca todas as cotacoes em paralelo
+  const allTickers = Object.values(MAPA_SETORES).flat();
+  const quotes = {};
+  await Promise.all(allTickers.map(async t => {
+    const q = await fetchQuote(t);
+    if (q) quotes[t] = q;
+  }));
+
+  document.getElementById("mapaLoading").style.display = "none";
+  document.getElementById("btnMapa").disabled = false;
+
+  // Calcula sentimento geral do mercado
+  const variacoes = Object.values(quotes).map(q => parseFloat(q.change||0)).filter(v => !isNaN(v));
+  const mediaGeral = variacoes.length ? (variacoes.reduce((a,b)=>a+b,0)/variacoes.length).toFixed(2) : 0;
+  const emAlta = variacoes.filter(v => v > 0).length;
+  const emBaixa = variacoes.filter(v => v < 0).length;
+  const sentimento = parseFloat(mediaGeral) > 1 ? "OTIMISTA" : parseFloat(mediaGeral) > 0 ? "NEUTRO POSITIVO" : parseFloat(mediaGeral) > -1 ? "NEUTRO NEGATIVO" : "PESSIMISTA";
+  const sentCor = parseFloat(mediaGeral) > 0 ? "var(--green)" : "var(--red)";
+
+  let html = "";
+
+  // Header — sentimento geral
+  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">'+
+    [
+      ["SENTIMENTO", sentimento, sentCor],
+      ["VARIACAO MEDIA", (parseFloat(mediaGeral)>=0?"+":"")+mediaGeral+"%", sentCor],
+      ["EM ALTA", emAlta+" ativos", "var(--green)"],
+      ["EM BAIXA", emBaixa+" ativos", "var(--red)"],
+    ].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
+      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:'+c+'">'+v+'</div>'+
+      '</div>'
+    ).join("")+'</div>';
+
+  // Setores
+  Object.entries(MAPA_SETORES).forEach(([setor, tickers]) => {
+    const tickersComQuote = tickers.filter(t => quotes[t]);
+    if (!tickersComQuote.length) return;
+
+    const vars = tickersComQuote.map(t => parseFloat(quotes[t].change||0));
+    const mediaSetor = (vars.reduce((a,b)=>a+b,0)/vars.length).toFixed(2);
+    const setorCor = parseFloat(mediaSetor) >= 0 ? "var(--green)" : "var(--red)";
+
+    html += '<div style="margin-bottom:16px;">'+
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--dim);">'+setor+'</div>'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+setorCor+'">'+
+        (parseFloat(mediaSetor)>=0?"+":"")+mediaSetor+"%"+'</div>'+
+      '<div style="flex:1;height:1px;background:var(--border);"></div>'+
+      '</div>'+
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+
+      tickersComQuote.map(t => {
+        const q = quotes[t];
+        const v = parseFloat(q.change||0);
+        const vStr = (v>=0?"+":"")+v.toFixed(2)+"%";
+        const isCart = getCarteira().some(p => p.ticker === t);
+        return '<div onclick="showTab(\'analisar\');document.getElementById(\'tickerInput\').value=\''+t+'\';analyze(\''+t+'\')" '+
+          'style="background:'+varBg(v)+';border:1px solid '+varColor(v)+'44;padding:10px 14px;cursor:pointer;min-width:90px;position:relative;">'+
+          (isCart ? '<div style="position:absolute;top:3px;right:4px;font-size:7px;color:var(--cyan);">NA CART.</div>' : "")+
+          '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+varColor(v)+'">'+t+'</div>'+
+          '<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+varColor(v)+'">'+vStr+'</div>'+
+          '<div style="font-family:monospace;font-size:9px;color:var(--dim);">'+q.currency+q.price.toFixed(2)+'</div>'+
+          '</div>';
+      }).join("")+'</div></div>';
+  });
+
+  document.getElementById("mapaContent").innerHTML = html;
+}
+
+
+// ─── MOTOR DE CORRELACAO ──────────────────────────────────────
+const CORRELACOES_SETOR = {
+  "PETR4":["PRIO3","VBBR3","CSAN3"],"PRIO3":["PETR4","VBBR3"],"VBBR3":["PETR4","PRIO3"],
+  "ITUB4":["BBDC4","BBAS3","SANB11","BPAC11"],"BBDC4":["ITUB4","BBAS3","SANB11"],"BBAS3":["ITUB4","BBDC4"],
+  "VALE3":["KLBN11","SUZB3"],"KLBN11":["VALE3","SUZB3"],"SUZB3":["VALE3","KLBN11"],
+  "EGIE3":["ENGI11","CMIG4","CPFE3","EQTL3","TAEE11"],"ENGI11":["EGIE3","CMIG4","TAEE11"],
+  "NVDA":["AMD","AAPL","MSFT"],"AMD":["NVDA","AAPL"],"AAPL":["NVDA","MSFT","GOOGL"],
+  "JPM":["BAC","V","MA"],"BAC":["JPM","V"],"V":["JPM","BAC","MA"],"MA":["JPM","V"],
+};
+
+function calcCorrelacaoCarteira() {
+  const carteira = getCarteira();
+  if (carteira.length < 2) return null;
+
+  const alertas = [];
+  const setoresPresentes = {};
+
+  carteira.forEach(p => {
+    // Detecta setor pelo ticker
+    for (const [setor, tickers] of Object.entries(MAPA_SETORES || {})) {
+      if (tickers.includes(p.ticker)) {
+        if (!setoresPresentes[setor]) setoresPresentes[setor] = [];
+        setoresPresentes[setor].push(p.ticker);
+      }
+    }
+    // Verifica correlacoes diretas
+    const correlatos = CORRELACOES_SETOR[p.ticker] || [];
+    const correlNaCart = correlatos.filter(t => carteira.some(c => c.ticker === t));
+    if (correlNaCart.length > 0) {
+      alertas.push({
+        tipo: "CORRELACAO_ALTA",
+        msg: p.ticker+" e "+correlNaCart.join(", ")+" sao altamente correlacionados",
+        nivel: "ATENCAO"
+      });
+    }
+  });
+
+  // Alerta concentracao por setor
+  Object.entries(setoresPresentes).forEach(([setor, tickers]) => {
+    if (tickers.length >= 2) {
+      const pct = (tickers.length / carteira.length * 100).toFixed(0);
+      alertas.push({
+        tipo: "CONCENTRACAO_SETOR",
+        msg: pct+"% da carteira no setor "+setor+" ("+tickers.join(", ")+")",
+        nivel: tickers.length >= 3 ? "RISCO" : "ATENCAO"
+      });
+    }
+  });
+
+  return { alertas, setoresPresentes };
+}
+
+function renderCorrelacaoAlert() {
+  const result = calcCorrelacaoCarteira();
+  if (!result || !result.alertas.length) return "";
+  return '<div style="background:rgba(255,204,0,.04);border:1px solid rgba(255,204,0,.2);padding:14px 18px;margin-bottom:12px;">'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:10px;">ANALISE DE CORRELACAO E RISCO</div>'+
+    result.alertas.map(a => {
+      const c = a.nivel === "RISCO" ? "var(--red)" : "var(--yellow)";
+      return '<div style="display:flex;gap:8px;margin-bottom:6px;font-size:11px;">'+
+        '<span style="color:'+c+';font-weight:700;">!'+a.tipo.replace(/_/g," ")+'</span>'+
+        '<span style="color:var(--sub);">'+a.msg+'</span></div>';
+    }).join("")+'</div>';
+}
+
+// ─── ATLAS JOURNAL ────────────────────────────────────────────
+async function gerarJournal(operacao) {
+  if (!operacao || operacao.status !== "ENCERRADA") return;
+  try {
+    const diasOp = operacao.data_entrada && operacao.saidas?.length
+      ? Math.round((new Date(operacao.saidas[operacao.saidas.length-1].data) - new Date(operacao.data_entrada)) / (1000*60*60*24))
+      : null;
+
+    const prompt = "Voce e ATLAS, gestor quantitativo. Analise esta operacao encerrada e gere um journal de aprendizado:\n\n"
+      + "TICKER: "+operacao.ticker+"\n"
+      + "ENTRADA: R$"+operacao.preco_medio+" em "+operacao.data_entrada+"\n"
+      + "SAIDA: R$"+operacao.saidas[operacao.saidas.length-1]?.preco+" em "+operacao.saidas[operacao.saidas.length-1]?.data+"\n"
+      + "RESULTADO: "+operacao.resultado_pct+"% | R$"+operacao.lucro_total+"\n"
+      + "MOTIVO SAIDA: "+operacao.saidas[operacao.saidas.length-1]?.motivo+"\n"
+      + "DIAS NA OPERACAO: "+(diasOp||"?")+"\n"
+      + "SCORE ATLAS NA ENTRADA: "+(operacao.score_atlas||"nao registrado")+"\n"
+      + "SINAL ATLAS: "+(operacao.sinal_atlas||"nao registrado")+"\n"
+      + "ATLAS ACERTOU: "+(operacao.atlas_acertou?"SIM":"NAO")+"\n\n"
+      + "Gere uma analise de aprendizado honesta e concisa. O que funcionou, o que falhou, o que aprender.\n\n"
+      + "Retorne APENAS JSON: {"acertou":true,"resumo":"","o_que_funcionou":"","o_que_falhou":"","licao_principal":"","setup_ideal_para_proximo":"","nota_operacao":"A"}";
+
+    const data = await callClaude(prompt);
+
+    // Salva journal na operacao
+    const idx = operacoes.findIndex(o => o.id === operacao.id);
+    if (idx >= 0) {
+      operacoes[idx].journal = data;
+      localStorage.setItem("operacoes_v1", JSON.stringify(operacoes));
+      await apiOperacoes("POST", { acao: "EDITAR", id: operacao.id, journal: data });
+    }
+    return data;
+  } catch(e) {
+    console.log("Journal erro:", e.message);
+    return null;
+  }
+}
+
+function renderJournalCard(operacao) {
+  const j = operacao.journal;
+  if (!j) return "";
+  const notaCor = j.nota_operacao === "A" ? "var(--green)" : j.nota_operacao === "B" ? "var(--cyan)" : j.nota_operacao === "C" ? "var(--yellow)" : "var(--red)";
+  return '<div style="background:rgba(0,170,255,.04);border:1px solid rgba(0,170,255,.2);padding:14px 18px;margin-top:8px;">'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--blue);">ATLAS JOURNAL</div>'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+notaCor+'">NOTA '+j.nota_operacao+'</div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--sub);line-height:1.7;margin-bottom:8px;">'+j.resumo+'</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;">'+
+    '<div><span style="color:var(--green);">OK: </span><span style="color:var(--sub);">'+j.o_que_funcionou+'</span></div>'+
+    '<div><span style="color:var(--red);">FALHOU: </span><span style="color:var(--sub);">'+j.o_que_falhou+'</span></div>'+
+    '</div>'+
+    '<div style="margin-top:8px;padding:8px;background:rgba(255,204,0,.06);border:1px solid rgba(255,204,0,.15);">'+
+    '<span style="font-family:monospace;font-size:8px;color:var(--yellow);">LICAO: </span>'+
+    '<span style="font-size:10px;color:var(--sub);">'+j.licao_principal+'</span>'+
+    '</div>'+
+    '<div style="margin-top:6px;font-size:10px;color:var(--dim);">Proximo setup ideal: '+j.setup_ideal_para_proximo+'</div>'+
+    '</div>';
 }
 
 </script>
