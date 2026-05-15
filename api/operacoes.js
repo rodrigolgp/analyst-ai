@@ -147,13 +147,15 @@ export default async function handler(req, res) {
     // EDITAR — atualiza stop/alvo/score
     if (acao === "EDITAR") {
       try {
-        const { id, stop, alvo, score } = req.body;
+        const { id, stop, alvo, score, nota, journal } = req.body;
         const ops = await redisGet();
         const idx = ops.findIndex(o => o.id === id);
         if (idx < 0) return res.status(404).json({ error: "Operação não encontrada" });
         if (stop !== undefined) ops[idx].stop_loss = Math.round(parseFloat(stop) * 10000) / 10000;
         if (alvo !== undefined) ops[idx].alvo = Math.round(parseFloat(alvo) * 10000) / 10000;
         if (score !== undefined) ops[idx].score_atlas = parseInt(score);
+        if (nota !== undefined) ops[idx].nota = String(nota).slice(0, 200);
+        if (journal !== undefined) ops[idx].journal = journal;
         await redisSet(ops);
         return res.status(200).json({ ok: true, operacao: ops[idx] });
       } catch(e) { return res.status(500).json({ error: e.message }); }
