@@ -2349,6 +2349,34 @@ function renderHistorico() {
         '</div></div>').join("")+'</div>';
   }
 
+  // Vendas parciais de posicoes ainda abertas
+  const parciaisComSaidas = getCarteira().filter(o => o.status === "PARCIAL" && o.saidas && o.saidas.length > 0);
+  if (parciaisComSaidas.length) {
+    html += sec("VENDAS PARCIAIS REALIZADAS")+
+      '<div style="overflow-x:auto;"><table class="portfolio-table" style="min-width:900px;">'+
+      '<thead><tr>'+["DATA","TICKER","ENTROU","SAIU","QTDE","RESULT%","RESULT R$","MOTIVO","STATUS",""].map(h=>'<th>'+h+'</th>').join("")+'</tr></thead>'+
+      '<tbody>'+parciaisComSaidas.flatMap(op =>
+        op.saidas.map(saida => {
+          const entrada = parseFloat(op.preco_medio)||0;
+          const ps = parseFloat(saida.preco)||0;
+          const res = entrada > 0 ? ((ps - entrada) / entrada * 100) : 0;
+          const lucro = (ps - entrada) * saida.qtd;
+          const rc = res >= 0 ? "var(--green)" : "var(--red)";
+          return '<tr style="border-left:3px solid var(--yellow);">'+
+            '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+saida.data+'</td>'+
+            '<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+op.ticker+'</td>'+
+            '<td style="color:var(--sub)">R$ '+entrada.toFixed(2)+'</td>'+
+            '<td style="color:var(--blue)">R$ '+ps.toFixed(2)+'</td>'+
+            '<td style="font-family:monospace">'+saida.qtd+' acoes</td>'+
+            '<td style="font-weight:700;color:'+rc+'">'+(res>=0?"+":"")+res.toFixed(2)+'%</td>'+
+            '<td style="font-weight:600;color:'+rc+'">'+(lucro>=0?"+ R$ ":"- R$ ")+Math.abs(lucro).toFixed(2)+'</td>'+
+            '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+saida.motivo+'</td>'+
+            '<td><span style="font-size:9px;color:var(--yellow);background:rgba(255,204,0,.1);padding:2px 6px;border-radius:3px;">ABERTA</span></td>'+
+            '<td></td></tr>';
+        })
+      ).join("")+'</tbody></table></div>';
+  }
+
   if (enc.length) {
     html += sec("OPERACOES ENCERRADAS")+
       '<div style="overflow-x:auto;"><table class="portfolio-table" style="min-width:900px;">'+
