@@ -835,6 +835,43 @@ Object.defineProperty(window, "historico", { get: () => getHistorico() });
   setInterval(updateTicker, 5 * 60 * 1000);
 })();
 
+// ─── TRAVAS MATEMATICAS ───────────────────────────────────────
+function calcTravas(ind, quote) {
+  if (!ind) return { passou: false, score: 0, travas: {} };
+
+  const i = ind.indicadores;
+  const preco = ind.preco_atual || 0;
+  const travas = {};
+
+  // TRAVA 1: RSI entre 30-70 (nao sobrecomprado/sobrevendido extremo)
+  const rsi = i.rsi?.rsi_ponderado || 50;
+  travas.rsi = rsi >= 30 && rsi <= 70;
+
+  // TRAVA 2: Volume normal ou acima da media
+  travas.volume = i.volume?.ratio >= 0.7;
+
+  // TRAVA 3: R/R natural >= 1:1.5 (suporte/resistencia)
+  travas.rr = ind.suporte_resistencia?.rr_natural >= 1.5;
+
+  // TRAVA 4: Tendencia nao fortemente baixista
+  travas.tendencia = ind.tendencia !== "BAIXA_FORTE";
+
+  // TRAVA 5: MACD nao fortemente negativo (sem cruzamento baixista recente)
+  travas.macd = i.macd?.crossover !== "CRUZAMENTO_BAIXA";
+
+  // TRAVA 6: Bollinger nao sobrecomprado
+  travas.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
+
+  // TRAVA 7: Upside para resistencia >= 5%
+  travas.upside = ind.suporte_resistencia?.distResist >= 5;
+
+  const aprovadas = Object.values(travas).filter(Boolean).length;
+  const total = Object.keys(travas).length;
+  const passou = aprovadas >= 5; // precisa passar em 5 de 7
+
+  return { passou, aprovadas, total, travas };
+}
+
 // ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
 function scorePrefiltro(ticker, quote) {
   let score = 0;
@@ -1554,12 +1591,22 @@ function buildAnalyzePrompt(ticker, quote, manualPrice, indicators) {
   return "Voce e ATLAS, o gestor quantitativo de elite do ATLAS WEALTH. Seu unico objetivo e maximizar o retorno mensal do investidor.\n\nPERFIL DO INVESTIDOR:\n- Capital: R$5.000 a R$20.000 + aportes mensais crescentes\n- Objetivo: RETORNO MENSAL MAXIMO - meta de +8% ao mes\n- Horizonte por operacao: 5 a 20 dias (swing trade agressivo)\n- Estrategia: girar capital rapidamente, realizar lucro, reinvestir\n- Mercados: B3 + NYSE/NASDAQ\n- Corretora: BTG Pactual\n- Perfil: aceita risco calculado para maximizar retorno\n- NAO e investidor de longo prazo - quer resultado este mes\n\nATIVO: "+ticker+"\n"+pi+"\nMERCADO: "+(quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"))+"\n\nCRITERIOS DE ANALISE (em ordem de prioridade):\n1. MOMENTUM - o ativo esta em movimento agora? Volume acima da media?\n2. CATALISADOR - ha evento proximo que pode impulsionar o preco nos proximos 5-20 dias?\n3. TECNICO - RSI, MACD, rompimento de resistencia, price action favoravel\n4. RISCO/RETORNO - minimo 1:2, ideal 1:3 ou mais\n5. FUNDAMENTALISTA - saude da empresa como suporte\n6. MACRO - setor e indice favoraveis\n\nCALCULOS OBRIGATORIOS com o preco real:\n- Alvo 7 dias: preco realista para swing de curto prazo\n- Alvo 15 dias: objetivo principal da operacao\n- Stop loss: maximo 5% abaixo da entrada\n- Upside minimo aceitavel: 8% em ate 15 dias\n- Risco/retorno minimo: 1:2\n\n7 TRAVAS DE SEGURANCA:\nrisco/retorno>=1:2, volume acima media, RSI entre 30-70, tendencia do indice favoravel, sem evento de risco iminente, alocacao max 20% por ativo, volatilidade dentro do normal\n\nSCORE (baseado em potencial de retorno nos proximos 15 dias):\n<40=VENDA | 40-59=AGUARDA | 60-74=COMPRA MODERADA | 75-89=COMPRA FORTE | 90+=COMPRA MAXIMA\n\nRetorne APENAS JSON sem texto extra:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo30\":\"\",\"alvo60\":\"\",\"stop\":\"\",\"up30\":\"\",\"up60\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54},{\"d\":60,\"a\":\"\",\"u\":\"\",\"c\":44}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"val\":\"\",\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"div\":\"\",\"cr\":\"\",\"dy\":\"\",\"moat\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30,\"preco\":\"\",\"upside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"},\"bas\":{\"d\":\"\",\"p\":50,\"preco\":\"\",\"upside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"},\"pes\":{\"d\":\"\",\"p\":20,\"preco\":\"\",\"downside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"}},\"retorno_esperado_ponderado\":\"\",\"vale_o_risco\":true,\"justificativa_risco\":\"\",\"retorno_minimo_aceitavel\":\"+8% em 15 dias\",\"cat\":[],\"ris\":[],\"said\":{\"p50\":\"\",\"tot\":\"\",\"stop\":\"\",\"eme\":\"\"},\"aloc\":\"\",\"ok\":true,\"just\":\"\",\"res\":\"\"}";
 }
 
-function buildRadarPrompt(tickers, quotes, indicadoresRadar) {
-  const info = tickers.slice(0,80).map(t=>{const q=quotes[t];return q?t+"("+q.currency+q.price+","+q.change+"%hoje)":t;}).join(",");
+function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, resultadosTravas) {
+  // Usa apenas candidatos aprovados nas travas
+  const tickers = candidatos || [];
+  const info = tickers.map(t=>{
+    const q=quotes[t];
+    const tr=resultadosTravas?.[t];
+    return q?t+"(R$"+q.price+","+q.change+"%,travas:"+( tr?tr.aprovadas+"/"+tr.total:"?")+")"  :t;
+  }).join(", ");
 
   // Adiciona indicadores dos top candidatos
-  // Usa buildIndicatorsContext para contexto completo com dimensao temporal
-  const indInfo = Object.entries(indicadoresRadar||{}).map(([t, ind]) => {
+  // Contexto completo com travas para candidatos aprovados
+  const indInfo = tickers.map(t => {
+    const ind = indicadoresRadar[t];
+    if (!ind) return t+": sem dados";
+    const tr = resultadosTravas?.[t];
+    const travaDet = tr ? Object.entries(tr.travas).map(([k,v])=>k+"="+(v?"OK":"FAIL")).join(",") : "";
     const ctx = buildIndicatorsContext(ind);
     // Extrai apenas o essencial para nao sobrecarregar o prompt
     const conf = ind.confluencia;
@@ -1584,12 +1631,18 @@ function buildRadarPrompt(tickers, quotes, indicadoresRadar) {
       +" KELLY="+ind.kelly_criterion?.half_kelly+"%"
       +(conf?.score >= 65 ? " ***ALTA_CONFLUENCIA***" : "")
       +(ind.smart_money?.score >= 50 ? " ***SMART_MONEY_"+ind.smart_money.sinal+"_score="+ind.smart_money.score+"***" : "");
-  }).join("\n");
+  }).join("
+");
 
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: identificar as 12 MELHORES oportunidades de RETORNO MAXIMO nos proximos 5 a 15 dias.\n\nREGRA ABSOLUTA DE QUALIDADE: Nunca recomendar ativo com score de confluencia matematica abaixo de 65. Se nao houver 12, liste menos.\n\nPERFIL: Investidor curto prazo, meta +8% ao mes, swing trade 5-20 dias, B3+NYSE/NASDAQ.\n\nATIVOS COM PRECOS REAIS:\n"+info+"\n\nINDICADORES MATEMATICOS COMPLETOS (mesma profundidade da analise individual):\n"+indInfo+"\n\nCRITERIOS OBRIGATORIOS (todos devem ser satisfeitos):\n1. SCORE CONFLUENCIA >= 65 - nao negociavel\n2. RSI ponderado entre 30-70 (nao sobrecomprado/sobrevendido extremo)\n3. MACD favoravel ou cruzamento recente\n4. VWAP: institucional comprando preferivelmente\n5. SMART MONEY score >= 40 preferivelmente\n6. UPSIDE MINIMO 8% em 15 dias | STOP MAXIMO 5%\n7. RISCO/RETORNO minimo 1:2, preferir 1:3\n8. Volume normal ou acima da media\n\nDISTRIBUICAO IDEAL: 8-10 acoes B3, 2-4 FIIs. Foco total no mercado brasileiro.\n\nALEM DOS 12: liste 5 ativos EM OBSERVACAO (score 55-64) com o que falta para classificar.\n\nUSE OS DADOS REAIS para calcular alvos e stops com a mesma precisao da analise individual.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"confluencia\":75,\"smart_money\":60,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"observacao\":[{\"ticker\":\"\",\"score\":60,\"motivo_pendente\":\"\",\"quando_entrar\":\"\"}],\"evitar\":[\"\"]}";
+  const obsInfo = (emObservacao||[]).map(t=>{
+    const ind=indicadoresRadar[t];const tr=resultadosTravas?.[t];
+    return t+":score="+(ind?.confluencia?.score||"?")+",travas="+(tr?tr.aprovadas+"/"+tr.total:"?");
+  }).join(", ");
+
+  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH.\n\nIMPORTANTE: Os ativos abaixo JA foram pre-filtrados matematicamente por 7 travas de seguranca. Todos passaram em pelo menos 4/7 travas. Analise apenas estes candidatos.\n\nPERFIL: Investidor curto prazo, B3, meta +8% ao mes, swing trade 5-20 dias.\n\nCANDIDATOS PRE-APROVADOS NAS TRAVAS:\n"+info+"\n\nINDICADORES COMPLETOS COM DETALHE DAS TRAVAS:\n"+indInfo+"\n\nCRITERIOS OBRIGATORIOS (todos devem ser satisfeitos):\n1. SCORE CONFLUENCIA >= 65 - nao negociavel\n2. RSI ponderado entre 30-70 (nao sobrecomprado/sobrevendido extremo)\n3. MACD favoravel ou cruzamento recente\n4. VWAP: institucional comprando preferivelmente\n5. SMART MONEY score >= 40 preferivelmente\n6. UPSIDE MINIMO 8% em 15 dias | STOP MAXIMO 5%\n7. RISCO/RETORNO minimo 1:2, preferir 1:3\n8. Volume normal ou acima da media\n\nDISTRIBUICAO IDEAL: 8-10 acoes B3, 2-4 FIIs. Foco total no mercado brasileiro.\n\nALEM DOS 12: liste 5 ativos EM OBSERVACAO (score 55-64) com o que falta para classificar.\n\nUSE OS DADOS REAIS para calcular alvos e stops com a mesma precisao da analise individual.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"confluencia\":75,\"smart_money\":60,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"observacao\":[{\"ticker\":\"\",\"score\":60,\"motivo_pendente\":\"\",\"quando_entrar\":\"\"}],\"evitar\":[\"\"]}";
 }
 
-function buildGuruPrompt(quotes, cap, indicadoresGuru) {
+function buildGuruPrompt(quotes, cap, indicadoresGuru, travasGuru) {
   const info = Object.entries(quotes).slice(0,60).map(([t,q])=>t+":"+q.currency+q.price+"("+q.change+"%)").join(",");
   const temCarteira = getCarteira().length > 0;
   const capitalInvestido = getCarteira().reduce((a,p)=>{
@@ -1630,7 +1683,10 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru) {
         const macdH = macdHist?.histogram;
         const macdCruzouRecente = macdH && macdH.length >= 5 ? (macdH[macdH.length-1]?.value > 0 && macdH[macdH.length-5]?.value < 0) : false;
         const macdAcelerou = macdH && macdH.length >= 3 ? Math.abs(macdH[macdH.length-1]?.value) > Math.abs(macdH[macdH.length-3]?.value) : false;
+        const tr = travasGuru?.[t];
+        const travaDet = tr ? Object.entries(tr.travas).map(([k,v])=>k+"="+(v?"OK":"FAIL")).join(",") : "";
         return "["+t+"]"
+          +" TRAVAS="+(tr?tr.aprovadas+"/"+tr.total:"?")+"("+travaDet+")"
           +" CONFLUENCIA="+conf?.score+"/"+conf?.direcao
           +" RSI="+rsiAtual+(rsi5dAtras?" (era "+rsi5dAtras.toFixed(1)+" 5d atras"+(rsiAtual>rsi5dAtras?" SUBINDO":" CAINDO")+")":"")
           +" MACD="+ind.indicadores?.macd?.trend+(macdCruzouRecente?" CRUZOU_POSITIVO_RECENTE":"")+(macdAcelerou?" ACELERANDO":"")
@@ -1640,9 +1696,10 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru) {
           +" KELLY="+ind.kelly_criterion?.half_kelly+"%"
           +" STOP="+ind.gestao_risco?.stop_sugerido
           +" ALVO="+ind.gestao_risco?.alvo_sugerido
-          +(conf?.score >= 65 ? " ***ALTA_CONFLUENCIA***":"");
+          +(conf?.score >= 65 && tr?.passou ? " ***APROVADO_TRAVAS_E_CONFLUENCIA***":"")
+          +(conf?.score < 65 || !tr?.passou ? " [ATENCAO: nao passou em todos os criterios, justifique se recomendar]":"");
       }).join("\n")
-    )+"\n\nREGRAS ABSOLUTAS:\n- NUNCA sugerir ativo com confluencia matematica < 65 para novas entradas\n- Se divergir da analise individual, justifique EXPLICITAMENTE o motivo\n- Max 6 ativos, 20% caixa intocavel, max 20% por ativo\n- Stop max 5%, R/R min 1:2, upside min 8% em 15 dias\n- USE OS INDICADORES MATEMATICOS com mesma profundidade da analise individual\n- Linguagem simples e direta\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"confluencia_score\":0,\"motivo\":\"\",\"diverge_analise_individual\":false,\"justificativa_divergencia\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
+    )+"\n\nREGRAS ABSOLUTAS:\n- NUNCA sugerir nova entrada com confluencia < 65 OU travas < 5/7\n- Ativos da carteira: analise independente de travas (podem precisar de saida)\n- Se divergir das travas matematicas, justifique EXPLICITAMENTE o motivo\n- Max 6 ativos, 20% caixa intocavel, max 20% por ativo\n- Stop max 5%, R/R min 1:2, upside min 8% em 15 dias\n- USE OS INDICADORES MATEMATICOS com mesma profundidade da analise individual\n- Linguagem simples e direta\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"confluencia_score\":0,\"motivo\":\"\",\"diverge_analise_individual\":false,\"justificativa_divergencia\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
 }
 
 
@@ -1714,6 +1771,43 @@ function renderHistory() {
   histDiv.innerHTML = historyArr.map(h=>'<div style="padding:5px 12px;background:var(--card);border:1px solid var(--border);font-family:monospace;font-size:10px;color:var(--sub);cursor:pointer;" onclick="document.getElementById(\'tickerInput\').value=\''+h+'\';analyze(\''+h+'\')">'+h+'</div>').join("");
 }
 renderHistory();
+
+// ─── TRAVAS MATEMATICAS ───────────────────────────────────────
+function calcTravas(ind, quote) {
+  if (!ind) return { passou: false, score: 0, travas: {} };
+
+  const i = ind.indicadores;
+  const preco = ind.preco_atual || 0;
+  const travas = {};
+
+  // TRAVA 1: RSI entre 30-70 (nao sobrecomprado/sobrevendido extremo)
+  const rsi = i.rsi?.rsi_ponderado || 50;
+  travas.rsi = rsi >= 30 && rsi <= 70;
+
+  // TRAVA 2: Volume normal ou acima da media
+  travas.volume = i.volume?.ratio >= 0.7;
+
+  // TRAVA 3: R/R natural >= 1:1.5 (suporte/resistencia)
+  travas.rr = ind.suporte_resistencia?.rr_natural >= 1.5;
+
+  // TRAVA 4: Tendencia nao fortemente baixista
+  travas.tendencia = ind.tendencia !== "BAIXA_FORTE";
+
+  // TRAVA 5: MACD nao fortemente negativo (sem cruzamento baixista recente)
+  travas.macd = i.macd?.crossover !== "CRUZAMENTO_BAIXA";
+
+  // TRAVA 6: Bollinger nao sobrecomprado
+  travas.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
+
+  // TRAVA 7: Upside para resistencia >= 5%
+  travas.upside = ind.suporte_resistencia?.distResist >= 5;
+
+  const aprovadas = Object.values(travas).filter(Boolean).length;
+  const total = Object.keys(travas).length;
+  const passou = aprovadas >= 5; // precisa passar em 5 de 7
+
+  return { passou, aprovadas, total, travas };
+}
 
 // ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
 function scorePrefiltro(ticker, quote) {
@@ -1812,18 +1906,46 @@ async function runRadar() {
     if (ind) indicadoresRadar[t] = ind;
   }));
 
-  // Enriquece quotes com score de confluencia real
+  // NIVEL 3: Aplica travas matematicas — filtra antes de enviar ao ATLAS
+  const resultadosTravas = {};
+  const aprovadosTravas = [];
+  const emObservacaoTravas = [];
+
   top30.forEach(t => {
-    if (indicadoresRadar[t] && quotes[t]) {
-      quotes[t].confluencia = indicadoresRadar[t].confluencia?.score;
-      quotes[t].sinal_tecnico = indicadoresRadar[t].confluencia?.direcao;
+    const ind = indicadoresRadar[t];
+    const trava = calcTravas(ind, quotes[t]);
+    resultadosTravas[t] = trava;
+    const score = ind?.confluencia?.score || 0;
+
+    // Enriquece quotes
+    if (ind && quotes[t]) {
+      quotes[t].confluencia = score;
+      quotes[t].sinal_tecnico = ind.confluencia?.direcao;
+      quotes[t].travas = trava;
+    }
+
+    if (trava.passou && score >= 65) {
+      aprovadosTravas.push(t);
+    } else if (score >= 55 || trava.aprovadas >= 4) {
+      emObservacaoTravas.push(t);
     }
   });
+
+  // Ordena aprovados por confluencia
+  aprovadosTravas.sort((a,b) => (indicadoresRadar[b]?.confluencia?.score||0) - (indicadoresRadar[a]?.confluencia?.score||0));
+
+  console.log(`Travas: ${aprovadosTravas.length} aprovados de ${top30.length} candidatos`);
+
+  // Se poucos aprovados, relaxa para 4/7 travas
+  const candidatosFinais = aprovadosTravas.length >= 3
+    ? aprovadosTravas
+    : top30.filter(t => resultadosTravas[t]?.aprovadas >= 4 && (indicadoresRadar[t]?.confluencia?.score||0) >= 55)
+           .sort((a,b) => (indicadoresRadar[b]?.confluencia?.score||0) - (indicadoresRadar[a]?.confluencia?.score||0));
 
   si = 5; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
 
   try {
-    const data = await callClaude(buildRadarPrompt(RADAR_TICKERS, quotes, indicadoresRadar));
+    const data = await callClaude(buildRadarPrompt(candidatosFinais, quotes, indicadoresRadar, emObservacaoTravas, resultadosTravas));
     document.getElementById("loadR").style.display = "none";
     document.getElementById("resR").innerHTML = renderRadar(data, quotes, indicadoresRadar);
     document.getElementById("resR").style.display = "block";
@@ -2056,27 +2178,54 @@ async function guruMontar() {
     if (ind) indicadoresGuru[t] = ind;
   }));
 
-  // NIVEL 3: Ordena por score de confluencia real
-  top25Guru.sort((a, b) => {
-    // Ativos da carteira sempre primeiro
-    const aCart = carteiraTickers.includes(a) ? 1000 : 0;
-    const bCart = carteiraTickers.includes(b) ? 1000 : 0;
-    const sa = (indicadoresGuru[a]?.confluencia?.score || 0) + aCart;
-    const sb = (indicadoresGuru[b]?.confluencia?.score || 0) + bCart;
-    return sb - sa;
-  });
+  // NIVEL 3: Aplica travas — separa carteira de novos candidatos
+  const travasGuru = {};
+  const novosCandidatos = []; // para novas entradas
+  const carteiraSemTravas = []; // posicoes existentes sempre incluidas
 
-  // Enriquece quotes com confluencia real
   top25Guru.forEach(t => {
-    if (indicadoresGuru[t] && quotes[t]) {
-      quotes[t].confluencia = indicadoresGuru[t].confluencia?.score;
-      quotes[t].sinal_tecnico = indicadoresGuru[t].confluencia?.direcao;
+    const isCarteira = carteiraTickers.includes(t);
+    const ind = indicadoresGuru[t];
+    const trava = calcTravas(ind, quotes[t]);
+    travasGuru[t] = trava;
+
+    if (ind && quotes[t]) {
+      quotes[t].confluencia = ind.confluencia?.score;
+      quotes[t].sinal_tecnico = ind.confluencia?.direcao;
+    }
+
+    if (isCarteira) {
+      // Ativos da carteira SEMPRE analisados (para decidir manter/vender)
+      carteiraSemTravas.push(t);
+    } else if (trava.passou && (ind?.confluencia?.score || 0) >= 65) {
+      // Novos candidatos precisam passar nas travas
+      novosCandidatos.push(t);
     }
   });
+
+  // Ordena novos candidatos por confluencia
+  novosCandidatos.sort((a,b) =>
+    (indicadoresGuru[b]?.confluencia?.score||0) - (indicadoresGuru[a]?.confluencia?.score||0)
+  );
+
+  // Se poucos candidatos aprovados, relaxa para 4/7 travas
+  const candidatosGuruFinal = novosCandidatos.length >= 3
+    ? novosCandidatos
+    : top25Guru.filter(t => !carteiraTickers.includes(t) && travasGuru[t]?.aprovadas >= 4)
+               .sort((a,b) => (indicadoresGuru[b]?.confluencia?.score||0) - (indicadoresGuru[a]?.confluencia?.score||0));
+
+  console.log(`Guru travas: ${carteiraSemTravas.length} carteira + ${candidatosGuruFinal.length} novos aprovados`);
+
+  // Monta indicadores apenas dos ativos relevantes
+  const indicadoresGuruFiltrado = {};
+  [...carteiraSemTravas, ...candidatosGuruFinal.slice(0,10)].forEach(t => {
+    if (indicadoresGuru[t]) indicadoresGuruFiltrado[t] = indicadoresGuru[t];
+  });
+
   si = 5; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
 
   try {
-    const data = await callClaude(buildGuruPrompt(quotes, cap, indicadoresGuru));
+    const data = await callClaude(buildGuruPrompt(quotes, cap, indicadoresGuruFiltrado, travasGuru));
     si = 6; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
     document.getElementById("loadG").style.display = "none";
     document.getElementById("resG").innerHTML = renderGuruResult(data);
