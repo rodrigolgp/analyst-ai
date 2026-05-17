@@ -1586,7 +1586,8 @@ function buildRadarPrompt(tickers, quotes, indicadoresRadar) {
       +(ind.smart_money?.score >= 50 ? " ***SMART_MONEY_"+ind.smart_money.sinal+"_score="+ind.smart_money.score+"***" : "");
   }).join("\n");
 
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: identificar as melhores oportunidades de RETORNO MAXIMO nos proximos 5 a 15 dias.\n\nPERFIL: Investidor agressivo de curto prazo, meta +8% ao mes, gira capital rapidamente, B3+NYSE/NASDAQ, capital R$5k-20k.\n\nATIVOS COM PRECOS REAIS:\n"+info+"\n\nINDICADORES MATEMATICOS (top candidatos):\n"+indInfo+"\n\nCRITERIOS DE SELECAO (rigorosos):\n1. CONFLUENCIA alta (score >60) - multiplos sistemas confirmando\n2. MOMENTUM FORTE - subindo com volume acima da media AGORA\n3. VWAP favoravel - institucional comprando\n4. CATALISADOR IMINENTE - resultado, evento nos proximos 15 dias\n5. SETUP TECNICO - rompimento, pullback, candle de reversao\n6. UPSIDE MINIMO 8% em ate 15 dias | STOP MAXIMO 5%\n7. RISCO/RETORNO minimo 1:2, preferir 1:3\n\nSelecione TOP 8. Para ativos com indicadores matematicos disponíveis, USE OS DADOS REAIS para calcular alvos e stops.\nListe os ativos a EVITAR com motivo claro.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"evitar\":[\"\"]}";
+  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: identificar as 12 MELHORES oportunidades de RETORNO MAXIMO nos proximos 5 a 15 dias.\n\nREGRA ABSOLUTA DE QUALIDADE: Nunca recomendar ativo com score de confluencia matematica abaixo de 65. Se nao houver 12, liste menos.\n\nPERFIL: Investidor curto prazo, meta +8% ao mes, swing trade 5-20 dias, B3+NYSE/NASDAQ.\n\nATIVOS COM PRECOS REAIS:\n"+info+"\n\nINDICADORES MATEMATICOS COMPLETOS (mesma profundidade da analise individual):\n"+indInfo+"\n\nCRITERIOS OBRIGATORIOS (todos devem ser satisfeitos):\n1. SCORE CONFLUENCIA >= 65 - nao negociavel\n2. RSI ponderado entre 30-70 (nao sobrecomprado/sobrevendido extremo)\n3. MACD favoravel ou cruzamento recente\n4. VWAP: institucional comprando preferivelmente\n5. SMART MONEY score >= 40 preferivelmente\n6. UPSIDE MINIMO 8% em 15 dias | STOP MAXIMO 5%\n7. RISCO/RETORNO minimo 1:2, preferir 1:3\n8. Volume normal ou acima da media\n\nDISTRIBUICAO IDEAL: 6-7 B3, 3-4 NYSE/NASDAQ, 1-2 FIIs\n\nALEM DOS 12: liste 5 ativos EM OBSERVACAO (score 55-64) com o que falta para classificar.\n\nUSE OS DADOS REAIS para calcular alvos e stops com a mesma precisao da analise individual.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"confluencia\":75,\"smart_money\":60,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"observacao\":[{\"ticker\":\"\",\"score\":60,\"motivo_pendente\":\"\",\"quando_entrar\":\"\"}],\"evitar\":[\"\"]}";
+}
 }
 
 function buildGuruPrompt(quotes, cap, indicadoresGuru) {
@@ -1642,7 +1643,7 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru) {
           +" ALVO="+ind.gestao_risco?.alvo_sugerido
           +(conf?.score >= 65 ? " ***ALTA_CONFLUENCIA***":"");
       }).join("\n")
-    )+"\n\nREGRAS: max 6 ativos, 20% caixa intocavel, max 20% por ativo, stop max 5%, R/R min 1:2, linguagem simples. USE OS INDICADORES MATEMATICOS para calcular stops e alvos quando disponíveis.\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"motivo\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
+    )+"\n\nREGRAS ABSOLUTAS:\n- NUNCA sugerir ativo com confluencia matematica < 65 para novas entradas\n- Se divergir da analise individual, justifique EXPLICITAMENTE o motivo\n- Max 6 ativos, 20% caixa intocavel, max 20% por ativo\n- Stop max 5%, R/R min 1:2, upside min 8% em 15 dias\n- USE OS INDICADORES MATEMATICOS com mesma profundidade da analise individual\n- Linguagem simples e direta\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"confluencia_score\":0,\"motivo\":\"\",\"diverge_analise_individual\":false,\"justificativa_divergencia\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
 }
 
 
@@ -1837,22 +1838,59 @@ async function runRadar() {
 
 function renderRadar(data, quotes) {
   const macro = '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;margin-bottom:16px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.8;"><span style="color:var(--cyan);margin-right:8px">MACRO:</span>'+String(data.macro||"")+'</div>';
-  const ops = sec("TOP OPORTUNIDADES COM COTACAO REAL")
-    +(data.ops||[]).map(op=>{const q=quotes[op.ticker];return '<div style="background:var(--card);border:1px solid var(--border);padding:14px 18px;display:grid;grid-template-columns:60px 170px 1fr 100px 130px 120px;align-items:center;gap:14px;cursor:pointer;margin-bottom:6px;" onclick="showTab(\'analisar\');document.getElementById(\'tickerInput\').value=\''+op.ticker+'\';analyze(\''+op.ticker+'\')">'
-      +'<div style="text-align:center"><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+(op.rank===1?"var(--yellow)":"var(--dim)")+'">#'+op.rank+'</div><div style="font-family:monospace;font-size:8px;color:var(--dim)">SCORE '+op.score+'</div></div>'
-      +'<div><div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:var(--green)">'+op.ticker+'</div>'
-      +'<div style="font-size:10px;color:var(--dim);font-family:monospace">'+String(op.nome||"")+'</div>'
-      +'<div style="font-size:9px;color:var(--dim);margin-top:2px">'+String(op.mkt||"")+" - "+String(op.prazo||"")+'</div>'
-      +(q?'<div style="font-size:9px;color:var(--blue);margin-top:3px;font-family:monospace">'+q.currency+q.price.toFixed(2)+' <span style="color:'+(parseFloat(q.change)>=0?"var(--green)":"var(--red)")+'">'+(parseFloat(q.change)>=0?"+":"")+q.change+'%</span></div>':"")+'</div>'
-      +'<div style="font-size:11px;color:var(--sub);line-height:1.4">'+String(op.razao||"")+'</div>'
-      +'<div style="text-align:center"><div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--green)">'+String(op.up||"")+'</div><div style="font-family:monospace;font-size:8px;color:var(--dim)">UPSIDE</div></div>'
-      +'<div style="display:flex;flex-direction:column;gap:3px;font-size:11px;">'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--blue)">REAL </span>'+(q?q.currency+q.price.toFixed(2):String(op.ref||"--"))+'</div>'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--green)">ALVO </span>'+String(op.alvo||"--")+'</div>'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--red)">STOP </span>'+String(op.stop||"--")+'</div></div>'
-      +'<button style="background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);color:var(--green);padding:8px 14px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">VER ANALISE</button></div>';}).join("");
-  const ev = data.evitar&&data.evitar.length?'<div style="background:rgba(255,51,85,.04);border:1px solid rgba(255,51,85,.25);padding:18px;margin-top:16px;">'+sec("EVITAR AGORA")+data.evitar.map(x=>'<div style="font-family:monospace;font-size:10px;color:var(--sub);display:flex;gap:8px;margin-bottom:5px;"><span style="color:var(--red)">X</span>'+x+'</div>').join("")+'</div>':"";
-  return macro+ops+ev;
+
+  const ops = sec("TOP 12 OPORTUNIDADES — SCORE MINIMO 65")
+    +(data.ops||[]).map(op=>{
+      const q=quotes[op.ticker];
+      const confColor = op.confluencia>=75?"var(--green)":op.confluencia>=65?"var(--cyan)":"var(--yellow)";
+      const smColor = op.smart_money>=60?"var(--green)":op.smart_money>=40?"var(--cyan)":"var(--dim)";
+      return '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid '+confColor+';padding:14px 18px;display:grid;grid-template-columns:70px 180px 1fr 110px 140px 120px;align-items:center;gap:14px;cursor:pointer;margin-bottom:6px;" onclick="showTab(\'analisar\');document.getElementById(\'tickerInput\').value=\''+op.ticker+'\';analyze(\''+op.ticker+'\')">'
+        +'<div style="text-align:center">'
+          +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+(op.rank===1?"var(--yellow)":op.rank<=3?"var(--cyan)":"var(--dim)")+'">#'+op.rank+'</div>'
+          +'<div style="font-family:monospace;font-size:8px;color:'+confColor+'">'+op.score+'pts</div>'
+        +'</div>'
+        +'<div>'
+          +'<div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:var(--green)">'+op.ticker+'</div>'
+          +'<div style="font-size:10px;color:var(--dim);font-family:monospace">'+String(op.nome||"")+'</div>'
+          +'<div style="font-size:9px;color:var(--dim);margin-top:2px">'+String(op.mkt||"")+" - "+String(op.prazo||"")+'</div>'
+          +(q?'<div style="font-size:9px;color:var(--blue);margin-top:3px;font-family:monospace">'+q.currency+q.price.toFixed(2)+' <span style="color:'+(parseFloat(q.change)>=0?"var(--green)":"var(--red)")+'">'+(parseFloat(q.change)>=0?"+":"")+q.change+'%</span></div>':"")
+          +'<div style="display:flex;gap:8px;margin-top:4px;">'
+            +(op.confluencia?'<span style="font-family:monospace;font-size:8px;color:'+confColor+'">CONF:'+op.confluencia+'</span>':"")
+            +(op.smart_money?'<span style="font-family:monospace;font-size:8px;color:'+smColor+'">SM:'+op.smart_money+'</span>':"")
+          +'</div>'
+        +'</div>'
+        +'<div style="font-size:11px;color:var(--sub);line-height:1.4">'+String(op.razao||"")+'</div>'
+        +'<div style="text-align:center"><div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--green)">'+String(op.up||"")+'</div><div style="font-family:monospace;font-size:8px;color:var(--dim)">UPSIDE</div></div>'
+        +'<div style="display:flex;flex-direction:column;gap:3px;font-size:11px;">'
+          +'<div><span style="font-family:monospace;font-size:8px;color:var(--blue)">REAL </span>'+(q?q.currency+q.price.toFixed(2):String(op.ref||"--"))+'</div>'
+          +'<div><span style="font-family:monospace;font-size:8px;color:var(--green)">ALVO </span>'+String(op.alvo||"--")+'</div>'
+          +'<div><span style="font-family:monospace;font-size:8px;color:var(--red)">STOP </span>'+String(op.stop||"--")+'</div>'
+        +'</div>'
+        +'<button style="background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);color:var(--green);padding:8px 14px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">VER ANALISE</button>'
+      +'</div>';
+    }).join("");
+
+  // Em Observacao section
+  const obs = data.observacao&&data.observacao.length
+    ? '<div style="background:rgba(255,204,0,.03);border:1px solid rgba(255,204,0,.2);padding:18px;margin-top:16px;">'
+      +sec("EM OBSERVACAO — Score 55-64, quase classificados")
+      +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;">'
+      +data.observacao.map(o=>'<div style="background:var(--card);border:1px solid rgba(255,204,0,.2);padding:12px 16px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+          +'<div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--yellow)">'+String(o.ticker||"")+'</div>'
+          +'<div style="font-family:monospace;font-size:10px;color:var(--dim)">Score: '+String(o.score||"")+'</div>'
+        +'</div>'
+        +'<div style="font-size:10px;color:var(--sub);margin-bottom:4px;">Falta: '+String(o.motivo_pendente||"")+'</div>'
+        +'<div style="font-family:monospace;font-size:9px;color:var(--yellow);">Entrar quando: '+String(o.quando_entrar||"")+'</div>'
+      +'</div>').join("")
+      +'</div></div>'
+    : "";
+
+  const ev = data.evitar&&data.evitar.length
+    ? '<div style="background:rgba(255,51,85,.04);border:1px solid rgba(255,51,85,.25);padding:18px;margin-top:16px;">'+sec("EVITAR AGORA")+data.evitar.map(x=>'<div style="font-family:monospace;font-size:10px;color:var(--sub);display:flex;gap:8px;margin-bottom:5px;"><span style="color:var(--red)">X</span>'+x+'</div>').join("")+'</div>'
+    : "";
+
+  return macro+ops+obs+ev;
 }
 
 // ─── GURU ─────────────────────────────────────────────────────
@@ -1900,6 +1938,8 @@ function renderGuruResult(d) {
       +'<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:'+ac+'">'+String(a.acao||"")+'</div>'
       +'<div><div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;">'+String(a.ticker||"")+'</div><div style="font-family:monospace;font-size:9px;color:var(--dim)">'+String(a.nome||"")+'</div></div>'
       +'<div style="font-size:11px;color:var(--sub);line-height:1.5">'+String(a.motivo||"")+'</div>'
+      +(a.confluencia_score?'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:4px">CONF: <span style="color:'+(a.confluencia_score>=65?"var(--green)":"var(--yellow)")+'">'+a.confluencia_score+'</span></div>':"")
+      +(a.diverge_analise_individual?'<div style="font-family:monospace;font-size:8px;color:var(--yellow);margin-top:2px">* '+String(a.justificativa_divergencia||"diverge da analise individual")+'</div>':"")
       +'<div style="display:flex;flex-direction:column;gap:3px;font-size:11px;">'
       +'<div><span style="font-family:monospace;font-size:8px;color:var(--blue)">VALOR </span>R$ '+Number(a.valor_recomendado||0).toFixed(2)+'</div>'
       +'<div><span style="font-family:monospace;font-size:8px;color:var(--dim)">ENTRA </span>'+String(a.preco_entrada||"--")+'</div>'
