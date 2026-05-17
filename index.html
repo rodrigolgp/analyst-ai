@@ -1631,8 +1631,7 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
       +" KELLY="+ind.kelly_criterion?.half_kelly+"%"
       +(conf?.score >= 65 ? " ***ALTA_CONFLUENCIA***" : "")
       +(ind.smart_money?.score >= 50 ? " ***SMART_MONEY_"+ind.smart_money.sinal+"_score="+ind.smart_money.score+"***" : "");
-  }).join("
-");
+  }).join("\n");
 
   const obsInfo = (emObservacao||[]).map(t=>{
     const ind=indicadoresRadar[t];const tr=resultadosTravas?.[t];
