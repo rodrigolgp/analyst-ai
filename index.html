@@ -1584,6 +1584,11 @@ function renderResult(d, quote, indicators) {
     +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;font-style:normal">RESUMO EXECUTIVO</div>'
     +'"'+String(d.res||"")+'"\n</div>';
 
+  // Botao ABRIR POSICAO para sinais de compra
+  const btnAbrirPos = (d.ok && d.sinal && String(d.sinal).includes("COMPRA"))
+    ? '<button onclick="abrirPosicaoDaAnalise()" style="width:100%;background:linear-gradient(135deg,rgba(0,255,136,.15),rgba(0,170,255,.1));border:2px solid var(--green);color:var(--green);padding:16px;font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;margin-bottom:12px;">+ ABRIR POSICAO COM ESTES DADOS</button>'
+    : '';
+
   return qBadge + hero + sis + trav + temp + indCard + tecFun + catRis + cen + said + prof + res;
 }
 
@@ -1689,6 +1694,7 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru, travasGuru) {
   const caixaDisponivel = Math.max(0, cap - capitalInvestido);
   const reserva = cap * 0.20;
 
+  const hoje = new Date();
   const posicoes = temCarteira ? carteira.map(p => {
     const q = quotes[p.ticker];
     const atual = q ? q.price : parseFloat(p.preco_medio)||0;
@@ -1700,13 +1706,27 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru, travasGuru) {
     const dStop = stopN && atual ? (((atual - stopN) / atual) * 100).toFixed(2) : "?";
     const dAlvo = alvoN && atual ? (((alvoN - atual) / atual) * 100).toFixed(2) : "?";
     const tr = travasGuru?.[p.ticker];
-    return p.ticker+": entrada=R$"+entrada.toFixed(2)+", atual=R$"+atual.toFixed(2)
-      +", qty="+qty+", PL="+pl+"%"
-      +", stop="+(stopN?"R$"+stopN:"nao definido")
-      +", alvo="+(alvoN?"R$"+alvoN:"nao definido")
-      +", dist_stop="+dStop+"%"
-      +", dist_alvo="+dAlvo+"%"
-      +", travas="+(tr?tr.aprovadas+"/"+tr.total:"?");
+    const dataEntrada = p.data_entrada ? new Date(p.data_entrada) : null;
+    const diasAberto = dataEntrada ? Math.round((hoje - dataEntrada) / (1000*60*60*24)) : null;
+    const prazo = p.prazo_dias || 15;
+    const diasRestantes = diasAberto !== null ? Math.max(0, prazo - diasAberto) : null;
+    const dentroDoP = diasAberto !== null ? diasAberto <= prazo : true;
+    return p.ticker
+      +": entrada=R$"+entrada.toFixed(2)
+      +", atual=R$"+atual.toFixed(2)
+      +", qty="+qty
+      +", PL="+pl+"%"
+      +", stop="+(stopN?"R$"+stopN+" (dist "+dStop+"%)" :"nao definido")
+      +", alvo="+(alvoN?"R$"+alvoN+" (dist "+dAlvo+"%)" :"nao definido")
+      +", dias_aberto="+(diasAberto!==null?diasAberto:"?")
+      +", prazo_original="+prazo+"d"
+      +", dias_restantes="+(diasRestantes!==null?diasRestantes+"d":"?")
+      +", dentro_do_prazo="+(dentroDoP?"SIM":"PRAZO_EXPIRADO")
+      +(p.score_atlas?", score_entrada="+p.score_atlas:"")
+      +(p.sinal_atlas?", sinal_entrada="+p.sinal_atlas:"")
+      +(p.setup_original?", setup=["+p.setup_original+"]":"")
+      +(p.catalisador?", catalisador=["+p.catalisador+"]":"")
+      +(p.nota?", nota=["+p.nota+"]":"");
   }).join("\n") : "Nenhuma posicao aberta";
 
   const candidatos = Object.entries(indicadoresGuru||{})
@@ -1739,11 +1759,18 @@ CANDIDATOS PARA NOVAS ENTRADAS (pre-filtrados):
 `+candidatos+`
 
 INSTRUCOES:
-- Avalie cada posicao atual: MANTER, VENDER PARCIAL, VENDER TOTAL ou REFORCAR
-- Para novas entradas: apenas ativos com ***APROVADO*** (travas 5/7 + confluencia >= 65)
-- Se sugerir ativo sem ***APROVADO***, justifique explicitamente por que diverge
-- Max 6 posicoes simultaneas, max 20% por ativo, 20% caixa intocavel
-- Linguagem simples e direta
+POSICOES ABERTAS — REGRA DE OURO:
+Se a posicao esta DENTRO_DO_PRAZO=SIM e stop NAO foi atingido:
+→ Recomendacao padrao e MANTER. Nao questione o setup original.
+→ Oscilacoes de 1-3% sao normais. NAO sugira saida por isso.
+→ Apenas sugira saida se: stop atingido, prazo expirado, ou deterioracao CLARA do setup.
+→ Confie no plano original — foi calculado com dados reais.
+
+Se PRAZO_EXPIRADO: avalie se setup ainda valido para estender ou encerrar.
+
+NOVAS ENTRADAS: apenas ativos com ***APROVADO*** (travas 5/7 + confluencia >= 65)
+Max 6 posicoes, max 20% por ativo, 20% caixa intocavel.
+Linguagem direta. Sem drama.
 
 Retorne APENAS JSON:
 {"resumo_mercado":"","humor_mercado":"FAVORAVEL","capital_total":`+cap+`,"capital_investido":`+capitalInvestido.toFixed(2)+`,"caixa_disponivel":`+caixaDisponivel.toFixed(2)+`,"reserva_caixa":`+reserva.toFixed(2)+`,"modo":"`+modo+`","posicoes_atuais":[{"ticker":"","acao":"MANTER","motivo":"","pl_atual":"","recomendacao_saida":""}],"acoes_imediatas":[{"prioridade":1,"acao":"COMPRAR","ticker":"","nome":"","confluencia_score":0,"motivo":"","diverge_analise_individual":false,"justificativa_divergencia":"","valor_recomendado":0,"percentual_carteira":"0%","preco_entrada":"","stop_loss":"","alvo_30d":"","upside":"","risco_retorno":"1:2","urgencia":"ALTA"}],"alocacao_ideal":[{"ticker":"","nome":"","setor":"","valor":0,"percentual":"0%","motivo":""}],"nao_fazer_agora":[""],"proxima_revisao":"","mensagem_guru":""}`;
@@ -1848,6 +1875,8 @@ async function analyze(tickerOverride) {
     renderHistory();
     clearInterval(iv);
     document.getElementById("loadA").style.display = "none";
+    // Salva ultima analise para pre-preencher abertura de posicao
+    window._ultimaAnalise = { data, quote, indicators, ticker };
     document.getElementById("resA").innerHTML = renderResult(data, quote, indicators);
     document.getElementById("resA").style.display = "block";
     // Renderiza graficos se tiver dados de indicadores
@@ -2363,7 +2392,67 @@ async function guruBriefing() {
 }
 
 // ─── CARTEIRA ─────────────────────────────────────────────────
-// ─── CARTEIRA ─────────────────────────────────────────────────
+function abrirPosicaoDaAnalise() {
+  const a = window._ultimaAnalise;
+  if (!a) { alert("Nenhuma analise disponivel. Analise um ativo primeiro."); return; }
+
+  const { data, quote, indicators, ticker } = a;
+
+  // Extrai dados da analise
+  const preco = quote?.price || data.preco || "";
+  const stop = data.stop || indicators?.gestao_risco?.stop_sugerido || "";
+  const alvo = data.alvo60 || data.alvo30 || indicators?.gestao_risco?.alvo_sugerido || "";
+  const score = data.score || "";
+  const sinal = data.sinal || "";
+
+  // Prazo esperado — usa previsao de 15 dias
+  const prev15 = data.prev?.find(p => p.d === 15);
+  const prazo = prev15 ? 15 : (data.prev?.[1]?.d || 15);
+
+  // Setup original — monta a partir dos indicadores
+  const tend = data.tec?.tend || indicators?.tendencia || "";
+  const rsi = data.tec?.rsi || indicators?.indicadores?.rsi?.rsi_ponderado || "";
+  const macd = data.tec?.macd || indicators?.indicadores?.macd?.crossover || "";
+  const candle = indicators?.candle_pattern?.pattern || "";
+  const sm = indicators?.smart_money?.sinal || "";
+  const setup = [
+    tend ? "Tendencia: "+tend : "",
+    rsi ? "RSI: "+rsi : "",
+    macd ? "MACD: "+macd : "",
+    candle && candle !== "NENHUM" ? "Candle: "+candle : "",
+    sm && sm !== "NEUTRO" ? "SmartMoney: "+sm : "",
+  ].filter(Boolean).join(" | ");
+
+  // Catalisador
+  const cat = data.cat?.[0] || "";
+
+  // Muda para aba carteira e preenche formulario
+  showTab("portfolio");
+
+  setTimeout(() => {
+    document.getElementById("pTicker").value = ticker;
+    document.getElementById("pPrice").value = preco;
+    document.getElementById("pStop").value = stop;
+    document.getElementById("pTarget").value = alvo;
+
+    // Preenche campos extras se existirem
+    const prazoEl = document.getElementById("pPrazo");
+    if (prazoEl) prazoEl.value = prazo;
+    const setupEl = document.getElementById("pSetup");
+    if (setupEl) setupEl.value = setup;
+    const catEl = document.getElementById("pCatalisador");
+    if (catEl) catEl.value = cat;
+    const scoreEl = document.getElementById("pScore");
+    if (scoreEl) scoreEl.value = score;
+    const sinalEl = document.getElementById("pSinal");
+    if (sinalEl) sinalEl.value = sinal;
+
+    // Destaca o formulario
+    const form = document.querySelector("#tab-portfolio .form-field");
+    if (form) form.scrollIntoView({ behavior: "smooth" });
+  }, 300);
+}
+
 function addPosition() {
   const ticker = document.getElementById("pTicker").value.trim().toUpperCase();
   const qty = parseFloat(document.getElementById("pQty").value);
@@ -2371,9 +2460,27 @@ function addPosition() {
   const stop = parseFloat(document.getElementById("pStop").value) || null;
   const target = parseFloat(document.getElementById("pTarget").value) || null;
   const market = document.getElementById("pMarket").value;
+  const prazo = parseInt(document.getElementById("pPrazo").value) || 15;
+  const setup = document.getElementById("pSetup").value.trim();
+  const catalisador = document.getElementById("pCatalisador").value.trim();
+  const score = parseInt(document.getElementById("pScore").value) || null;
+  const sinal = document.getElementById("pSinal").value || null;
+
   if (!ticker||!qty||!price) { alert("Preencha Ticker, Quantidade e Preco."); return; }
-  abrirOperacao({ ticker, quantidade: qty, preco: price, stop, alvo: target, mercado: market });
-  ["pTicker","pQty","pPrice","pStop","pTarget"].forEach(id => document.getElementById(id).value = "");
+
+  abrirOperacao({
+    ticker, quantidade: qty, preco: price,
+    stop, alvo: target, mercado: market,
+    prazo_dias: prazo,
+    setup_original: setup || null,
+    catalisador: catalisador || null,
+    score, sinal
+  });
+
+  ["pTicker","pQty","pPrice","pStop","pTarget","pSetup","pCatalisador","pScore"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
 }
 
 async function venderParcial(id) {
