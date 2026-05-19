@@ -837,41 +837,48 @@ Object.defineProperty(window, "historico", { get: () => getHistorico() });
 
 // ─── TRAVAS MATEMATICAS ───────────────────────────────────────
 function calcTravas(ind, quote) {
-  if (!ind) return { passou: false, score: 0, travas: {} };
+  if (!ind) return { passou: false, aprovadas: 0, total: 7, travas: {} };
 
   const i = ind.indicadores;
-  const preco = ind.preco_atual || 0;
   const travas = {};
 
-  // TRAVA 1: RSI entre 30-70 (nao sobrecomprado/sobrevendido extremo)
+  // TRAVA 1: RSI entre 30-70
   const rsi = i.rsi?.rsi_ponderado || 50;
   travas.rsi = rsi >= 30 && rsi <= 70;
 
-  // TRAVA 2: Volume normal ou acima da media
-  travas.volume = i.volume?.ratio >= 0.7;
+  // TRAVA 2: Volume — volume zero no dia = reprovado automaticamente
+  const volDia = quote?.volume || 0;
+  const volMedia = i.volume?.media20 || 0;
+  const volRatio = i.volume?.ratio || 0;
+  if (volDia === 0) {
+    travas.volume = false;
+  } else if (volMedia > 0) {
+    travas.volume = (volDia / volMedia) >= 0.5;
+  } else {
+    travas.volume = volRatio >= 0.7;
+  }
 
-  // TRAVA 3: R/R natural >= 1:1.5 (suporte/resistencia)
-  travas.rr = ind.suporte_resistencia?.rr_natural >= 1.5;
+  // TRAVA 3: R/R natural >= 1:1.5
+  travas.rr = (ind.suporte_resistencia?.rr_natural || 0) >= 1.5;
 
   // TRAVA 4: Tendencia nao fortemente baixista
   travas.tendencia = ind.tendencia !== "BAIXA_FORTE";
 
-  // TRAVA 5: MACD nao fortemente negativo (sem cruzamento baixista recente)
+  // TRAVA 5: MACD sem cruzamento baixista recente
   travas.macd = i.macd?.crossover !== "CRUZAMENTO_BAIXA";
 
   // TRAVA 6: Bollinger nao sobrecomprado
   travas.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
 
   // TRAVA 7: Upside para resistencia >= 5%
-  travas.upside = ind.suporte_resistencia?.distResist >= 5;
+  travas.upside = (ind.suporte_resistencia?.distResist || 0) >= 5;
 
   const aprovadas = Object.values(travas).filter(Boolean).length;
   const total = Object.keys(travas).length;
-  const passou = aprovadas >= 5; // precisa passar em 5 de 7
+  const passou = aprovadas >= 5;
 
   return { passou, aprovadas, total, travas };
 }
-
 // ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
 function scorePrefiltro(ticker, quote) {
   let score = 0;
@@ -1581,126 +1588,166 @@ function renderResult(d, quote, indicators) {
 }
 
 // ─── PROMPTS ──────────────────────────────────────────────────
+// ─── ATLAS CONTEXTO BASE — compartilhado pelos 3 modulos ──────
+function buildAtlasContext() {
+  return `Voce e ATLAS, gestor quantitativo de elite do ATLAS WEALTH.
+
+PERFIL DO INVESTIDOR:
+- Capital: R$5.000 a R$20.000
+- Objetivo: +8% ao mes via swing trade
+- Horizonte: 5 a 20 dias por operacao
+- Mercado: B3 (acoes e FIIs)
+- Perfil: aceita risco calculado, NAO e holder
+
+CRITERIOS INEGOCIAVEIS (valem para QUALQUER recomendacao):
+1. Score confluencia matematica >= 65
+2. R/R minimo 1:2, preferir 1:3
+3. Upside minimo 8% em 15 dias
+4. Stop maximo 5% abaixo da entrada
+5. Volume nao zerado no dia
+6. RSI ponderado entre 30 e 70
+7. MACD sem cruzamento baixista recente
+
+SE QUALQUER UM DOS 7 CRITERIOS FALHAR: sinal e AGUARDA ou EVITAR. Sem excecoes.
+
+ESCALA DE SINAL:
+score <40 = VENDA | 40-59 = AGUARDA | 60-74 = COMPRA MODERADA | 75-89 = COMPRA FORTE | 90+ = COMPRA MAXIMA`;
+}
+
 function buildAnalyzePrompt(ticker, quote, manualPrice, indicators) {
   const pi = manualPrice
     ? "PRECO ATUAL (manual): "+(quote&&quote.currency||"R$")+" "+manualPrice
     : quote
-      ? "PRECO REAL (Yahoo Finance): "+quote.currency+" "+quote.price+" | Variacao hoje: "+quote.change+"% | Max: "+quote.high+" | Min: "+quote.low+" | Vol: "+(quote.volume||0).toLocaleString()+" | Fech.ant.: "+quote.prevClose
-      : "PRECO: nao disponivel - use conhecimento mais recente";
+      ? "PRECO REAL: "+quote.currency+" "+quote.price+" | Hoje: "+quote.change+"% | Vol: "+(quote.volume||0).toLocaleString()+" | Fech.ant.: "+quote.prevClose
+      : "PRECO: nao disponivel";
 
-  return "Voce e ATLAS, o gestor quantitativo de elite do ATLAS WEALTH. Seu unico objetivo e maximizar o retorno mensal do investidor.\n\nPERFIL DO INVESTIDOR:\n- Capital: R$5.000 a R$20.000 + aportes mensais crescentes\n- Objetivo: RETORNO MENSAL MAXIMO - meta de +8% ao mes\n- Horizonte por operacao: 5 a 20 dias (swing trade agressivo)\n- Estrategia: girar capital rapidamente, realizar lucro, reinvestir\n- Mercados: B3 + NYSE/NASDAQ\n- Corretora: BTG Pactual\n- Perfil: aceita risco calculado para maximizar retorno\n- NAO e investidor de longo prazo - quer resultado este mes\n\nATIVO: "+ticker+"\n"+pi+"\nMERCADO: "+(quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"))+"\n\nCRITERIOS DE ANALISE (em ordem de prioridade):\n1. MOMENTUM - o ativo esta em movimento agora? Volume acima da media?\n2. CATALISADOR - ha evento proximo que pode impulsionar o preco nos proximos 5-20 dias?\n3. TECNICO - RSI, MACD, rompimento de resistencia, price action favoravel\n4. RISCO/RETORNO - minimo 1:2, ideal 1:3 ou mais\n5. FUNDAMENTALISTA - saude da empresa como suporte\n6. MACRO - setor e indice favoraveis\n\nCALCULOS OBRIGATORIOS com o preco real:\n- Alvo 7 dias: preco realista para swing de curto prazo\n- Alvo 15 dias: objetivo principal da operacao\n- Stop loss: maximo 5% abaixo da entrada\n- Upside minimo aceitavel: 8% em ate 15 dias\n- Risco/retorno minimo: 1:2\n\n7 TRAVAS DE SEGURANCA:\nrisco/retorno>=1:2, volume acima media, RSI entre 30-70, tendencia do indice favoravel, sem evento de risco iminente, alocacao max 20% por ativo, volatilidade dentro do normal\n\nSCORE (baseado em potencial de retorno nos proximos 15 dias):\n<40=VENDA | 40-59=AGUARDA | 60-74=COMPRA MODERADA | 75-89=COMPRA FORTE | 90+=COMPRA MAXIMA\n\nRetorne APENAS JSON sem texto extra:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo30\":\"\",\"alvo60\":\"\",\"stop\":\"\",\"up30\":\"\",\"up60\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54},{\"d\":60,\"a\":\"\",\"u\":\"\",\"c\":44}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"val\":\"\",\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"div\":\"\",\"cr\":\"\",\"dy\":\"\",\"moat\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30,\"preco\":\"\",\"upside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"},\"bas\":{\"d\":\"\",\"p\":50,\"preco\":\"\",\"upside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"},\"pes\":{\"d\":\"\",\"p\":20,\"preco\":\"\",\"downside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"}},\"retorno_esperado_ponderado\":\"\",\"vale_o_risco\":true,\"justificativa_risco\":\"\",\"retorno_minimo_aceitavel\":\"+8% em 15 dias\",\"cat\":[],\"ris\":[],\"said\":{\"p50\":\"\",\"tot\":\"\",\"stop\":\"\",\"eme\":\"\"},\"aloc\":\"\",\"ok\":true,\"just\":\"\",\"res\":\"\"}";
+  const indCtx = indicators ? buildIndicatorsContext(indicators) : "Indicadores: nao disponivel";
+
+  return buildAtlasContext()+"\n\nMODO: ANALISE INDIVIDUAL PROFUNDA\nATIVO: "+ticker+"\n"+pi+"\n\n"+indCtx+"\n\nAnalise este ativo com maxima profundidade. Fundamentos, macro, catalisadores, tecnico.\nSe algum dos 7 criterios inegociaveis falhar, sinalize claramente qual e por que.\n\nRetorne APENAS JSON:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo30\":\"\",\"alvo60\":\"\",\"stop\":\"\",\"up30\":\"\",\"up60\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54},{\"d\":60,\"a\":\"\",\"u\":\"\",\"c\":44}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"val\":\"\",\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"div\":\"\",\"cr\":\"\",\"dy\":\"\",\"moat\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30,\"preco\":\"\",\"upside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"},\"bas\":{\"d\":\"\",\"p\":50,\"preco\":\"\",\"upside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"},\"pes\":{\"d\":\"\",\"p\":20,\"preco\":\"\",\"downside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"}},\"retorno_esperado_ponderado\":\"\",\"vale_o_risco\":true,\"justificativa_risco\":\"\",\"retorno_minimo_aceitavel\":\"+8% em 15 dias\",\"cat\":[],\"ris\":[],\"said\":{\"p50\":\"\",\"tot\":\"\",\"stop\":\"\",\"eme\":\"\"},\"aloc\":\"\",\"ok\":true,\"just\":\"\",\"res\":\"\"}";
 }
 
 function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, resultadosTravas) {
-  // Usa apenas candidatos aprovados nas travas
   const tickers = candidatos || [];
-  const info = tickers.map(t=>{
-    const q=quotes[t];
-    const tr=resultadosTravas?.[t];
-    return q?t+"(R$"+q.price+","+q.change+"%,travas:"+( tr?tr.aprovadas+"/"+tr.total:"?")+")"  :t;
-  }).join(", ");
 
-  // Adiciona indicadores dos top candidatos
-  // Contexto completo com travas para candidatos aprovados
-  const indInfo = tickers.map(t => {
-    const ind = indicadoresRadar[t];
-    if (!ind) return t+": sem dados";
+  const info = tickers.map(t => {
+    const q = quotes[t];
     const tr = resultadosTravas?.[t];
-    const travaDet = tr ? Object.entries(tr.travas).map(([k,v])=>k+"="+(v?"OK":"FAIL")).join(",") : "";
-    const ctx = buildIndicatorsContext(ind);
-    // Extrai apenas o essencial para nao sobrecarregar o prompt
-    const conf = ind.confluencia;
-    const candle = ind.candle_pattern;
-    const rsiHist = ind.historico_rsi;
-    const macdHist = ind.historico_macd;
-    const rsiAtual = ind.indicadores?.rsi?.rsi_ponderado;
-    const rsi5dAtras = rsiHist && rsiHist.length >= 5 ? rsiHist[rsiHist.length-5]?.value : null;
-    const macdH = macdHist?.histogram;
-    const macdAcelerou = macdH && macdH.length >= 3 ? Math.abs(macdH[macdH.length-1]?.value) > Math.abs(macdH[macdH.length-3]?.value) : false;
-    const macdCruzouRecente = macdH && macdH.length >= 5 ? (macdH[macdH.length-1]?.value > 0 && macdH[macdH.length-5]?.value < 0) : false;
-    return "["+t+"]"
-      +" CONFLUENCIA="+conf?.score+"/"+conf?.direcao
-      +" RSI="+rsiAtual+(rsi5dAtras?" (era "+rsi5dAtras.toFixed(1)+" ha 5d"+(rsiAtual>rsi5dAtras?" SUBINDO":" CAINDO")+")":"")
-      +" MACD="+ind.indicadores?.macd?.trend+(macdCruzouRecente?" CRUZOU_POSITIVO_RECENTE":"")+(macdAcelerou?" ACELERANDO":"")
-      +" VWAP="+ind.indicadores?.vwap?.sinal
-      +" VOLUME="+ind.indicadores?.volume?.status
-      +" CANDLE="+candle?.pattern+"("+candle?.bias+","+candle?.confianca+"%)"
-      +(ind.indicadores?.bollinger?.squeeze?" BOLLINGER_SQUEEZE":"")
-      +" STOP="+ind.gestao_risco?.stop_sugerido
-      +" ALVO="+ind.gestao_risco?.alvo_sugerido
-      +" KELLY="+ind.kelly_criterion?.half_kelly+"%"
-      +(conf?.score >= 65 ? " ***ALTA_CONFLUENCIA***" : "")
-      +(ind.smart_money?.score >= 50 ? " ***SMART_MONEY_"+ind.smart_money.sinal+"_score="+ind.smart_money.score+"***" : "");
+    const ind = indicadoresRadar[t];
+    const rsi = ind?.indicadores?.rsi?.rsi_ponderado;
+    const vol = ind?.indicadores?.volume?.status;
+    const rr = ind?.suporte_resistencia?.rr_natural;
+    return t+"(R$"+(q?.price||"?")
+      +","+( q?.change||"0")+"% hoje"
+      +",CONF="+(ind?.confluencia?.score||"?")
+      +",RSI="+(rsi||"?")
+      +",VOL="+(vol||"?")
+      +",RR=1:"+(rr||"?")
+      +",travas="+(tr?tr.aprovadas+"/"+tr.total:"?")
+      +(tr&&!tr.passou?",REPROV_EM="+Object.entries(tr.travas||{}).filter(([k,v])=>!v).map(([k])=>k).join("+"):"")
+      +")";
   }).join("\n");
 
-  const obsInfo = (emObservacao||[]).map(t=>{
-    const ind=indicadoresRadar[t];const tr=resultadosTravas?.[t];
-    return t+":score="+(ind?.confluencia?.score||"?")+",travas="+(tr?tr.aprovadas+"/"+tr.total:"?");
-  }).join(", ");
+  const obsInfo = (emObservacao||[]).map(t => {
+    const ind = indicadoresRadar[t];
+    const tr = resultadosTravas?.[t];
+    const falhas = tr ? Object.entries(tr.travas||{}).filter(([k,v])=>!v).map(([k])=>k).join(", ") : "?";
+    return t+": score="+(ind?.confluencia?.score||"?")+" | travas="+(tr?tr.aprovadas+"/"+tr.total:"?")+" | falta: "+falhas;
+  }).join("\n");
 
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH.\n\nIMPORTANTE: Os ativos abaixo JA foram pre-filtrados matematicamente por 7 travas de seguranca. Todos passaram em pelo menos 4/7 travas. Analise apenas estes candidatos.\n\nPERFIL: Investidor curto prazo, B3, meta +8% ao mes, swing trade 5-20 dias.\n\nCANDIDATOS PRE-APROVADOS NAS TRAVAS:\n"+info+"\n\nINDICADORES COMPLETOS COM DETALHE DAS TRAVAS:\n"+indInfo+"\n\nCRITERIOS OBRIGATORIOS (todos devem ser satisfeitos):\n1. SCORE CONFLUENCIA >= 65 - nao negociavel\n2. RSI ponderado entre 30-70 (nao sobrecomprado/sobrevendido extremo)\n3. MACD favoravel ou cruzamento recente\n4. VWAP: institucional comprando preferivelmente\n5. SMART MONEY score >= 40 preferivelmente\n6. UPSIDE MINIMO 8% em 15 dias | STOP MAXIMO 5%\n7. RISCO/RETORNO minimo 1:2, preferir 1:3\n8. Volume normal ou acima da media\n\nDISTRIBUICAO IDEAL: 8-10 acoes B3, 2-4 FIIs. Foco total no mercado brasileiro.\n\nALEM DOS 12: liste 5 ativos EM OBSERVACAO (score 55-64) com o que falta para classificar.\n\nUSE OS DADOS REAIS para calcular alvos e stops com a mesma precisao da analise individual.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"confluencia\":75,\"smart_money\":60,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"observacao\":[{\"ticker\":\"\",\"score\":60,\"motivo_pendente\":\"\",\"quando_entrar\":\"\"}],\"evitar\":[\"\"]}";
+  return buildAtlasContext()+`
+
+MODO: RADAR DE OPORTUNIDADES — B3
+
+IMPORTANTE: Estes ativos JA passaram pelo filtro matematico de 7 travas.
+Use os mesmos 7 criterios inegociaveis para selecionar os melhores.
+
+CANDIDATOS PRE-FILTRADOS:
+`+info+`
+
+EM OBSERVACAO (quase aprovados):
+`+(obsInfo||"nenhum")+`
+
+INSTRUCOES:
+- Selecione os MELHORES (maximo 12, minimo 0 se nenhum for bom o suficiente)
+- Use stop e alvo matematicos (2x ATR e 3x ATR) como base
+- Para cada ativo em observacao, diga exatamente o que falta
+- Se um ativo passou nas travas mas voce identificar problema qualitativo (sem catalisador, setor ruim, etc), coloque em EVITAR com explicacao
+
+Retorne APENAS JSON:
+{"macro":"","ops":[{"rank":1,"ticker":"","nome":"","mkt":"","score":80,"confluencia":75,"smart_money":60,"up":"","prazo":"","ref":"","stop":"","alvo":"","razao":"","cat":"","risco":""}],"observacao":[{"ticker":"","score":60,"motivo_pendente":"","quando_entrar":""}],"evitar":[""]}`;
 }
 
 function buildGuruPrompt(quotes, cap, indicadoresGuru, travasGuru) {
-  const info = Object.entries(quotes).slice(0,60).map(([t,q])=>t+":"+q.currency+q.price+"("+q.change+"%)").join(",");
-  const temCarteira = getCarteira().length > 0;
-  const capitalInvestido = getCarteira().reduce((a,p)=>{
+  const carteira = getCarteira();
+  const temCarteira = carteira.length > 0;
+  const modo = temCarteira ? "REBALANCEAMENTO" : "MONTAGEM_INICIAL";
+  const capitalInvestido = carteira.reduce((a,p)=>{
     const q = quotes[p.ticker];
-    const precoAtual = q ? q.price : parseFloat(p.preco_medio)||0;
-    return a + (parseFloat(p.quantidade_atual)||0) * precoAtual;
+    const preco = q ? q.price : parseFloat(p.preco_medio)||0;
+    return a + (parseFloat(p.quantidade_atual)||0) * preco;
   }, 0);
-  const reserva = cap * 0.2;
-  const caixaDisponivel = Math.max(0, cap - capitalInvestido - reserva);
-  const modo = getCarteira().length > 0 ? "REBALANCEAMENTO" : "MONTAGEM_INICIAL";
+  const caixaDisponivel = Math.max(0, cap - capitalInvestido);
+  const reserva = cap * 0.20;
 
-  const posicoes = temCarteira ? getCarteira().map(p => {
+  const posicoes = temCarteira ? carteira.map(p => {
     const q = quotes[p.ticker];
     const atual = q ? q.price : parseFloat(p.preco_medio)||0;
     const entrada = parseFloat(p.preco_medio)||0;
     const qty = parseFloat(p.quantidade_atual)||0;
     const pl = entrada > 0 ? (((atual - entrada) / entrada) * 100).toFixed(2) : "0";
-    const valorAtual = (qty * atual).toFixed(2);
     const stopN = p.stop_loss || null;
     const alvoN = p.alvo || null;
     const dStop = stopN && atual ? (((atual - stopN) / atual) * 100).toFixed(2) : "?";
     const dAlvo = alvoN && atual ? (((alvoN - atual) / atual) * 100).toFixed(2) : "?";
-    return p.ticker+":entrada=R$"+entrada.toFixed(2)+",atual=R$"+atual.toFixed(2)+",qty="+qty+",valor=R$"+valorAtual+",PL="+pl+"%,stop="+(stopN?"R$"+stopN:"nao definido")+",alvo="+(alvoN?"R$"+alvoN:"nao definido")+",dist_stop="+dStop+"%,dist_alvo="+dAlvo+"%";
-  }).join(" | ") : "Nenhuma posicao aberta";
+    const tr = travasGuru?.[p.ticker];
+    return p.ticker+": entrada=R$"+entrada.toFixed(2)+", atual=R$"+atual.toFixed(2)
+      +", qty="+qty+", PL="+pl+"%"
+      +", stop="+(stopN?"R$"+stopN:"nao definido")
+      +", alvo="+(alvoN?"R$"+alvoN:"nao definido")
+      +", dist_stop="+dStop+"%"
+      +", dist_alvo="+dAlvo+"%"
+      +", travas="+(tr?tr.aprovadas+"/"+tr.total:"?");
+  }).join("\n") : "Nenhuma posicao aberta";
 
-  const instrucoes = temCarteira
-    ? "MODO REBALANCEAMENTO - ja tenho posicoes abertas.\nPARA CADA POSICAO DECIDA:\n- MANTER: posicao saudavel, longe do stop, caminhando para o alvo\n- VENDER: atingiu alvo, proximo do stop (<2%), ou ha oportunidade muito melhor\n- REFORCAR: posicao vencedora com espaco para mais\n\nDepois, com o CAIXA LIVRE de R$"+caixaDisponivel.toFixed(2)+", sugira NOVAS ENTRADAS apenas se houver oportunidades com upside >8% em 15 dias e R/R >1:2. Se nao houver, mantenha o caixa. NAO force entradas."
-    : "MODO MONTAGEM INICIAL - carteira vazia.\nSelecione 5-6 ativos com maior potencial nos proximos 15 dias.\nCapital para investir: R$"+caixaDisponivel.toFixed(2);
+  const candidatos = Object.entries(indicadoresGuru||{})
+    .filter(([t]) => !carteira.some(p => p.ticker === t))
+    .map(([t, ind]) => {
+      const q = quotes[t];
+      const tr = travasGuru?.[t];
+      const conf = ind.confluencia?.score || 0;
+      const rsi = ind.indicadores?.rsi?.rsi_ponderado;
+      const rr = ind.suporte_resistencia?.rr_natural;
+      const falhas = tr ? Object.entries(tr.travas||{}).filter(([k,v])=>!v).map(([k])=>k).join("+") : "?";
+      return t+"(R$"+(q?.price||"?")+",CONF="+conf+",RSI="+rsi+",RR=1:"+rr
+        +",travas="+(tr?tr.aprovadas+"/"+tr.total:"?")
+        +(tr&&!tr.passou?",FALHOU="+falhas:"")
+        +(conf>=65&&tr?.passou?" ***APROVADO***":"")
+        +")";
+    }).join("\n");
 
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: MAXIMIZAR RETORNO DESTE MES.\n\nCAPITAL TOTAL: R$"+cap+"\nCAPITAL INVESTIDO: R$"+capitalInvestido.toFixed(2)+"\nCAIXA LIVRE: R$"+caixaDisponivel.toFixed(2)+"\nRESERVA (20%): R$"+reserva.toFixed(2)+"\nMETA: +8% ao mes | Swing trade 5-20 dias | BTG Pactual\n\nPOSICOES ATUAIS:\n"+posicoes+"\n\nMERCADO HOJE: "+info+"\n\n"+instrucoes+("\n\nINDICADORES MATEMATICOS DOS CANDIDATOS:\n"
-    + Object.entries(indicadoresGuru||{}).map(([t,ind])=>{
-        const conf = ind.confluencia;
-        const candle = ind.candle_pattern;
-        const rsiHist = ind.historico_rsi;
-        const macdHist = ind.historico_macd;
-        const rsiAtual = ind.indicadores?.rsi?.rsi_ponderado;
-        const rsi5dAtras = rsiHist && rsiHist.length >= 5 ? rsiHist[rsiHist.length-5]?.value : null;
-        const macdH = macdHist?.histogram;
-        const macdCruzouRecente = macdH && macdH.length >= 5 ? (macdH[macdH.length-1]?.value > 0 && macdH[macdH.length-5]?.value < 0) : false;
-        const macdAcelerou = macdH && macdH.length >= 3 ? Math.abs(macdH[macdH.length-1]?.value) > Math.abs(macdH[macdH.length-3]?.value) : false;
-        const tr = travasGuru?.[t];
-        const travaDet = tr ? Object.entries(tr.travas).map(([k,v])=>k+"="+(v?"OK":"FAIL")).join(",") : "";
-        return "["+t+"]"
-          +" TRAVAS="+(tr?tr.aprovadas+"/"+tr.total:"?")+"("+travaDet+")"
-          +" CONFLUENCIA="+conf?.score+"/"+conf?.direcao
-          +" RSI="+rsiAtual+(rsi5dAtras?" (era "+rsi5dAtras.toFixed(1)+" 5d atras"+(rsiAtual>rsi5dAtras?" SUBINDO":" CAINDO")+")":"")
-          +" MACD="+ind.indicadores?.macd?.trend+(macdCruzouRecente?" CRUZOU_POSITIVO_RECENTE":"")+(macdAcelerou?" ACELERANDO":"")
-          +" VWAP="+ind.indicadores?.vwap?.sinal
-          +" CANDLE="+candle?.pattern+"("+candle?.bias+")"
-          +(ind.indicadores?.bollinger?.squeeze?" SQUEEZE":"")
-          +" KELLY="+ind.kelly_criterion?.half_kelly+"%"
-          +" STOP="+ind.gestao_risco?.stop_sugerido
-          +" ALVO="+ind.gestao_risco?.alvo_sugerido
-          +(conf?.score >= 65 && tr?.passou ? " ***APROVADO_TRAVAS_E_CONFLUENCIA***":"")
-          +(conf?.score < 65 || !tr?.passou ? " [ATENCAO: nao passou em todos os criterios, justifique se recomendar]":"");
-      }).join("\n")
-    )+"\n\nREGRAS ABSOLUTAS:\n- NUNCA sugerir nova entrada com confluencia < 65 OU travas < 5/7\n- Ativos da carteira: analise independente de travas (podem precisar de saida)\n- Se divergir das travas matematicas, justifique EXPLICITAMENTE o motivo\n- Max 6 ativos, 20% caixa intocavel, max 20% por ativo\n- Stop max 5%, R/R min 1:2, upside min 8% em 15 dias\n- USE OS INDICADORES MATEMATICOS com mesma profundidade da analise individual\n- Linguagem simples e direta\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"confluencia_score\":0,\"motivo\":\"\",\"diverge_analise_individual\":false,\"justificativa_divergencia\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
+  return buildAtlasContext()+`
+
+MODO: `+modo+`
+CAPITAL TOTAL: R$`+cap.toFixed(2)+`
+CAPITAL INVESTIDO: R$`+capitalInvestido.toFixed(2)+`
+CAIXA DISPONIVEL: R$`+caixaDisponivel.toFixed(2)+` (reserva minima 20%: R$`+reserva.toFixed(2)+`)
+
+POSICOES ATUAIS:
+`+posicoes+`
+
+CANDIDATOS PARA NOVAS ENTRADAS (pre-filtrados):
+`+candidatos+`
+
+INSTRUCOES:
+- Avalie cada posicao atual: MANTER, VENDER PARCIAL, VENDER TOTAL ou REFORCAR
+- Para novas entradas: apenas ativos com ***APROVADO*** (travas 5/7 + confluencia >= 65)
+- Se sugerir ativo sem ***APROVADO***, justifique explicitamente por que diverge
+- Max 6 posicoes simultaneas, max 20% por ativo, 20% caixa intocavel
+- Linguagem simples e direta
+
+Retorne APENAS JSON:
+{"resumo_mercado":"","humor_mercado":"FAVORAVEL","capital_total":`+cap+`,"capital_investido":`+capitalInvestido.toFixed(2)+`,"caixa_disponivel":`+caixaDisponivel.toFixed(2)+`,"reserva_caixa":`+reserva.toFixed(2)+`,"modo":"`+modo+`","posicoes_atuais":[{"ticker":"","acao":"MANTER","motivo":"","pl_atual":"","recomendacao_saida":""}],"acoes_imediatas":[{"prioridade":1,"acao":"COMPRAR","ticker":"","nome":"","confluencia_score":0,"motivo":"","diverge_analise_individual":false,"justificativa_divergencia":"","valor_recomendado":0,"percentual_carteira":"0%","preco_entrada":"","stop_loss":"","alvo_30d":"","upside":"","risco_retorno":"1:2","urgencia":"ALTA"}],"alocacao_ideal":[{"ticker":"","nome":"","setor":"","valor":0,"percentual":"0%","motivo":""}],"nao_fazer_agora":[""],"proxima_revisao":"","mensagem_guru":""}`;
 }
-
 
 function buildBriefingPrompt(quotes, cap) {
   const hoje = Object.entries(quotes).slice(0,30).map(([t,q])=>t+":"+q.change+"%").join(",");
@@ -1771,42 +1818,6 @@ function renderHistory() {
 }
 renderHistory();
 
-// ─── TRAVAS MATEMATICAS ───────────────────────────────────────
-function calcTravas(ind, quote) {
-  if (!ind) return { passou: false, score: 0, travas: {} };
-
-  const i = ind.indicadores;
-  const preco = ind.preco_atual || 0;
-  const travas = {};
-
-  // TRAVA 1: RSI entre 30-70 (nao sobrecomprado/sobrevendido extremo)
-  const rsi = i.rsi?.rsi_ponderado || 50;
-  travas.rsi = rsi >= 30 && rsi <= 70;
-
-  // TRAVA 2: Volume normal ou acima da media
-  travas.volume = i.volume?.ratio >= 0.7;
-
-  // TRAVA 3: R/R natural >= 1:1.5 (suporte/resistencia)
-  travas.rr = ind.suporte_resistencia?.rr_natural >= 1.5;
-
-  // TRAVA 4: Tendencia nao fortemente baixista
-  travas.tendencia = ind.tendencia !== "BAIXA_FORTE";
-
-  // TRAVA 5: MACD nao fortemente negativo (sem cruzamento baixista recente)
-  travas.macd = i.macd?.crossover !== "CRUZAMENTO_BAIXA";
-
-  // TRAVA 6: Bollinger nao sobrecomprado
-  travas.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
-
-  // TRAVA 7: Upside para resistencia >= 5%
-  travas.upside = ind.suporte_resistencia?.distResist >= 5;
-
-  const aprovadas = Object.values(travas).filter(Boolean).length;
-  const total = Object.keys(travas).length;
-  const passou = aprovadas >= 5; // precisa passar em 5 de 7
-
-  return { passou, aprovadas, total, travas };
-}
 
 // ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
 function scorePrefiltro(ticker, quote) {
