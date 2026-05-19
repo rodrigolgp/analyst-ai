@@ -69,6 +69,9 @@ export default async function handler(req, res) {
           alvo: alvo ? Math.round(parseFloat(alvo) * 100) / 100 : null,
           score_atlas: score ? parseInt(score) : null,
           sinal_atlas: sinal || null,
+          prazo_dias: req.body.prazo_dias ? parseInt(req.body.prazo_dias) : null,
+          setup_original: req.body.setup_original || null,
+          catalisador: req.body.catalisador || null,
           saidas: [],
           lucro_total: 0,
           resultado_pct: 0,
@@ -156,6 +159,9 @@ export default async function handler(req, res) {
         if (score !== undefined) ops[idx].score_atlas = parseInt(score);
         if (nota !== undefined) ops[idx].nota = String(nota).slice(0, 200);
         if (journal !== undefined) ops[idx].journal = journal;
+        if (req.body.prazo_dias !== undefined) ops[idx].prazo_dias = parseInt(req.body.prazo_dias);
+        if (req.body.setup_original !== undefined) ops[idx].setup_original = String(req.body.setup_original).slice(0, 500);
+        if (req.body.catalisador !== undefined) ops[idx].catalisador = String(req.body.catalisador).slice(0, 200);
         await redisSet(ops);
         return res.status(200).json({ ok: true, operacao: ops[idx] });
       } catch(e) { return res.status(500).json({ error: e.message }); }
