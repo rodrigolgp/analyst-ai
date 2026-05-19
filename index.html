@@ -1750,17 +1750,71 @@ Retorne APENAS JSON:
 }
 
 function buildBriefingPrompt(quotes, cap) {
-  const hoje = Object.entries(quotes).slice(0,30).map(([t,q])=>t+":"+q.change+"%").join(",");
   const cartBriefing = getCarteira();
-  const pos = cartBriefing.length>0?cartBriefing.map(p=>{
-    const q=quotes[p.ticker];const atual=q?q.price:null;
-    const entrada=parseFloat(p.preco_medio)||0;
-    const v=atual&&entrada?(((atual-entrada)/entrada)*100).toFixed(2):"?";
-    const sn=p.stop_loss||null;
-    const an=p.alvo||null;
-    return p.ticker+":entrada=R$"+entrada.toFixed(2)+",atual="+(atual?"R$"+atual.toFixed(2):"?")+",var="+v+"%,stop="+(sn?"R$"+sn:"nao definido")+",alvo="+(an?"R$"+an:"nao definido")+",STOP_ATING="+(atual&&sn&&atual<=sn)+",ALVO_ATING="+(atual&&an&&atual>=an);
-  }).join(" | "):"Sem posicoes abertas";
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Faca o briefing diario focado em MAXIMIZAR O RETORNO DO MES.\n\nCARTEIRA: "+pos+"\nCAPITAL TOTAL: R$"+cap+"\nMETA DO MES: +8% = R$"+(cap*0.08).toFixed(2)+"\nMERCADO HOJE: "+hoje+"\n\nPARA CADA POSICAO ANALISE:\n1. Esta perto do stop? Risco de perda?\n2. Esta perto do alvo? Hora de realizar?\n3. Deveria reforcar a posicao?\n4. Ha motivo para sair antes do alvo?\n\nIDENTIFIQUE:\n- Oportunidade do dia com maior potencial de retorno rapido\n- Ativos da carteira que devem ser vendidos hoje\n- Proxima entrada recomendada quando houver caixa disponivel\n\nLinguagem direta e objetiva. Foco em ACAO - o que fazer AGORA.\n\nRetorne APENAS JSON:\n{\"situacao_carteira\":\"VERDE\",\"resumo\":\"\",\"alertas\":[{\"tipo\":\"INFO\",\"ticker\":\"\",\"mensagem\":\"\",\"acao_recomendada\":\"\"}],\"posicoes\":[{\"ticker\":\"\",\"status\":\"LUCRO\",\"variacao_hoje\":\"0%\",\"variacao_desde_entrada\":\"0%\",\"distancia_stop\":\"\",\"distancia_alvo\":\"\",\"recomendacao\":\"MANTER\"}],\"oportunidade_do_dia\":{\"ticker\":\"\",\"motivo\":\"\",\"acao\":\"\"},\"mensagem_guru\":\"\"}";
+  const temCarteira = cartBriefing.length > 0;
+
+  const pos = temCarteira ? cartBriefing.map(p => {
+    const q = quotes[p.ticker];
+    const atual = q ? q.price : parseFloat(p.preco_medio)||0;
+    const entrada = parseFloat(p.preco_medio)||0;
+    const v = entrada > 0 ? (((atual - entrada) / entrada) * 100).toFixed(2) : "0";
+    const sn = p.stop_loss || null;
+    const an = p.alvo || null;
+    const varHoje = q?.change || "0";
+    const dStop = sn && atual ? (((atual - sn) / atual) * 100).toFixed(2) : "?";
+    const dAlvo = an && atual ? (((an - atual) / atual) * 100).toFixed(2) : "?";
+    return p.ticker
+      +": entrada=R$"+entrada.toFixed(2)
+      +", atual=R$"+atual.toFixed(2)
+      +", var_total="+v+"%"
+      +", var_hoje="+varHoje+"%"
+      +", stop="+(sn?"R$"+sn+" (dist "+dStop+"%)" :"nao definido")
+      +", alvo="+(an?"R$"+an+" (dist "+dAlvo+"%)" :"nao definido")
+      +", STOP_ATINGIDO="+(atual&&sn&&atual<=sn?"SIM":"nao")
+      +", ALVO_ATINGIDO="+(atual&&an&&atual>=an?"SIM":"nao")
+      +", nota="+(p.nota||"");
+  }).join("\n") : "Sem posicoes abertas";
+
+  const mercadoHoje = Object.entries(quotes).slice(0,20)
+    .map(([t,q])=>t+":"+q.change+"%").join(", ");
+
+  const capitalInvestido = cartBriefing.reduce((a,p)=>{
+    const q=quotes[p.ticker];
+    return a+(parseFloat(p.quantidade_atual)||0)*(q?q.price:parseFloat(p.preco_medio)||0);
+  },0);
+  const caixaLivre = Math.max(0, cap - capitalInvestido);
+
+  return buildAtlasContext()+`
+
+MODO: BRIEFING DIARIO
+
+`+(temCarteira ? `CARTEIRA ATUAL:
+`+pos+`
+
+CAPITAL INVESTIDO: R$`+capitalInvestido.toFixed(2)+`
+CAIXA DISPONIVEL: R$`+caixaLivre.toFixed(2)+`
+
+PARA CADA POSICAO RESPONDA:
+- Esta perto do stop (< 2%)? → ALERTAR
+- Atingiu o alvo? → REALIZAR
+- Variacao do dia justifica ajuste?
+- Manter ou sair?`
+: `SEM POSICOES ABERTAS.
+Capital disponivel: R$`+cap.toFixed(2)+`
+Caixa livre para alocar: R$`+caixaLivre.toFixed(2)+`
+
+Se nao ha posicoes, foque em identificar a melhor oportunidade do dia para entrada.`)+`
+
+MERCADO HOJE: `+mercadoHoje+`
+
+INSTRUCOES:
+- Seja direto e objetivo
+- Se nao ha posicoes, diga isso claramente e aponte 1-2 oportunidades do dia
+- Nao dramatize sobre falta de capital — se caixa disponivel > R$500, ha capital para operar
+- Foco em ACAO concreta: o que fazer AGORA com o que existe
+
+Retorne APENAS JSON:
+{"situacao_carteira":"VERDE","resumo":"","alertas":[{"tipo":"INFO","ticker":"","mensagem":"","acao_recomendada":""}],"posicoes":[{"ticker":"","status":"LUCRO","variacao_hoje":"0%","variacao_desde_entrada":"0%","distancia_stop":"","distancia_alvo":"","recomendacao":"MANTER"}],"oportunidade_do_dia":{"ticker":"","motivo":"","acao":""},"mensagem_guru":""}`;
 }
 
 // ─── ANALISAR ─────────────────────────────────────────────────
@@ -2252,12 +2306,7 @@ async function guruMontar() {
 async function guruBriefing() {
   const aporte = parseFloat(document.getElementById("guruAporte").value) || 0;
   const carteira = getCarteira();
-  const valorCarteira = carteira.reduce((a,p)=>{
-    const q = portfolioQuotes[p.ticker];
-    const preco = q ? q.price : parseFloat(p.preco_medio)||0;
-    return a + (parseFloat(p.quantidade_atual)||0) * preco;
-  }, 0);
-  const cap = valorCarteira + aporte;
+
   document.getElementById("emptyG").style.display = "none";
   document.getElementById("errG").style.display = "none";
   document.getElementById("resG").style.display = "none";
@@ -2267,14 +2316,31 @@ async function guruBriefing() {
   let si = 0;
   document.getElementById("stepsG").innerHTML = steps(STEPS_B, 0);
 
+  // Busca cotacoes — prioriza ativos da carteira
   const quotes = {};
-  const tickers = portfolio.length>0?[...new Set([...portfolio.map(p=>p.ticker),...GURU_TICKERS.slice(0,20)])]:GURU_TICKERS.slice(0,30);
-  for (const t of tickers) {
-    si = 1;
-    document.getElementById("stepsG").innerHTML = steps(STEPS_B, si);
+  const carteiraTickrs = carteira.map(p => p.ticker);
+  const extras = GURU_TICKERS.filter(t => !carteiraTickrs.includes(t)).slice(0, 15);
+  const tickers = [...carteiraTickrs, ...extras];
+
+  si = 1; document.getElementById("stepsG").innerHTML = steps(STEPS_B, si);
+  await Promise.all(tickers.map(async t => {
     const q = await fetchQuote(t);
-    if (q) quotes[t] = q;
-  }
+    if (q) { quotes[t] = q; portfolioQuotes[t] = q; }
+  }));
+
+  // Calcula capital com cotacoes reais
+  const valorCarteira = carteira.reduce((a,p) => {
+    const q = quotes[p.ticker];
+    const preco = q ? q.price : parseFloat(p.preco_medio)||0;
+    return a + (parseFloat(p.quantidade_atual)||0) * preco;
+  }, 0);
+
+  // Se carteira vazia, usa preco medio como fallback
+  const valorFallback = carteira.reduce((a,p) =>
+    a + (parseFloat(p.quantidade_atual)||0) * (parseFloat(p.preco_medio)||0), 0);
+
+  const cap = Math.max(valorCarteira, valorFallback) + aporte;
+
   si = 2; document.getElementById("stepsG").innerHTML = steps(STEPS_B, si);
 
   try {
@@ -2282,7 +2348,6 @@ async function guruBriefing() {
     document.getElementById("loadG").style.display = "none";
     document.getElementById("resG").innerHTML = renderBriefing(data);
     document.getElementById("resG").style.display = "block";
-    // Envia briefing via Telegram automaticamente
     sendTelegram("BRIEFING", {
       situacao: data.situacao_carteira || "NEUTRO",
       resumo: data.resumo || "",
