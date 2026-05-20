@@ -621,14 +621,14 @@ function renderJournalCard(operacao) {
         <div id="guruCapitalInfo" style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:12px;padding:10px;background:var(--bg);border:1px solid var(--border);line-height:2;">
           Carregando carteira...
         </div>
-        <button class="btn" id="btnGuruMontar" onclick="guruMontar()" style="width:100%;margin-bottom:8px;">MONTAR MINHA CARTEIRA</button>
+        <button class="btn" id="btnGuruMontar" onclick="guruMontar()" style="width:100%;margin-bottom:8px;">CONSULTAR ATLAS</button>
         <button class="btn-outline" id="btnGuruBriefing" onclick="guruBriefing()" style="width:100%;">BRIEFING DO DIA</button>
       </div>
       <div style="background:var(--card);border:1px solid var(--border);padding:22px;">
         <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">COMO FUNCIONA</div>
         <div style="font-family:monospace;font-size:10px;color:var(--sub);line-height:2.2;">
           <div>1. Informe seu capital disponivel</div>
-          <div>2. Clique em MONTAR MINHA CARTEIRA</div>
+          <div>2. Clique em CONSULTAR ATLAS</div>
           <div>3. O Guru varra o mercado e monta o plano</div>
           <div>4. Execute as ordens no BTG Pactual</div>
           <div>5. Todo dia, clique em BRIEFING DO DIA</div>
@@ -643,7 +643,7 @@ function renderJournalCard(operacao) {
     <div class="loading" id="loadG" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsG"></div></div>
     <div class="error-box" id="errG" style="display:none;"></div>
     <div id="resG" style="display:none;"></div>
-    <div id="emptyG" class="empty">INFORME SEU CAPITAL E CLIQUE EM MONTAR MINHA CARTEIRA</div>
+    <div id="emptyG" class="empty">INFORME SEU CAPITAL E CLIQUE EM CONSULTAR ATLAS</div>
   </div>
 
   <!-- CARTEIRA -->
@@ -842,24 +842,24 @@ function calcTravas(ind, quote) {
   const i = ind.indicadores;
   const travas = {};
 
-  // TRAVA 1: RSI entre 30-70
+  // TRAVA 1: RSI entre 25-75 (zona extrema mesmo)
   const rsi = i.rsi?.rsi_ponderado || 50;
-  travas.rsi = rsi >= 30 && rsi <= 70;
+  travas.rsi = rsi >= 25 && rsi <= 75;
 
-  // TRAVA 2: Volume — volume zero no dia = reprovado automaticamente
+  // TRAVA 2: Volume — usa ratio historico como principal (cotacao ao vivo pode atrasar)
+  const volRatio = i.volume?.ratio || 0;
   const volDia = quote?.volume || 0;
   const volMedia = i.volume?.media20 || 0;
-  const volRatio = i.volume?.ratio || 0;
-  if (volDia === 0) {
-    travas.volume = false;
-  } else if (volMedia > 0) {
-    travas.volume = (volDia / volMedia) >= 0.5;
+  if (volDia > 0 && volMedia > 0) {
+    // Tem volume do dia: aceita >= 30% da media (mercado pode estar lento)
+    travas.volume = (volDia / volMedia) >= 0.3;
   } else {
-    travas.volume = volRatio >= 0.7;
+    // Sem volume do dia: usa historico (ratio dos ultimos 20 dias)
+    travas.volume = volRatio >= 0.5;
   }
 
-  // TRAVA 3: R/R natural >= 1:1.5
-  travas.rr = (ind.suporte_resistencia?.rr_natural || 0) >= 1.5;
+  // TRAVA 3: R/R natural >= 1:1.2 (mais realista)
+  travas.rr = (ind.suporte_resistencia?.rr_natural || 0) >= 1.2;
 
   // TRAVA 4: Tendencia nao fortemente baixista
   travas.tendencia = ind.tendencia !== "BAIXA_FORTE";
@@ -870,12 +870,13 @@ function calcTravas(ind, quote) {
   // TRAVA 6: Bollinger nao sobrecomprado
   travas.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
 
-  // TRAVA 7: Upside para resistencia >= 4%
-  travas.upside = (ind.suporte_resistencia?.distResist || 0) >= 4;
+  // TRAVA 7: Upside para resistencia >= 3% (mais realista para B3)
+  travas.upside = (ind.suporte_resistencia?.distResist || 0) >= 3;
 
   const aprovadas = Object.values(travas).filter(Boolean).length;
   const total = Object.keys(travas).length;
-  const passou = aprovadas >= 5;
+  // Precisa passar em 4 de 7 (antes era 5)
+  const passou = aprovadas >= 4;
 
   return { passou, aprovadas, total, travas };
 }
@@ -934,10 +935,21 @@ function selecionarCandidatos(tickers, quotes, n) {
 
 // ─── BENCHMARK ────────────────────────────────────────────────
 async function updateBenchmarkCard() {
-  const totalInv = getCarteira().reduce((a,p)=>(a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0)),0);
-  const totalAtual = getCarteira().reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+(parseFloat(p.quantidade_atual)||0)*(q?q.price:parseFloat(p.preco_medio)||0);},0);
-  const cartVar = totalInv > 0 ? ((totalAtual - totalInv) / totalInv * 100).toFixed(2) : "0.00";
-  const cartPL = (totalAtual - totalInv).toFixed(2);
+  const carteira = getCarteira();
+  // Custo original total (quantidade atual × preco medio)
+  const totalInv = carteira.reduce((a,p)=>(a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0)),0);
+  // Valor atual das posicoes abertas
+  const totalAtual = carteira.reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+(parseFloat(p.quantidade_atual)||0)*(q?q.price:parseFloat(p.preco_medio)||0);},0);
+  // Lucro ja realizado em vendas parciais
+  const lucroRealizado = carteira.reduce((a,p)=>a+(parseFloat(p.lucro_total)||0),0);
+  // PL total = ganho/perda atual + lucro ja realizado
+  const cartPL = ((totalAtual - totalInv) + lucroRealizado).toFixed(2);
+  // Custo original considerando tudo que foi investido (incluindo parcelas vendidas)
+  const custoOriginal = carteira.reduce((a,p)=>{
+    const qtdTotal = (parseFloat(p.quantidade_total)||0);
+    return a + qtdTotal * (parseFloat(p.preco_medio)||0);
+  }, 0);
+  const cartVar = custoOriginal > 0 ? ((parseFloat(cartPL) / custoOriginal) * 100).toFixed(2) : "0.00";
 
   // Calcula resultado do dia (vs fechamento de ontem)
   const totalOntem = getCarteira().reduce((a,p)=>{
@@ -1989,7 +2001,42 @@ function selecionarCandidatos(tickers, quotes, maxCandidatos = 30) {
 }
 
 // ─── RADAR ────────────────────────────────────────────────────
-const RADAR_TICKERS = ["PETR4","VALE3","ITUB4","BBDC4","WEGE3","RENT3","BBAS3","ABEV3","ELET3","SUZB3","CSAN3","PRIO3","VBBR3","BRFS3","JBSS3","CMIG4","CPFE3","EGIE3","ENGI11","TAEE11","TIMS3","VIVT3","AZUL4","EMBR3","RADL3","HAPV3","RDOR3","HYPE3","LREN3","MGLU3","EQTL3","BPAC11","ITSA4","SANB11","KLBN11","CYRE3","MRVE3","PETZ3","BLAU3","INTER3","CRFB3","ASAI3","KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","BTLG11","KNCR11","BBAS3","BRSR6","GGBR4","USIM5","CSNA3","GOAU4","SLCE3","SMTO3","BEEF3","MOVI3"];
+const RADAR_TICKERS = [
+  // BLUE CHIPS
+  "PETR4","VALE3","ITUB4","BBDC4","WEGE3","BBAS3","ABEV3","ELET3","SUZB3","RENT3",
+  "CSAN3","PRIO3","VBBR3","EQTL3","BPAC11","ITSA4","SANB11","KLBN11","EMBR3","RADL3",
+  // BANCOS E FINANCEIRO
+  "BRSR6","INTER3","BBSE3","CIEL3","IRBR3","WIZC3","PSSA3","BMGB4","SMFT3",
+  // ENERGIA ELETRICA
+  "CMIG4","CPFE3","EGIE3","ENGI11","TAEE11","AURE3","CPLE6","ENBR3","TRPL4","NEOE3",
+  // PETROLEO E GAS
+  "VBBR3","RECV3","RRRP3","UGPA3","TREI5",
+  // MINERACAO E SIDERURGIA
+  "GGBR4","USIM5","CSNA3","GOAU4","CMIN3","FESA4",
+  // AGRONEGOCIO
+  "SLCE3","SMTO3","BEEF3","AGRO3","TTEN3","JALL3","CAML3","MNPR3",
+  // CONSUMO E VAREJO
+  "LREN3","MGLU3","CRFB3","ASAI3","PETZ3","SOMA3","VIVA3","ARZZ3","SBFG3",
+  "ALPA4","NTCO3","CGDO3","AMAR3","TFCO4",
+  // SAUDE
+  "HAPV3","RDOR3","HYPE3","FLRY3","QUAL3","DASA3","ODPV3","PNVL3","ONCO3",
+  // TELECOMUNICACOES
+  "TIMS3","VIVT3",
+  // LOGISTICA E TRANSPORTE
+  "RAIL3","CCRO3","ECOR3","GOLL4","AZUL4","POMO4","SIMH3","TPVB3",
+  // CONSTRUCAO E IMOBILIARIO
+  "CYRE3","MRVE3","EZTC3","TEND3","DIRR3","EVEN3","TRIS3","JHSF3","LAVV3",
+  // TECNOLOGIA E TELECOM
+  "LWSA3","TOTVS3","POSITIVO3","FIQE3","MLAS3","CASH3",
+  // PAPEL E CELULOSE
+  "SUZB3","KLBN11","RANI3",
+  // DIVERSIFICADOS
+  "MULT3","BRML3","ALUP11","CPRE3","GMAT3","MOVI3","BLAU3","BRFS3","JBSS3",
+  // FIIS — Top por liquidez
+  "KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","BTLG11","KNCR11",
+  "BCFF11","RBRF11","HGRE11","HSML11","BRCO11","RBRR11","CVBI11","RZTR11",
+  "MALL11","HGBS11","VILG11","GTWR11"
+];
 const STEPS_R = ["Iniciando scanner...","Buscando cotacoes B3...","Buscando cotacoes NYSE/NASDAQ...","Score de pre-filtro (100+ ativos)...","Indicadores matematicos (top 30)...","Score de confluencia...","ATLAS gerando relatorio..."];
 
 async function runRadar() {
@@ -2076,8 +2123,8 @@ async function runRadar() {
     emObservacaoTravas.length = 0;
     top30.forEach(t => {
       const score = indicadoresRadar[t]?.confluencia?.score || 0;
-      if (resultadosTravas[t]?.passou && score >= 65) aprovadosTravas.push(t);
-      else if (score >= 55 || resultadosTravas[t]?.aprovadas >= 4) emObservacaoTravas.push(t);
+      if (resultadosTravas[t]?.passou && score >= 60) aprovadosTravas.push(t);
+      else if (score >= 50 || resultadosTravas[t]?.aprovadas >= 3) emObservacaoTravas.push(t);
     });
     aprovadosTravas.sort((a,b) => (indicadoresRadar[b]?.confluencia?.score||0) - (indicadoresRadar[a]?.confluencia?.score||0));
     console.log(`Fora do pregao: volume relaxado. Aprovados: ${aprovadosTravas.length}`);
@@ -2086,7 +2133,7 @@ async function runRadar() {
   // Se ainda poucos aprovados, relaxa para 4/7 travas
   const candidatosFinais = aprovadosTravas.length >= 3
     ? aprovadosTravas
-    : top30.filter(t => resultadosTravas[t]?.aprovadas >= 4 && (indicadoresRadar[t]?.confluencia?.score||0) >= 55)
+    : top30.filter(t => resultadosTravas[t]?.aprovadas >= 3 && (indicadoresRadar[t]?.confluencia?.score||0) >= 50)
            .sort((a,b) => (indicadoresRadar[b]?.confluencia?.score||0) - (indicadoresRadar[a]?.confluencia?.score||0));
 
   si = 5; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
@@ -2185,9 +2232,18 @@ function renderRadar(data, quotes) {
 }
 
 // ─── GURU ─────────────────────────────────────────────────────
-const GURU_TICKERS = ["PETR4","VALE3","ITUB4","BBDC4","WEGE3","RENT3","BBAS3","ABEV3","ELET3","SUZB3","CSAN3","PRIO3","VBBR3","BRFS3","JBSS3","CMIG4","EGIE3","ENGI11","TAEE11","TIMS3","VIVT3","AZUL4","EMBR3","RADL3","HAPV3","RDOR3","HYPE3","LREN3","MGLU3","EQTL3","BPAC11","ITSA4","SANB11","KLBN11","CYRE3","MRVE3","PETZ3","BLAU3","INTER3","CRFB3","KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","KNCR11","AAPL","MSFT","GOOGL","AMZN","META","NVDA","JPM","V","MA","AVGO","MRK","ABBV","AMD","ADBE","CRM","MCD","BAC","DDOG","NET","CRWD","PANW","COIN","UBER","SPY","QQQ"];
-const STEPS_G = ["Analisando mercado...","Varrendo B3...","Varrendo NYSE/NASDAQ...","Selecionando melhores...","Calculando alocacao...","Definindo stops e alvos...","Montando plano..."];
-const STEPS_B = ["Verificando posicoes...","Analisando mercado...","Checando stops e alvos...","Identificando oportunidades...","Preparando briefing..."];
+const GURU_TICKERS = [
+  "PETR4","VALE3","ITUB4","BBDC4","WEGE3","BBAS3","ABEV3","ELET3","SUZB3","RENT3",
+  "CSAN3","PRIO3","VBBR3","EQTL3","BPAC11","ITSA4","SANB11","KLBN11","EMBR3","RADL3",
+  "BRSR6","INTER3","BBSE3","CIEL3","PSSA3","CMIG4","CPFE3","EGIE3","ENGI11","TAEE11",
+  "AURE3","ENBR3","NEOE3","GGBR4","USIM5","CSNA3","GOAU4","CMIN3","SLCE3","SMTO3",
+  "BEEF3","AGRO3","TTEN3","JALL3","LREN3","MGLU3","CRFB3","ASAI3","PETZ3","SOMA3",
+  "VIVA3","ARZZ3","HAPV3","RDOR3","HYPE3","FLRY3","QUAL3","DASA3","TIMS3","VIVT3",
+  "RAIL3","CCRO3","GOLL4","AZUL4","CYRE3","MRVE3","EZTC3","TEND3","DIRR3","EVEN3",
+  "LWSA3","TOTVS3","MULT3","MOVI3","BLAU3","BRFS3","JBSS3","RECV3","RRRP3","UGPA3",
+  "KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","BTLG11","KNCR11",
+  "BCFF11","RBRF11","HGRE11","HSML11","MALL11","VILG11","GTWR11"
+]
 
 function renderGuruResult(d) {
   const hc = d.humor_mercado==="FAVORAVEL"?"var(--green)":d.humor_mercado==="NEUTRO"?"var(--yellow)":"var(--red)";
@@ -2657,8 +2713,13 @@ function renderPortfolio() {
       const q = portfolioQuotes[p.ticker];
       return a + p.quantidade_atual * (q ? q.price : p.preco_medio);
     }, 0);
-    const totalPL = totalAtual - totalInv;
-    const totalPLpct = totalInv > 0 ? ((totalPL/totalInv)*100).toFixed(2) : "0.00";
+    const lucroRealizadoCart = carteira.reduce((a,p)=>a+(parseFloat(p.lucro_total)||0),0);
+    const totalPL = (totalAtual - totalInv) + lucroRealizadoCart;
+    const custoOriginalCart = carteira.reduce((a,p)=>{
+      const qtdTotal = parseFloat(p.quantidade_total)||0;
+      return a + qtdTotal * (parseFloat(p.preco_medio)||0);
+    },0);
+    const totalPLpct = custoOriginalCart > 0 ? ((totalPL/custoOriginalCart)*100).toFixed(2) : "0.00";
     const totalOntem = carteira.reduce((a,p) => {
       const q = portfolioQuotes[p.ticker];
       const prev = q && q.prevClose ? q.prevClose : (q ? q.price : p.preco_medio);
@@ -2674,7 +2735,9 @@ function renderPortfolio() {
       '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">CUSTO MEDIO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">R$ '+totalInv.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
       (hasQ
         ? '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
-          '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+( totalPL>=0?"+":"")+totalPL.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+( parseFloat(totalPLpct)>=0?"+":"")+totalPLpct+'%)</div>'+'<div style="font-family:monospace;font-size:9px;color:'+( parseFloat(varDia)>=0?"var(--green)":"var(--red)")+'">'+( parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div></div>'
+          '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO TOTAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+( totalPL>=0?"+":"")+totalPL.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+( parseFloat(totalPLpct)>=0?"+":"")+totalPLpct+'%)</div>'+
+          (lucroRealizadoCart>0?'<div style="font-family:monospace;font-size:9px;color:var(--green)">Realizado: +R$'+lucroRealizadoCart.toFixed(2)+'</div>':"")+
+          '<div style="font-family:monospace;font-size:9px;color:'+( parseFloat(varDia)>=0?"var(--green)":"var(--red)")+'">'+( parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div></div>'
         : '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;opacity:.5;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:monospace;font-size:10px;color:var(--dim)">Buscando...</div></div>'
       )+
       '<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'+
