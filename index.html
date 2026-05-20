@@ -870,8 +870,8 @@ function calcTravas(ind, quote) {
   // TRAVA 6: Bollinger nao sobrecomprado
   travas.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
 
-  // TRAVA 7: Upside para resistencia >= 5%
-  travas.upside = (ind.suporte_resistencia?.distResist || 0) >= 5;
+  // TRAVA 7: Upside para resistencia >= 4%
+  travas.upside = (ind.suporte_resistencia?.distResist || 0) >= 4;
 
   const aprovadas = Object.values(travas).filter(Boolean).length;
   const total = Object.keys(travas).length;
@@ -1599,7 +1599,7 @@ function buildAtlasContext() {
 
 PERFIL DO INVESTIDOR:
 - Capital: R$5.000 a R$20.000
-- Objetivo: +8% ao mes via swing trade
+- Objetivo: +8% ao mes via swing trade (meta pessoal, nao filtro rigido)
 - Horizonte: 5 a 20 dias por operacao
 - Mercado: B3 (acoes e FIIs)
 - Perfil: aceita risco calculado, NAO e holder
@@ -1607,16 +1607,24 @@ PERFIL DO INVESTIDOR:
 CRITERIOS INEGOCIAVEIS (valem para QUALQUER recomendacao):
 1. Score confluencia matematica >= 65
 2. R/R minimo 1:2, preferir 1:3
-3. Upside minimo 8% em 15 dias
+3. Upside minimo 4% em 15 dias (operacoes acima de 8% sao PRIORIDADE ALTA)
 4. Stop maximo 5% abaixo da entrada
 5. Volume nao zerado no dia
 6. RSI ponderado entre 30 e 70
 7. MACD sem cruzamento baixista recente
 
-SE QUALQUER UM DOS 7 CRITERIOS FALHAR: sinal e AGUARDA ou EVITAR. Sem excecoes.
+ESCALA DE PRIORIDADE POR UPSIDE:
+>= 8% em 15 dias = PRIORIDADE MAXIMA
+>= 6% em 15 dias = PRIORIDADE ALTA
+>= 4% em 15 dias = APROVADO
+< 4% em 15 dias = REPROVADO
+
+SE CRITERIOS 1, 2, 4, 5, 6 ou 7 FALHAREM: sinal e AGUARDA ou EVITAR. Sem excecoes.
+Criterio 3 (upside): minimo 4%, nao 8%. Meta de 8% e aspiracional, nao filtro de entrada.
 
 ESCALA DE SINAL:
 score <40 = VENDA | 40-59 = AGUARDA | 60-74 = COMPRA MODERADA | 75-89 = COMPRA FORTE | 90+ = COMPRA MAXIMA`;
+}
 }
 
 function buildAnalyzePrompt(ticker, quote, manualPrice, indicators) {
@@ -1632,7 +1640,7 @@ function buildAnalyzePrompt(ticker, quote, manualPrice, indicators) {
 }
 
 function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, resultadosTravas) {
-  const tickers = candidatos || [];
+  const tickers = (candidatos && candidatos.length > 0) ? candidatos : Object.keys(indicadoresRadar || {}).slice(0, 20);
 
   const info = tickers.map(t => {
     const q = quotes[t];
@@ -1641,45 +1649,61 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
     const rsi = ind?.indicadores?.rsi?.rsi_ponderado;
     const vol = ind?.indicadores?.volume?.status;
     const rr = ind?.suporte_resistencia?.rr_natural;
-    return t+"(R$"+(q?.price||"?")
-      +","+( q?.change||"0")+"% hoje"
-      +",CONF="+(ind?.confluencia?.score||"?")
+    const conf = ind?.confluencia?.score;
+    const sm = ind?.smart_money?.score;
+    const stop = ind?.gestao_risco?.stop_sugerido;
+    const alvo = ind?.gestao_risco?.alvo_sugerido;
+    const macd = ind?.indicadores?.macd?.crossover !== "NENHUM"
+      ? ind?.indicadores?.macd?.crossover
+      : ind?.indicadores?.macd?.trend;
+    const candle = ind?.candle_pattern?.pattern;
+    return t
+      +"(R$"+(q?.price||"?")
+      +","+(q?.change||"0")+"% hoje"
+      +",CONF="+(conf||"?")
       +",RSI="+(rsi||"?")
+      +",MACD="+(macd||"?")
       +",VOL="+(vol||"?")
       +",RR=1:"+(rr||"?")
+      +",STOP="+(stop||"?")
+      +",ALVO="+(alvo||"?")
+      +(sm?",SM="+sm:"")
+      +(candle&&candle!=="NENHUM"?",CANDLE="+candle:"")
       +",travas="+(tr?tr.aprovadas+"/"+tr.total:"?")
-      +(tr&&!tr.passou?",REPROV_EM="+Object.entries(tr.travas||{}).filter(([k,v])=>!v).map(([k])=>k).join("+"):"")
+      +(tr&&!tr.passou?",FALHOU="+Object.entries(tr.travas||{}).filter(([k,v])=>!v).map(([k])=>k).join("+"):"")
       +")";
   }).join("\n");
 
-  const obsInfo = (emObservacao||[]).map(t => {
+  // Se info ainda vazio, usa cotacoes diretas como fallback
+  const infoFinal = info.trim() || Object.entries(quotes).slice(0,20)
+    .map(([t,q])=>t+"(R$"+q.price+","+q.change+"% hoje)").join("\n");
+
+  const obsInfo = (emObservacao||[]).slice(0,5).map(t => {
     const ind = indicadoresRadar[t];
     const tr = resultadosTravas?.[t];
     const falhas = tr ? Object.entries(tr.travas||{}).filter(([k,v])=>!v).map(([k])=>k).join(", ") : "?";
-    return t+": score="+(ind?.confluencia?.score||"?")+" | travas="+(tr?tr.aprovadas+"/"+tr.total:"?")+" | falta: "+falhas;
+    return t+": score="+(ind?.confluencia?.score||"?")+" travas="+(tr?tr.aprovadas+"/"+tr.total:"?")+" falta: "+falhas;
   }).join("\n");
 
   return buildAtlasContext()+`
 
 MODO: RADAR DE OPORTUNIDADES — B3
 
-IMPORTANTE: Estes ativos JA passaram pelo filtro matematico de 7 travas.
-Use os mesmos 7 criterios inegociaveis para selecionar os melhores.
-
-CANDIDATOS PRE-FILTRADOS:
-`+info+`
+CANDIDATOS (ja pre-filtrados matematicamente):
+`+infoFinal+`
 
 EM OBSERVACAO (quase aprovados):
 `+(obsInfo||"nenhum")+`
 
 INSTRUCOES:
-- Selecione os MELHORES (maximo 12, minimo 0 se nenhum for bom o suficiente)
-- Use stop e alvo matematicos (2x ATR e 3x ATR) como base
-- Para cada ativo em observacao, diga exatamente o que falta
-- Se um ativo passou nas travas mas voce identificar problema qualitativo (sem catalisador, setor ruim, etc), coloque em EVITAR com explicacao
+- Analise os candidatos acima e selecione os MELHORES (maximo 12)
+- Use stop e alvo matematicos fornecidos como base
+- Se identificar problema qualitativo, coloque em EVITAR com explicacao
+- Se nenhum for bom o suficiente, retorne ops:[] com explicacao no campo macro
 
 Retorne APENAS JSON:
 {"macro":"","ops":[{"rank":1,"ticker":"","nome":"","mkt":"","score":80,"confluencia":75,"smart_money":60,"up":"","prazo":"","ref":"","stop":"","alvo":"","razao":"","cat":"","risco":""}],"observacao":[{"ticker":"","score":60,"motivo_pendente":"","quando_entrar":""}],"evitar":[""]}`;
+}
 }
 
 function buildGuruPrompt(quotes, cap, indicadoresGuru, travasGuru) {
@@ -1810,35 +1834,36 @@ function buildBriefingPrompt(quotes, cap) {
     return a+(parseFloat(p.quantidade_atual)||0)*(q?q.price:parseFloat(p.preco_medio)||0);
   },0);
   const caixaLivre = Math.max(0, cap - capitalInvestido);
+  const temCapital = cap > 0;
 
   return buildAtlasContext()+`
 
 MODO: BRIEFING DIARIO
 
-`+(temCarteira ? `CARTEIRA ATUAL:
+`+(temCarteira ? `CARTEIRA ATUAL (${cartBriefing.length} posicoes):
 `+pos+`
 
 CAPITAL INVESTIDO: R$`+capitalInvestido.toFixed(2)+`
 CAIXA DISPONIVEL: R$`+caixaLivre.toFixed(2)+`
 
 PARA CADA POSICAO RESPONDA:
-- Esta perto do stop (< 2%)? → ALERTAR
-- Atingiu o alvo? → REALIZAR
+- Esta perto do stop (dist < 2%)? ALERTAR URGENTE
+- Atingiu o alvo? REALIZAR
 - Variacao do dia justifica ajuste?
 - Manter ou sair?`
 : `SEM POSICOES ABERTAS.
-Capital disponivel: R$`+cap.toFixed(2)+`
-Caixa livre para alocar: R$`+caixaLivre.toFixed(2)+`
-
-Se nao ha posicoes, foque em identificar a melhor oportunidade do dia para entrada.`)+`
+`+(temCapital ? `Capital disponivel para operar: R$`+cap.toFixed(2)+`
+Identifique a MELHOR oportunidade do dia para entrada considerando os criterios inegociaveis.
+Se nao houver oportunidade clara hoje, diga isso — prefira caixa a entrada ruim.`
+: `Sem capital informado. Analise o mercado e indique o melhor momento para entrar quando houver capital.`))+`
 
 MERCADO HOJE: `+mercadoHoje+`
 
 INSTRUCOES:
-- Seja direto e objetivo
-- Se nao ha posicoes, diga isso claramente e aponte 1-2 oportunidades do dia
-- Nao dramatize sobre falta de capital — se caixa disponivel > R$500, ha capital para operar
-- Foco em ACAO concreta: o que fazer AGORA com o que existe
+- Seja direto. Sem drama sobre capital.
+- Com carteira vazia: foque em 1-2 oportunidades do dia ou diga que nao ha entrada boa agora
+- Com posicoes: avalie cada uma pelo plano original
+- Nao repita o contexto de volta — va direto para a recomendacao
 
 Retorne APENAS JSON:
 {"situacao_carteira":"VERDE","resumo":"","alertas":[{"tipo":"INFO","ticker":"","mensagem":"","acao_recomendada":""}],"posicoes":[{"ticker":"","status":"LUCRO","variacao_hoje":"0%","variacao_desde_entrada":"0%","distancia_stop":"","distancia_alvo":"","recomendacao":"MANTER"}],"oportunidade_do_dia":{"ticker":"","motivo":"","acao":""},"mensagem_guru":""}`;
@@ -2029,7 +2054,38 @@ async function runRadar() {
 
   console.log(`Travas: ${aprovadosTravas.length} aprovados de ${top30.length} candidatos`);
 
-  // Se poucos aprovados, relaxa para 4/7 travas
+  // Detecta se e fim de semana ou fora do pregao
+  const agora = new Date();
+  const diaSemana = agora.getDay(); // 0=dom, 6=sab
+  const hora = agora.getHours();
+  const foraDoPregao = diaSemana === 0 || diaSemana === 6 || hora < 10 || hora > 17;
+
+  // Fora do pregao: volume zero e normal, relaxa trava de volume
+  if (foraDoPregao) {
+    top30.forEach(t => {
+      if (resultadosTravas[t] && !resultadosTravas[t].travas.volume) {
+        // Usa volume historico em vez do dia atual
+        const ind = indicadoresRadar[t];
+        const volRatio = ind?.indicadores?.volume?.ratio || 0;
+        resultadosTravas[t].travas.volume = volRatio >= 0.7;
+        // Recalcula aprovadas
+        resultadosTravas[t].aprovadas = Object.values(resultadosTravas[t].travas).filter(Boolean).length;
+        resultadosTravas[t].passou = resultadosTravas[t].aprovadas >= 5;
+      }
+    });
+    // Reprocessa aprovados apos relaxar volume
+    aprovadosTravas.length = 0;
+    emObservacaoTravas.length = 0;
+    top30.forEach(t => {
+      const score = indicadoresRadar[t]?.confluencia?.score || 0;
+      if (resultadosTravas[t]?.passou && score >= 65) aprovadosTravas.push(t);
+      else if (score >= 55 || resultadosTravas[t]?.aprovadas >= 4) emObservacaoTravas.push(t);
+    });
+    aprovadosTravas.sort((a,b) => (indicadoresRadar[b]?.confluencia?.score||0) - (indicadoresRadar[a]?.confluencia?.score||0));
+    console.log(`Fora do pregao: volume relaxado. Aprovados: ${aprovadosTravas.length}`);
+  }
+
+  // Se ainda poucos aprovados, relaxa para 4/7 travas
   const candidatosFinais = aprovadosTravas.length >= 3
     ? aprovadosTravas
     : top30.filter(t => resultadosTravas[t]?.aprovadas >= 4 && (indicadoresRadar[t]?.confluencia?.score||0) >= 55)
@@ -2037,10 +2093,33 @@ async function runRadar() {
 
   si = 5; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
 
+  // Avisa se fora do pregao
+  const avisoFds = foraDoPregao
+    ? '<div style="background:rgba(255,204,0,.08);border:1px solid rgba(255,204,0,.3);padding:10px 16px;margin-bottom:12px;font-family:monospace;font-size:10px;color:var(--yellow);">⚠ FORA DO PREGAO — Volume do dia pode ser zero. Usando volume historico nas travas. Resultados mais precisos em dias uteis.</div>'
+    : '';
+
+  // Se nenhum candidato passou nas travas, mostra mensagem clara
+  if (candidatosFinais.length === 0) {
+    document.getElementById("loadR").style.display = "none";
+    document.getElementById("resR").innerHTML = avisoFds +
+      '<div style="background:var(--card);border:1px solid rgba(255,204,0,.3);padding:24px;text-align:center;">'+
+      '<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:var(--yellow);margin-bottom:10px;">NENHUM ATIVO APROVADO HOJE</div>'+
+      '<div style="font-family:monospace;font-size:10px;color:var(--sub);line-height:1.8;">'+
+      'Nenhum dos '+top30.length+' candidatos analisados passou nos criterios minimos.<br>'+
+      'Isso e sinal de que o mercado nao oferece oportunidade clara agora.<br>'+
+      '<span style="color:var(--yellow)">Melhor decisao: aguardar. Caixa tambem e posicao.</span>'+
+      '</div>'+
+      (emObservacaoTravas.length ? '<div style="margin-top:14px;font-family:monospace;font-size:9px;color:var(--dim)">Em observacao: '+emObservacaoTravas.slice(0,5).join(", ")+'</div>' : "")+
+      '</div>';
+    document.getElementById("resR").style.display = "block";
+    document.getElementById("btnRadar").disabled = false;
+    return;
+  }
+
   try {
     const data = await callClaude(buildRadarPrompt(candidatosFinais, quotes, indicadoresRadar, emObservacaoTravas, resultadosTravas));
     document.getElementById("loadR").style.display = "none";
-    document.getElementById("resR").innerHTML = renderRadar(data, quotes, indicadoresRadar);
+    document.getElementById("resR").innerHTML = avisoFds + renderRadar(data, quotes, indicadoresRadar);
     document.getElementById("resR").style.display = "block";
   } catch(e) {
     document.getElementById("loadR").style.display = "none";
@@ -2364,11 +2443,12 @@ async function guruBriefing() {
     return a + (parseFloat(p.quantidade_atual)||0) * preco;
   }, 0);
 
-  // Se carteira vazia, usa preco medio como fallback
   const valorFallback = carteira.reduce((a,p) =>
     a + (parseFloat(p.quantidade_atual)||0) * (parseFloat(p.preco_medio)||0), 0);
 
-  const cap = Math.max(valorCarteira, valorFallback) + aporte;
+  const valorReal = Math.max(valorCarteira, valorFallback);
+  // Se carteira vazia e sem aporte, assume capital minimo para nao travar o ATLAS
+  const cap = valorReal + aporte || 5000;
 
   si = 2; document.getElementById("stepsG").innerHTML = steps(STEPS_B, si);
 
