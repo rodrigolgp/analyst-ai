@@ -1,7 +1,6 @@
 {
   "functions": {
-    "api/*.js": { "maxDuration": 30 },
-    "api/precalc.js": { "maxDuration": 300 }
+    "api/*.js": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" }
