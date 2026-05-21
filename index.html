@@ -2008,11 +2008,19 @@ async function runRadar() {
   document.getElementById("stepsR").innerHTML = steps(STEPS_R, 0);
 
   const quotes = {};
-  for (let i = 0; i < RADAR_TICKERS.length; i += 8) {
-    si = i < 35 ? 1 : 2;
+  // Lotes de 5 com delay entre lotes para evitar rate limit
+  const BATCH = 5;
+  for (let i = 0; i < RADAR_TICKERS.length; i += BATCH) {
+    si = i < 50 ? 1 : 2;
     document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
-    await Promise.all(RADAR_TICKERS.slice(i, i+8).map(async t => { const q=await fetchQuote(t); if(q) quotes[t]=q; }));
+    await Promise.all(RADAR_TICKERS.slice(i, i+BATCH).map(async t => {
+      const q = await fetchQuote(t);
+      if (q) quotes[t] = q;
+    }));
+    // Delay entre lotes para nao sobrecarregar
+    if (i + BATCH < RADAR_TICKERS.length) await new Promise(r => setTimeout(r, 200));
   }
+  console.log(`Cotacoes obtidas: ${Object.keys(quotes).length} de ${RADAR_TICKERS.length}`);
   si = 3; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
 
   // NIVEL 1: Score de pre-filtro para todos os ativos
@@ -2341,12 +2349,13 @@ async function guruMontar() {
   document.getElementById("stepsG").innerHTML = steps(STEPS_G, 0);
 
   const quotes = {};
-  for (let i = 0; i < GURU_TICKERS.length; i += 8) {
+  for (let i = 0; i < GURU_TICKERS.length; i += 5) {
     si = i < 20 ? 1 : 2;
     document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
-    await Promise.all(GURU_TICKERS.slice(i,i+8).map(async t=>{const q=await fetchQuote(t);if(q)quotes[t]=q;}));
+    await Promise.all(GURU_TICKERS.slice(i,i+5).map(async t=>{const q=await fetchQuote(t);if(q)quotes[t]=q;}));
+    if (i + 5 < GURU_TICKERS.length) await new Promise(r => setTimeout(r, 200));
   }
-  si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
+  console.log(`Guru cotacoes: ${Object.keys(quotes).length} de ${GURU_TICKERS.length}`);
 
   // NIVEL 1: Pre-filtro quantitativo - seleciona top 25
   si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
