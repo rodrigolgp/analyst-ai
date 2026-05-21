@@ -83,6 +83,34 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
 }
 </style>
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js">
+// ─── FUNDAMENTALISTA ──────────────────────────────────────────
+async function fetchFundamentals(ticker) {
+  try {
+    const r = await fetch("/api/fundamentus?ticker="+ticker);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+function buildFundamentalsContext(fun) {
+  if (!fun) return "";
+  const items = [];
+  if (fun.pl !== null) items.push("P/L="+fun.pl+(fun.pl<10?" (BARATO)":fun.pl<20?" (JUSTO)":fun.pl<30?" (CARO)":"(MUITO CARO)"));
+  if (fun.pvp !== null) items.push("P/VP="+fun.pvp);
+  if (fun.roe !== null) items.push("ROE="+fun.roe+"%"+(fun.roe>15?" (BOM)":fun.roe>8?" (OK)":" (FRACO)"));
+  if (fun.margem_liquida !== null) items.push("Mrg.Liq="+fun.margem_liquida+"%");
+  if (fun.margem_ebitda !== null) items.push("Mrg.EBITDA="+fun.margem_ebitda+"%");
+  if (fun.dy !== null) items.push("DY="+fun.dy+"%");
+  if (fun.divida_pl !== null) items.push("Div/PL="+fun.divida_pl+(fun.divida_pl>2?" (ALTO)":fun.divida_pl>1?" (MODERADO)":" (BAIXO)"));
+  if (fun.crescimento_receita !== null) items.push("Cresc.Rec="+fun.crescimento_receita+"%");
+  if (fun.setor) items.push("Setor="+fun.setor);
+  if (!items.length) return "";
+  return "
+--- DADOS FUNDAMENTALISTAS REAIS ("+fun.fonte+") ---
+"+items.join(" | ")+"
+";
+}
+
 // ─── PRECALC / CACHE ──────────────────────────────────────────
 async function verificarCachePrecalc() {
   try {
@@ -1589,7 +1617,32 @@ function renderResult(d, quote, indicators) {
     ? '<button onclick="abrirPosicaoDaAnalise()" style="width:100%;background:linear-gradient(135deg,rgba(0,255,136,.15),rgba(0,170,255,.1));border:2px solid var(--green);color:var(--green);padding:16px;font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;margin-bottom:12px;">+ ABRIR POSICAO COM ESTES DADOS</button>'
     : '';
 
-  return qBadge + hero + sis + trav + temp + indCard + tecFun + catRis + cen + said + prof + res;
+  // Card fundamentalista com dados reais
+  const funData = window._ultimaAnalise?.fundamentals;
+  const funRealCard = (funData && funData.fonte) ? (function(){
+    const f = funData;
+    const items = [
+      ["P/L", f.pl, f.pl!=null?(f.pl<10?"var(--green)":f.pl<20?"var(--cyan)":f.pl<30?"var(--yellow)":"var(--red)"):"var(--dim)"],
+      ["P/VP", f.pvp, f.pvp!=null?(f.pvp<1.5?"var(--green)":f.pvp<3?"var(--cyan)":"var(--yellow)"):"var(--dim)"],
+      ["ROE", f.roe!=null?f.roe+"%":null, f.roe!=null?(f.roe>15?"var(--green)":f.roe>8?"var(--cyan)":"var(--red)"):"var(--dim)"],
+      ["MRG.LIQ", f.margem_liquida!=null?f.margem_liquida+"%":null, f.margem_liquida!=null?(f.margem_liquida>15?"var(--green)":f.margem_liquida>5?"var(--cyan)":"var(--yellow)"):"var(--dim)"],
+      ["DY", f.dy!=null?f.dy+"%":null, "var(--yellow)"],
+      ["DIV/PL", f.divida_pl, f.divida_pl!=null?(f.divida_pl<1?"var(--green)":f.divida_pl<2?"var(--yellow)":"var(--red)"):"var(--dim)"],
+    ].filter(([k,v])=>v!=null);
+    if (!items.length) return "";
+    return '<div style="background:var(--card);border:1px solid var(--border);padding:16px 20px;margin-bottom:10px;">'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">FUNDAMENTALISTA REAL'
+      +'<span style="font-family:monospace;font-size:8px;color:var(--dim);font-weight:400;margin-left:8px;">'+f.fonte+'</span></div>'
+      +'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;">'
+      +items.map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'
+        +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'
+        +'<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+c+'">'+v+'</div></div>'
+      ).join("")+'</div>'
+      +(f.setor?'<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-top:8px;">'+f.setor+(f.industria?' | '+f.industria:'')+'</div>':'')+
+      '</div>';
+  })() : "";
+
+  return btnAbrirPos + funRealCard + qBadge + hero + sis + trav + temp + indCard + tecFun + catRis + cen + said + prof + res;
 }
 
 // ─── PROMPTS ──────────────────────────────────────────────────
@@ -1623,10 +1676,14 @@ SE CRITERIOS 1, 2, 4, 5, 6 ou 7 FALHAREM: sinal e AGUARDA ou EVITAR. Sem excecoe
 Criterio 3 (upside): minimo 4%, nao 8%. Meta de 8% e aspiracional, nao filtro de entrada.
 
 ESCALA DE SINAL:
-score <40 = VENDA | 40-59 = AGUARDA | 60-74 = COMPRA MODERADA | 75-89 = COMPRA FORTE | 90+ = COMPRA MAXIMA`;
+score <40 = VENDA | 40-59 = AGUARDA | 60-74 = COMPRA MODERADA | 75-89 = COMPRA FORTE | 90+ = COMPRA MAXIMA
+
+INSTRUCAO DEVIL'S ADVOCATE:
+Antes de recomendar COMPRA, liste os 3 principais motivos pelos quais essa operacao pode dar errado.
+Isso nao impede a recomendacao - apenas garante que os riscos foram considerados.`;
 }
 
-function buildAnalyzePrompt(ticker, quote, manualPrice, indicators) {
+function buildAnalyzePrompt(ticker, quote, manualPrice, indicators, fundamentals) {
   const pi = manualPrice
     ? "PRECO ATUAL (manual): "+(quote&&quote.currency||"R$")+" "+manualPrice
     : quote
@@ -1895,14 +1952,14 @@ async function analyze(tickerOverride) {
     ]);
     let quote = quoteRaw;
     if (mp) quote = { price:mp, change:quote&&quote.change||"0.00", high:quote&&quote.high||mp, low:quote&&quote.low||mp, volume:quote&&quote.volume||0, prevClose:quote&&quote.prevClose||mp, market:quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"), currency:quote&&quote.currency||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"R$":"US$"), name:quote&&quote.name||ticker, source:"Manual" };
-    const data = await callClaude(buildAnalyzePrompt(ticker, quote, mp, indicators));
+    const data = await callClaude(buildAnalyzePrompt(ticker, quote, mp, indicators, fundamentals));
     historyArr = [ticker, ...historyArr.filter(x=>x!==ticker)].slice(0,8);
     localStorage.setItem("ai_history", JSON.stringify(historyArr));
     renderHistory();
     clearInterval(iv);
     document.getElementById("loadA").style.display = "none";
     // Salva ultima analise para pre-preencher abertura de posicao
-    window._ultimaAnalise = { data, quote, indicators, ticker };
+    window._ultimaAnalise = { data, quote, indicators, ticker, fundamentals };
     // Aviso fora do pregao
     const _agora = new Date();
     const _dia = _agora.getDay();
@@ -3203,6 +3260,34 @@ async function gerarRelatorio() {
   }
 }
 
+
+// ─── FUNDAMENTALISTA ──────────────────────────────────────────
+async function fetchFundamentals(ticker) {
+  try {
+    const r = await fetch("/api/fundamentus?ticker="+ticker);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+function buildFundamentalsContext(fun) {
+  if (!fun) return "";
+  const items = [];
+  if (fun.pl !== null) items.push("P/L="+fun.pl+(fun.pl<10?" (BARATO)":fun.pl<20?" (JUSTO)":fun.pl<30?" (CARO)":"(MUITO CARO)"));
+  if (fun.pvp !== null) items.push("P/VP="+fun.pvp);
+  if (fun.roe !== null) items.push("ROE="+fun.roe+"%"+(fun.roe>15?" (BOM)":fun.roe>8?" (OK)":" (FRACO)"));
+  if (fun.margem_liquida !== null) items.push("Mrg.Liq="+fun.margem_liquida+"%");
+  if (fun.margem_ebitda !== null) items.push("Mrg.EBITDA="+fun.margem_ebitda+"%");
+  if (fun.dy !== null) items.push("DY="+fun.dy+"%");
+  if (fun.divida_pl !== null) items.push("Div/PL="+fun.divida_pl+(fun.divida_pl>2?" (ALTO)":fun.divida_pl>1?" (MODERADO)":" (BAIXO)"));
+  if (fun.crescimento_receita !== null) items.push("Cresc.Rec="+fun.crescimento_receita+"%");
+  if (fun.setor) items.push("Setor="+fun.setor);
+  if (!items.length) return "";
+  return "
+--- DADOS FUNDAMENTALISTAS REAIS ("+fun.fonte+") ---
+"+items.join(" | ")+"
+";
+}
 
 // ─── PRECALC / CACHE ──────────────────────────────────────────
 async function verificarCachePrecalc() {
