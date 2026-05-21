@@ -1,2407 +1,373 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>AnalystAI</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&family=Exo+2:wght@300;400;600;700&display=swap');
-*{box-sizing:border-box;margin:0;padding:0;}
-:root{
-  --green:#00ff88;--red:#ff3355;--yellow:#ffcc00;--blue:#00aaff;--cyan:#00ffee;
-  --bg:#030508;--card:#090f18;--border:#0f2035;--hi:#1a3a5c;
-  --txt:#e8f4f8;--sub:#7a9bb5;--dim:#3a5570;
-}
-body{background:var(--bg);color:var(--txt);font-family:'Exo 2',sans-serif;min-height:100vh;}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
-@keyframes tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-.header{border-bottom:1px solid var(--hi);padding:13px 22px;display:flex;align-items:center;
-  justify-content:space-between;background:rgba(7,12,18,.97);position:sticky;top:0;z-index:100;}
-.logo-box{width:34px;height:34px;border:1.5px solid var(--green);display:flex;align-items:center;
-  justify-content:center;font-family:monospace;font-size:11px;color:var(--green);}
-.logo-text{font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;letter-spacing:3px;}
-.logo-text span{color:var(--green);}
-.logo-sub{font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:2px;}
-.status{display:flex;align-items:center;gap:6px;font-family:monospace;font-size:10px;color:var(--green);}
-.dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;}
-.ticker-wrap{background:rgba(0,255,136,.04);border-bottom:1px solid var(--border);padding:5px 0;overflow:hidden;white-space:nowrap;}
-.ticker-inner{display:inline-block;animation:tick 40s linear infinite;font-family:monospace;font-size:10px;}
-.main{max-width:1380px;margin:0 auto;padding:22px;}
-.profile-bar{background:var(--card);border:1px solid var(--border);padding:11px 18px;display:flex;gap:24px;margin-bottom:18px;flex-wrap:wrap;}
-.pf-key{font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:2px;}
-.pf-val{font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;color:var(--cyan);letter-spacing:1px;}
-.pf-val.green{color:var(--green);}
-.tabs{display:flex;gap:2px;margin-bottom:22px;border-bottom:1px solid var(--border);flex-wrap:wrap;}
-.tab{padding:9px 18px;font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:600;letter-spacing:2px;
-  cursor:pointer;border:none;background:transparent;text-transform:uppercase;color:var(--dim);
-  border-bottom:2px solid transparent;transition:color .2s;}
-.tab.active{color:var(--green);border-bottom-color:var(--green);}
-.field-label{font-family:monospace;font-size:9px;letter-spacing:2px;margin-bottom:5px;}
-.field-label.cyan{color:var(--cyan);}
-.field-label.yellow{color:var(--yellow);}
-input[type=text],input[type=number],input[type=date]{background:var(--card);border:1px solid var(--hi);
-  color:var(--txt);padding:10px 14px;font-family:monospace;font-size:13px;outline:none;width:100%;}
-input[type=text]{letter-spacing:2px;text-transform:uppercase;}
-input::placeholder{color:var(--dim);font-size:11px;text-transform:none;letter-spacing:0;}
-select{background:var(--card);border:1px solid var(--hi);color:var(--txt);padding:10px 14px;
-  font-family:monospace;font-size:13px;outline:none;width:100%;}
-.btn{background:var(--green);color:#000;border:none;padding:12px 24px;font-family:'Rajdhani',sans-serif;
-  font-size:13px;font-weight:700;letter-spacing:3px;cursor:pointer;transition:opacity .2s;}
-.btn:disabled{opacity:.4;cursor:not-allowed;}
-.btn-outline{background:transparent;color:var(--cyan);border:1px solid var(--cyan);padding:12px 24px;
-  font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;letter-spacing:3px;cursor:pointer;}
-.loading{display:flex;flex-direction:column;align-items:center;padding:50px;gap:16px;}
-.spinner{width:40px;height:40px;border:2px solid var(--border);border-top-color:var(--green);
-  border-radius:50%;animation:spin .8s linear infinite;}
-.load-steps{font-family:monospace;font-size:10px;line-height:2.4;}
-.error-box{background:rgba(255,51,85,.06);border:1px solid rgba(255,51,85,.4);padding:20px;
-  color:var(--red);font-family:monospace;font-size:11px;line-height:1.8;word-break:break-all;margin-top:10px;}
-.empty{text-align:center;padding:50px;color:var(--dim);font-family:monospace;font-size:11px;
-  letter-spacing:1px;border:1px dashed var(--border);margin-top:16px;}
-.kv{display:flex;justify-content:space-between;align-items:center;padding-bottom:8px;margin-bottom:8px;border-bottom:1px solid var(--border);}
-.kv:last-child{border-bottom:none;padding-bottom:0;margin-bottom:0;}
-.kv-label{font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:1px;}
-.kv-val{font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;}
-.sec{display:flex;align-items:center;gap:10px;margin-bottom:10px;margin-top:14px;}
-.sec-label{font-family:'Rajdhani',sans-serif;font-size:10px;font-weight:700;letter-spacing:3px;color:var(--dim);text-transform:uppercase;white-space:nowrap;}
-.sec-line{flex:1;height:1px;background:var(--border);}
-.bar-wrap{width:100%;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
-.bar-fill{height:100%;border-radius:2px;transition:width 1.2s ease;}
-.form-field label{font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;display:block;margin-bottom:4px;}
-.portfolio-table{width:100%;border-collapse:collapse;}
-.portfolio-table th{font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;text-align:left;padding:8px 12px;border-bottom:1px solid var(--border);}
-.portfolio-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;}
-.btn-sm{padding:4px 10px;cursor:pointer;font-family:monospace;font-size:9px;border:none;}
-.disclaimer{background:rgba(255,204,0,.03);border:1px solid rgba(255,204,0,.18);padding:12px 16px;
-  margin-top:20px;font-family:monospace;font-size:9px;color:var(--yellow);letter-spacing:.5px;line-height:1.8;opacity:.7;}
-@media(max-width:768px){
-  .main{padding:12px;}
-  .tabs{gap:0;}
-  .tab{padding:8px 10px;font-size:9px;letter-spacing:1px;}
-}
-</style>
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js">
-// ─── GRAFICOS INTERATIVOS ──────────────────────────────────────
-let currentChartData = null;
-let currentChartTicker = null;
-let mainChart = null;
-let rsiChart = null;
-let macdChart = null;
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
 
-function destroyCharts() {
-  if (mainChart) { try { mainChart.remove(); } catch(e) {} mainChart = null; }
-  if (rsiChart) { try { rsiChart.remove(); } catch(e) {} rsiChart = null; }
-  if (macdChart) { try { macdChart.remove(); } catch(e) {} macdChart = null; }
-}
+  const { ticker } = req.query;
+  if (!ticker) return res.status(400).json({ error: "ticker required" });
 
-function renderCharts(indicatorData, period) {
-  if (!indicatorData || !indicatorData.historico_recente) return;
-  currentChartData = indicatorData;
-  period = period || 60;
+  // ── REDIS CACHE FIRST ──────────────────────────────────────
+  const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
+  const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
 
-  destroyCharts();
-
-  const hist = indicatorData.historico_recente || [];
-  if (!hist.length) return;
-
-  // Slice para o periodo selecionado
-  const data = hist.slice(-period);
-
-  const chartOpts = {
-    layout: {
-      background: { color: "#090f18" },
-      textColor: "#7a9bb5",
-    },
-    grid: {
-      vertLines: { color: "#0f2035" },
-      horzLines: { color: "#0f2035" },
-    },
-    crosshair: { mode: 1 },
-    rightPriceScale: { borderColor: "#0f2035" },
-    timeScale: { borderColor: "#0f2035", timeVisible: true },
-    handleScroll: true,
-    handleScale: true,
-  };
-
-  // ── GRAFICO PRINCIPAL — Candlestick + Volume + MMs ──────────
-  const mainEl = document.getElementById("chartMain");
-  mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
-
-  const candleSeries = mainChart.addCandlestickSeries({
-    upColor: "#00ff88",
-    downColor: "#ff3355",
-    borderUpColor: "#00ff88",
-    borderDownColor: "#ff3355",
-    wickUpColor: "#00ff88",
-    wickDownColor: "#ff3355",
-  });
-
-  const candleData = data.map(d => ({
-    time: d.date,
-    open: parseFloat(d.open||d.close),
-    high: parseFloat(d.high),
-    low: parseFloat(d.low),
-    close: parseFloat(d.close),
-  })).filter(d => d.open && d.high && d.low && d.close);
-
-  candleSeries.setData(candleData);
-
-  // Volume como histograma
-  const volumeSeries = mainChart.addHistogramSeries({
-    color: "rgba(0,170,255,0.3)",
-    priceFormat: { type: "volume" },
-    priceScaleId: "volume",
-    scaleMargins: { top: 0.85, bottom: 0 },
-  });
-
-  const volumeData = data.map(d => ({
-    time: d.date,
-    value: d.volume || 0,
-    color: parseFloat(d.close) >= parseFloat(d.open||d.close) ? "rgba(0,255,136,0.3)" : "rgba(255,51,85,0.3)",
-  }));
-  volumeSeries.setData(volumeData);
-
-  // Medias moveis — dados reais historicos
-  const ind = indicatorData.indicadores;
-  const mmDefs = [
-    { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
-    { key: "historico_mm21", color: "#00aaff", label: "MM21", width: 1 },
-    { key: "historico_mm50", color: "#ff8800", label: "MM50", width: 1.5 },
-  ];
-  mmDefs.forEach(mm => {
-    const hist = (indicatorData[mm.key] || []).slice(-period);
-    if (!hist.length) return;
-    const mmSeries = mainChart.addLineSeries({
-      color: mm.color, lineWidth: mm.width,
-      priceLineVisible: false, lastValueVisible: true,
-      title: mm.label,
-    });
-    mmSeries.setData(hist.map(d => ({ time: d.date, value: d.value })));
-  });
-
-  // Suporte e Resistencia como linhas horizontais
-  if (indicatorData.suporte_resistencia) {
-    const sup = indicatorData.suporte_resistencia.suporte;
-    const res = indicatorData.suporte_resistencia.resistencia;
-    if (sup) candleSeries.createPriceLine({ price: sup, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Suporte" });
-    if (res) candleSeries.createPriceLine({ price: res, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Resistencia" });
-    if (indicatorData.gestao_risco?.stop_sugerido) {
-      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.stop_sugerido, color: "#ff3355", lineWidth: 1, lineStyle: 3, title: "Stop ATR" });
-    }
-    if (indicatorData.gestao_risco?.alvo_sugerido) {
-      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.alvo_sugerido, color: "#00ff88", lineWidth: 1, lineStyle: 3, title: "Alvo ATR" });
-    }
-  }
-
-  mainChart.timeScale().fitContent();
-
-  // ── RSI REAL ──────────────────────────────────────────────────
-  const rsiEl = document.getElementById("chartRSI");
-  rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
-
-  const rsiSeries = rsiChart.addLineSeries({
-    color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
-  });
-
-  // Usa dados historicos reais do indicators.js
-  const rsiHistData = (indicatorData.historico_rsi || []).slice(-period);
-  if (rsiHistData.length) {
-    rsiSeries.setData(rsiHistData.map(d => ({ time: d.date, value: d.value })));
-  }
-
-  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomp." });
-  rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
-  rsiSeries.createPriceLine({ price: 50, color: "#3a5570", lineWidth: 1, lineStyle: 2 });
-  rsiChart.timeScale().fitContent();
-
-  // ── MACD REAL ─────────────────────────────────────────────────
-  const macdEl = document.getElementById("chartMACD");
-  macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
-
-  const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
-  const signalSeries = macdChart.addLineSeries({ color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
-  const histSeries = macdChart.addHistogramSeries({ priceLineVisible: false, title: "Hist" });
-
-  const macdHistData = indicatorData.historico_macd || {};
-  const macdLineData = (macdHistData.macdLine || []).slice(-period);
-  const signalLineData = (macdHistData.signalLine || []).slice(-period);
-  const histData = (macdHistData.histogram || []).slice(-period);
-
-  if (macdLineData.length) macdSeries.setData(macdLineData.map(d => ({ time: d.date, value: d.value })));
-  if (signalLineData.length) signalSeries.setData(signalLineData.map(d => ({ time: d.date, value: d.value })));
-  if (histData.length) histSeries.setData(histData.map(d => ({
-    time: d.date, value: d.value,
-    color: d.value >= 0 ? "rgba(0,255,136,0.6)" : "rgba(255,51,85,0.6)"
-  })));
-
-  macdChart.timeScale().fitContent();
-
-  // Sincroniza zoom entre os 3 graficos
-  mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-    if (range) {
-      rsiChart.timeScale().setVisibleLogicalRange(range);
-      macdChart.timeScale().setVisibleLogicalRange(range);
-    }
-  });
-
-  document.getElementById("chartContainer").style.display = "block";
-}
-
-function setChartPeriod(period) {
-  ["btn30","btn60","btn90","btn200"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.color = "var(--dim)";
-  });
-  const map = {30:"btn30",60:"btn60",90:"btn90",200:"btn200"};
-  const el = document.getElementById(map[period]);
-  if (el) el.style.color = "var(--cyan)";
-  if (currentChartData) renderCharts(currentChartData, period);
-}
-
-</script>
-</head>
-<body>
-
-<div class="header">
-  <div style="display:flex;align-items:center;gap:11px;">
-    <div class="logo-box">AI</div>
-    <div>
-      <div class="logo-text">ANALYST<span>AI</span></div>
-      <div class="logo-sub">ANALISE DE INVESTIMENTOS - PERFIL MODERADO</div>
-    </div>
-  </div>
-  <div class="status"><div class="dot"></div><span>ONLINE</span></div>
-</div>
-
-<div class="ticker-wrap">
-  <div class="ticker-inner" id="tickerInner"></div>
-</div>
-
-<div class="main">
-  <div class="profile-bar">
-    <div><div class="pf-key">RISCO</div><div class="pf-val">Moderado</div></div>
-    <div><div class="pf-key">MERCADOS</div><div class="pf-val">B3 + NYSE/NASDAQ</div></div>
-    <div><div class="pf-key">HORIZONTE</div><div class="pf-val">Curto prazo</div></div>
-    <div><div class="pf-key">CAPITAL</div><div class="pf-val">R$5k-R$20k + aportes</div></div>
-    <div><div class="pf-key">META</div><div class="pf-val green">+8% ao mes</div></div>
-    <div><div class="pf-key">COTACOES</div><div class="pf-val green">Yahoo Finance OK</div></div>
-    <div id="benchCarteiraBar"><div class="pf-key">MINHA CARTEIRA</div><div class="pf-val" style="color:var(--dim)">---</div></div>
-    <div id="benchIBOV"><div class="pf-key">IBOV HOJE</div><div class="pf-val" style="color:var(--dim)">Carregando...</div></div>
-    <div id="benchCDI"><div class="pf-key">CDI MES</div><div class="pf-val" style="color:var(--dim)">Carregando...</div></div>
-  </div>
-
-  <div class="tabs">
-    <button class="tab active" onclick="showTab('analisar')">ANALISAR</button>
-    <button class="tab" onclick="showTab('radar')">RADAR</button>
-    <button class="tab" onclick="showTab('guru')">GURU</button>
-    <button class="tab" onclick="showTab('portfolio')">CARTEIRA</button>
-    <button class="tab" onclick="showTab('historico')">HISTORICO</button>
-    <button class="tab" onclick="showTab('config')">CONFIG</button>
-    <button class="tab" onclick="showTab('relatorio')">RELATORIO</button>
-  </div>
-
-  <!-- ANALISAR -->
-  <div id="tab-analisar">
-    <div style="display:flex;gap:10px;margin-bottom:8px;align-items:flex-end;flex-wrap:wrap;">
-      <div style="flex:1;min-width:200px;">
-        <div class="field-label cyan">TICKER DO ATIVO</div>
-        <input type="text" id="tickerInput" placeholder="ex: PETR4, VALE3, AAPL, NVDA, BLAU3" onkeydown="if(event.key==='Enter')analyze()"/>
-      </div>
-      <div style="width:180px;">
-        <div class="field-label yellow">PRECO MANUAL (opcional)</div>
-        <input type="number" id="manualPrice" placeholder="ex: 10.66" step="0.01"/>
-      </div>
-      <div style="align-self:flex-end;">
-        <button class="btn" id="btnAnalyze" onclick="analyze()">ANALISAR</button>
-      </div>
-    </div>
-    <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:16px;line-height:1.8;">
-      Cotacao automatica via Yahoo Finance. Se o preco estiver errado, informe no campo amarelo.
-    </div>
-    <div class="loading" id="loadA" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsA"></div></div>
-    <div class="error-box" id="errA" style="display:none;"></div>
-    <div id="resA" style="display:none;"></div>
-    <div id="chartContainer" style="display:none;margin-bottom:20px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
-        <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--cyan);">GRAFICO INTERATIVO</div>
-        <div style="display:flex;gap:6px;">
-          <button onclick="setChartPeriod(30)" id="btn30" class="btn-outline" style="padding:5px 12px;font-size:10px;">1M</button>
-          <button onclick="setChartPeriod(60)" id="btn60" class="btn-outline" style="padding:5px 12px;font-size:10px;">2M</button>
-          <button onclick="setChartPeriod(90)" id="btn90" class="btn-outline" style="padding:5px 12px;font-size:10px;">3M</button>
-          <button onclick="setChartPeriod(200)" id="btn200" class="btn-outline" style="padding:5px 12px;font-size:10px;">MAX</button>
-        </div>
-      </div>
-      <!-- Candlestick + Volume -->
-      <div id="chartMain" style="width:100%;height:380px;background:var(--card);border:1px solid var(--border);"></div>
-      <!-- RSI -->
-      <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;padding:6px 0 4px;">RSI PONDERADO</div>
-      <div id="chartRSI" style="width:100%;height:100px;background:var(--card);border:1px solid var(--border);"></div>
-      <!-- MACD -->
-      <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;padding:6px 0 4px;">MACD</div>
-      <div id="chartMACD" style="width:100%;height:100px;background:var(--card);border:1px solid var(--border);"></div>
-    </div>
-    <div id="emptyA" class="empty">DIGITE UM TICKER E PRESSIONE ANALISAR<br><span style="font-size:9px;margin-top:8px;display:block;color:var(--green)">B3 - NYSE/NASDAQ - FIIs - ETFs - BDRs</span></div>
-    <div class="loading" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:16px;" id="histRow"></div>
-  </div>
-
-  <!-- RADAR -->
-  <div id="tab-radar" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;flex-wrap:wrap;gap:10px;">
-      <div>
-        <div style="font-family:'Rajdhani',sans-serif;font-size:20px;font-weight:700;letter-spacing:2px;margin-bottom:4px;">RADAR DE OPORTUNIDADES</div>
-        <div style="font-family:monospace;font-size:10px;color:var(--dim);">Varre 100+ ativos com cotacoes reais - B3 + NYSE/NASDAQ + FIIs + ETFs</div>
-      </div>
-      <button class="btn" id="btnRadar" onclick="runRadar()">ESCANEAR MERCADO</button>
-    </div>
-    <div class="loading" id="loadR" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsR"></div></div>
-    <div class="error-box" id="errR" style="display:none;"></div>
-    <div id="resR" style="display:none;"></div>
-    <div id="emptyR" class="empty">CLIQUE EM ESCANEAR MERCADO PARA IDENTIFICAR AS MELHORES OPORTUNIDADES</div>
-  </div>
-
-  <!-- GURU -->
-  <div id="tab-guru" style="display:none;">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-      <div style="background:var(--card);border:1px solid var(--hi);padding:22px;">
-        <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:6px;">GURU INVESTIDOR</div>
-        <div style="font-family:monospace;font-size:10px;color:var(--dim);line-height:1.8;margin-bottom:16px;">Seu gestor pessoal. Decide o que comprar, quanto, quando vender.</div>
-        <div style="margin-bottom:12px;">
-          <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">NOVO APORTE (R$) — deixe 0 se nao vai aportar agora</div>
-          <input type="number" id="guruAporte" value="0" step="100"
-            oninput="atualizarInfoCapital()"
-            style="width:100%;background:var(--card);border:1px solid var(--hi);padding:10px 14px;outline:none;font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--green);"/>
-        </div>
-        <div id="guruCapitalInfo" style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:12px;padding:10px;background:var(--bg);border:1px solid var(--border);line-height:2;">
-          Carregando carteira...
-        </div>
-        <button class="btn" id="btnGuruMontar" onclick="guruMontar()" style="width:100%;margin-bottom:8px;">MONTAR MINHA CARTEIRA</button>
-        <button class="btn-outline" id="btnGuruBriefing" onclick="guruBriefing()" style="width:100%;">BRIEFING DO DIA</button>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--border);padding:22px;">
-        <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:600;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">COMO FUNCIONA</div>
-        <div style="font-family:monospace;font-size:10px;color:var(--sub);line-height:2.2;">
-          <div>1. Informe seu capital disponivel</div>
-          <div>2. Clique em MONTAR MINHA CARTEIRA</div>
-          <div>3. O Guru varra o mercado e monta o plano</div>
-          <div>4. Execute as ordens no BTG Pactual</div>
-          <div>5. Todo dia, clique em BRIEFING DO DIA</div>
-          <div>6. O Guru avisa quando agir</div>
-        </div>
-        <div style="margin-top:14px;padding:12px;background:rgba(255,204,0,.06);border:1px solid rgba(255,204,0,.2);">
-          <div style="font-family:monospace;font-size:8px;color:var(--yellow);letter-spacing:1px;margin-bottom:4px;">REGRAS DO GURU</div>
-          <div style="font-family:monospace;font-size:9px;color:var(--sub);line-height:1.8;">Max 6 ativos - 20% sempre em caixa<br>Max 25% por ativo - Score minimo 75<br>Stop loss obrigatorio em tudo</div>
-        </div>
-      </div>
-    </div>
-    <div class="loading" id="loadG" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsG"></div></div>
-    <div class="error-box" id="errG" style="display:none;"></div>
-    <div id="resG" style="display:none;"></div>
-    <div id="emptyG" class="empty">INFORME SEU CAPITAL E CLIQUE EM MONTAR MINHA CARTEIRA</div>
-  </div>
-
-  <!-- CARTEIRA -->
-  <div id="tab-portfolio" style="display:none;">
-    <!-- Benchmark card -->
-    <div id="benchmarkCarteira" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;"></div>
-    <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);margin-bottom:12px;">CADASTRAR POSICAO</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:16px;align-items:end;">
-      <div class="form-field"><label>TICKER</label><input type="text" id="pTicker" placeholder="PETR4"/></div>
-      <div class="form-field"><label>QTDE</label><input type="number" id="pQty" placeholder="100"/></div>
-      <div class="form-field"><label>PRECO MEDIO</label><input type="number" id="pPrice" placeholder="38.50" step="0.01"/></div>
-      <div class="form-field"><label>STOP LOSS</label><input type="number" id="pStop" placeholder="36.00" step="0.01"/></div>
-      <div class="form-field"><label>ALVO</label><input type="number" id="pTarget" placeholder="42.00" step="0.01"/></div>
-      <div class="form-field"><label>MERCADO</label><select id="pMarket"><option>B3</option><option>NYSE/NASDAQ</option></select></div>
-      <button class="btn" onclick="addPosition()" style="align-self:flex-end;">+ ADICIONAR</button>
-    </div>
-    <div id="portfolioContent"></div>
-  </div>
-
-  <!-- HISTORICO -->
-  <div id="tab-historico" style="display:none;">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-      <div style="background:var(--card);border:1px solid var(--hi);padding:20px;">
-        <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--cyan);">+ REGISTRAR OPERACAO</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-          <div class="form-field"><label>TICKER</label><input type="text" id="hTicker" placeholder="PETR4"/></div>
-          <div class="form-field"><label>SINAL DO GURU</label><select id="hSinal"><option>COMPRA</option><option>VENDA</option><option>AGUARDA</option></select></div>
-          <div class="form-field"><label>PRECO ENTRADA</label><input type="number" id="hEntrada" placeholder="38.50" step="0.01"/></div>
-          <div class="form-field"><label>QUANTIDADE</label><input type="number" id="hQty" placeholder="100"/></div>
-          <div class="form-field"><label>STOP LOSS</label><input type="number" id="hStop" placeholder="36.00" step="0.01"/></div>
-          <div class="form-field"><label>ALVO</label><input type="number" id="hAlvo" placeholder="42.00" step="0.01"/></div>
-          <div class="form-field"><label>SCORE DO GURU</label><input type="number" id="hScore" placeholder="78" min="0" max="100"/></div>
-          <div class="form-field"><label>DATA ENTRADA</label><input type="date" id="hDataEntrada"/></div>
-        </div>
-        <button class="btn" onclick="registrarOperacao()" style="width:100%;">+ REGISTRAR</button>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--hi);padding:20px;">
-        <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--green);">PERFORMANCE DO GURU</div>
-        <div id="perfSummary"></div>
-      </div>
-    </div>
-    <div id="historicoContent"></div>
-  </div>
-
-  <!-- CONFIG -->
-  <div id="tab-config" style="display:none;">
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
-
-      <!-- Telegram -->
-      <div style="background:var(--card);border:1px solid var(--hi);padding:22px;">
-        <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;margin-bottom:6px;color:var(--cyan);">TELEGRAM</div>
-        <div style="font-family:monospace;font-size:10px;color:var(--dim);line-height:1.8;margin-bottom:16px;">
-          Bot: @Atlaswealth_bot<br>
-          Alertas de stop, alvo, briefing e oportunidades.
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px;">
-          <button onclick="testarTelegram()" class="btn" style="width:100%;">TESTAR CONEXAO TELEGRAM</button>
-          <button onclick="verificarAlertas()" class="btn-outline" style="width:100%;">VERIFICAR ALERTAS AGORA</button>
-        </div>
-        <div style="margin-top:14px;padding:12px;background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.2);">
-          <div style="font-family:monospace;font-size:8px;color:var(--green);letter-spacing:1px;margin-bottom:6px;">ALERTAS AUTOMATICOS</div>
-          <div style="font-family:monospace;font-size:9px;color:var(--sub);line-height:2;">
-            A cada 30min (seg-sex 10h-18h)<br>
-            Stop loss atingido<br>
-            Alvo atingido<br>
-            Queda maior que 3% no dia<br>
-            Resumo a cada hora cheia
-          </div>
-        </div>
-      </div>
-
-      <!-- Perfil -->
-      <div style="background:var(--card);border:1px solid var(--hi);padding:22px;">
-        <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;letter-spacing:2px;margin-bottom:6px;color:var(--cyan);">PERFIL DO INVESTIDOR</div>
-        <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">
-          <div style="background:var(--bg);border:1px solid var(--border);padding:14px;">
-            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">RISCO</div>
-            <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--green);">Moderado</div>
-          </div>
-          <div style="background:var(--bg);border:1px solid var(--border);padding:14px;">
-            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">MERCADOS</div>
-            <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--green);">B3 + NYSE/NASDAQ</div>
-          </div>
-          <div style="background:var(--bg);border:1px solid var(--border);padding:14px;">
-            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">HORIZONTE</div>
-            <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--green);">Curto prazo</div>
-          </div>
-          <div style="background:var(--bg);border:1px solid var(--border);padding:14px;">
-            <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">OBJETIVO</div>
-            <div style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:var(--green);">Multiplicar Capital</div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- App Info -->
-    <div style="background:var(--card);border:1px solid var(--border);padding:20px;">
-      <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--cyan);">ATLAS WEALTH — INFORMACOES DO SISTEMA</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
-        <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">VERSAO</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--txt)">1.0.0</div></div>
-        <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">COTACOES</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--green)">Yahoo Finance</div></div>
-        <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">BANCO</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--green)">Upstash Redis</div></div>
-        <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">TELEGRAM</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--green)">Ativo</div></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- RELATORIO -->
-  <div id="tab-relatorio" style="display:none;">
-    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px;">
-      <div>
-        <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:4px;">RELATORIO MENSAL</div>
-        <div style="font-family:monospace;font-size:10px;color:var(--dim);">Analise completa da performance do ATLAS este mes</div>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <select id="relatorioMes" style="background:var(--card);border:1px solid var(--hi);color:var(--txt);padding:8px 14px;font-family:monospace;font-size:12px;outline:none;">
-        </select>
-        <button class="btn" onclick="gerarRelatorio()">GERAR RELATORIO</button>
-      </div>
-    </div>
-    <div class="loading" id="loadRelatorio" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsRelatorio"></div></div>
-    <div class="error-box" id="errRelatorio" style="display:none;"></div>
-    <div id="resultRelatorio" style="display:none;"></div>
-    <div id="emptyRelatorio" class="empty">
-      CLIQUE EM "GERAR RELATORIO" PARA VER A ANALISE COMPLETA DO MES<br>
-      <span style="font-size:9px;margin-top:8px;display:block;color:var(--green)">
-        Taxa de acerto - Resultado - Licoes - Estrategia - Nota do ATLAS
-      </span>
-    </div>
-  </div>
-
-  <div class="disclaimer">
-    DISCLAIMER: Ferramenta de apoio a decisao baseada em IA. Nao constitui recomendacao de investimento.
-    Rentabilidade passada nao garante resultados futuros. Renda variavel envolve risco de perda.
-    Consulte assessor certificado. Use stop loss sempre.
-  </div>
-</div>
-
-<script>
-// ─── ESTADO ───────────────────────────────────────────────────
-let historyArr = JSON.parse(localStorage.getItem("ai_history") || "[]");
-let operacoes = [];
-let portfolioQuotes = {};
-let benchmark = null;
-
-// Atalhos para compatibilidade com codigo existente
-function getCarteira() { return operacoes.filter(o => o.status === "ABERTA" || o.status === "PARCIAL"); }
-function getHistorico() { return operacoes.filter(o => o.status === "ENCERRADA"); }
-// portfolio e historico como aliases para compatibilidade
-Object.defineProperty(window, "portfolio", { get: () => getCarteira() });
-Object.defineProperty(window, "historico", { get: () => getHistorico() });
-
-// ─── TICKER STRIP ─────────────────────────────────────────────
-(function(){
-  // Inicia com placeholders
-  const items = ["PETR4","VALE3","ITUB4","BBAS3","WEGE3","AAPL","NVDA","MSFT","AMZN","META","TSLA","BBDC4","PRIO3","BPAC11","GOOGL","JPM"];
-  const html = [...items,...items].map(t => '<span style="margin:0 28px;color:var(--dim);font-family:monospace;font-size:10px;">@ '+t+'</span>').join("");
-  document.getElementById("tickerInner").innerHTML = html;
-
-  // Busca precos reais em background
-  async function updateTicker() {
+  if (REDIS_URL && REDIS_TOKEN) {
     try {
-      const r = await fetch("/api/tickers");
-      if (!r.ok) return;
-      const d = await r.json();
-      if (!d.tickers || !d.tickers.length) return;
-      const html = [...d.tickers, ...d.tickers].map(t => {
-        const color = t.up ? "var(--green)" : "var(--red)";
-        const arrow = t.up ? "+" : "";
-        return '<span style="margin:0 28px;font-family:monospace;font-size:10px;">'+
-          '<span style="color:var(--cyan);">'+t.ticker+'</span> '+
-          '<span style="color:var(--txt);">'+t.currency+t.price.toFixed(2)+'</span> '+
-          '<span style="color:'+color+';">'+arrow+t.change+'%</span>'+
-          '</span>';
-      }).join("");
-      document.getElementById("tickerInner").innerHTML = html;
-    } catch(e) {}
-  }
-
-  // Atualiza imediatamente e a cada 5 minutos
-  setTimeout(updateTicker, 2000);
-  setInterval(updateTicker, 5 * 60 * 1000);
-})();
-
-// ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
-function scorePrefiltro(ticker, quote) {
-  let score = 0;
-  const var_ = parseFloat(quote.change || 0);
-  const vol = quote.volume || 0;
-
-  // Momentum positivo forte
-  if (var_ > 5) score += 35;
-  else if (var_ > 3) score += 28;
-  else if (var_ > 1.5) score += 20;
-  else if (var_ > 0.5) score += 12;
-
-  // Pullback saudavel (possivel reversao)
-  if (var_ < -2 && var_ > -6) score += 22;
-  else if (var_ < -1 && var_ > -2) score += 10;
-
-  // Mercado prestando atencao (volatilidade)
-  if (Math.abs(var_) > 4) score += 15;
-  else if (Math.abs(var_) > 2) score += 8;
-
-  // Volume como confirmador (quando disponivel)
-  if (vol > 0) {
-    // Ativos B3 com volume alto
-    if (vol > 50000000) score += 15;
-    else if (vol > 20000000) score += 10;
-    else if (vol > 5000000) score += 5;
-  }
-
-  // Bonus para ativos com preco razoavel (mais liquidos)
-  const price = quote.price || 0;
-  if (price > 5 && price < 500) score += 5;
-
-  return score;
-}
-
-function selecionarCandidatos(tickers, quotes, n) {
-  // Calcula score rapido para todos os ativos com cotacao
-  const scored = tickers
-    .filter(t => quotes[t])
-    .map(t => ({ ticker: t, score: scorePrefiltro(t, quotes[t]) }))
-    .sort((a, b) => b.score - a.score);
-
-  // Retorna top N garantindo diversificacao B3 + EUA
-  const b3 = scored.filter(x => /^[A-Z]{4}[0-9]{1,2}$/.test(x.ticker)).slice(0, Math.ceil(n * 0.6));
-  const eua = scored.filter(x => !/^[A-Z]{4}[0-9]{1,2}$/.test(x.ticker) && !/11$/.test(x.ticker)).slice(0, Math.floor(n * 0.3));
-  const fiis = scored.filter(x => /11$/.test(x.ticker)).slice(0, Math.floor(n * 0.1));
-
-  return [...b3, ...eua, ...fiis]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, n)
-    .map(x => x.ticker);
-}
-
-// ─── BENCHMARK ────────────────────────────────────────────────
-async function updateBenchmarkCard() {
-  const totalInv = portfolio.reduce((a,p)=>(a+(parseFloat(p.qty)||0)*(parseFloat(p.price)||0)),0);
-  const totalAtual = portfolio.reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+(parseFloat(p.qty)||0)*(q?q.price:parseFloat(p.price)||0);},0);
-  const cartVar = totalInv > 0 ? ((totalAtual - totalInv) / totalInv * 100).toFixed(2) : "0.00";
-  const cartPL = (totalAtual - totalInv).toFixed(2);
-
-  // Calcula resultado do dia (vs fechamento de ontem)
-  const totalOntem = portfolio.reduce((a,p)=>{
-    const q = portfolioQuotes[p.ticker];
-    const prevClose = q && q.prevClose ? q.prevClose : (q ? q.price : parseFloat(p.price)||0);
-    return a + (parseFloat(p.qty)||0) * prevClose;
-  }, 0);
-  const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
-  const plDia = (totalAtual - totalOntem).toFixed(2);
-
-  // Atualiza barra de perfil
-  const barEl = document.getElementById("benchCarteiraBar");
-  if (barEl && totalInv > 0) {
-    const cTotal = parseFloat(cartVar) >= 0 ? "var(--green)" : "var(--red)";
-    const cDia = parseFloat(varDia) >= 0 ? "var(--green)" : "var(--red)";
-    barEl.innerHTML = '<div class="pf-key">MINHA CARTEIRA</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+cTotal+'">'+
-      (parseFloat(cartVar)>=0?"+":"")+cartVar+'% total</div>'
-      +'<div style="font-family:monospace;font-size:9px;color:'+cDia+'">'+
-      (parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div>';
-  }
-
-  const benchEl = document.getElementById("benchmarkCarteira");
-  if (!benchEl || !benchmark) return;
-  const ibovMes = parseFloat(benchmark.ibovespa.var_mes).toFixed(2);
-  const ibovDia = parseFloat(benchmark.ibovespa.var_dia).toFixed(2);
-  const cdiMes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
-  const items = [
-    ["SUA CARTEIRA", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", (parseFloat(varDia)>=0?"+":"")+varDia+"% hoje"],
-    ["IBOVESPA", (parseFloat(ibovMes)>=0?"+":"")+ibovMes+"% mes", parseFloat(ibovMes)>=0?"var(--green)":"var(--red)", (parseFloat(ibovDia)>=0?"+":"")+ibovDia+"% hoje"],
-    ["CDI", "+"+cdiMes+"% mes", "var(--yellow)", "+"+parseFloat(benchmark.cdi.var_dia).toFixed(4)+"% hoje"],
-  ];
-  benchEl.innerHTML = items.map(([k,v,c,sub])=>
-    '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
-    '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
-    '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:2px;">'+sub+'</div>'+
-    '</div>'
-  ).join("");
-}
-
-async function fetchBenchmark() {
-  try {
-    const r = await fetch("/api/benchmark");
-    if (!r.ok) return;
-    benchmark = await r.json();
-    updateProfileBar();
-    updateBenchmarkCard();
-  } catch(e) {}
-}
-
-function updateProfileBar() {
-  if (!benchmark) return;
-  const ibovEl = document.getElementById("benchIBOV");
-  const cdiEl = document.getElementById("benchCDI");
-  if (ibovEl) {
-    const v = parseFloat(benchmark.ibovespa.var_dia).toFixed(2);
-    const c = parseFloat(v) >= 0 ? "var(--green)" : "var(--red)";
-    ibovEl.innerHTML = '<span style="color:var(--dim);font-size:8px;">IBOV HOJE</span><br>'
-      +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+c+'">'
-      +(parseFloat(v)>=0?"+":"")+v+'%</span>';
-  }
-  if (cdiEl) {
-    const mes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
-    // CDI acumulado real do ano: calcula meses decorridos desde jan/1
-    const agora = new Date();
-    const diasAno = Math.floor((agora - new Date(agora.getFullYear(),0,1)) / (1000*60*60*24));
-    const cdiDia = benchmark.cdi.var_dia || 0.0405;
-    const anoReal = parseFloat(((Math.pow(1 + cdiDia/100, diasAno) - 1) * 100).toFixed(2));
-    cdiEl.innerHTML = '<span style="color:var(--dim);font-size:8px;">CDI ACUMULADO</span><br>'
-      +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--yellow)">+'
-      +mes+'% mes</span><br>'
-      +'<span style="font-family:monospace;font-size:9px;color:var(--dim)">+'
-      +anoReal+'% no ano (jan-hoje)</span>';
-  }
-}
-
-// Busca benchmark ao carregar
-setTimeout(fetchBenchmark, 3000);
-setInterval(fetchBenchmark, 30 * 60 * 1000); // atualiza a cada 30 min
-
-// ─── TABS ─────────────────────────────────────────────────────
-function showTab(name) {
-  ["analisar","radar","guru","portfolio","historico","config","relatorio"].forEach(t => {
-    document.getElementById("tab-"+t).style.display = t===name ? "" : "none";
-  });
-  document.querySelectorAll(".tab").forEach((el,i) => {
-    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","config","relatorio"][i]===name);
-  });
-  if (name === "relatorio") renderRelatorioTab();
-  if (name === "historico") renderHistorico();
-  if (name === "portfolio") {
-    renderPortfolio();
-    loadPortfolio();
-    // Busca cotacoes e depois atualiza benchmark
-    atualizarCotacoesCarteira().then(() => updateBenchmarkCard());
-  }
-}
-
-// ─── API ──────────────────────────────────────────────────────
-async function fetchQuote(ticker) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    const r = await fetch("/api/quote?ticker="+ticker, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!r.ok) return null;
-    return await r.json();
-  } catch(e) { return null; }
-}
-
-async function callClaude(prompt) {
-  const r = await fetch("/api/analyze", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
-  });
-  if (!r.ok) {
-    const err = await r.text();
-    throw new Error("API "+r.status+": "+err);
-  }
-  const d = await r.json();
-  if (d.error) throw new Error(d.error);
-  const text = d.text || "";
-  const i = text.indexOf("{");
-  const j = text.lastIndexOf("}");
-  if (i === -1) throw new Error("JSON nao encontrado: "+text.slice(0,200));
-  return JSON.parse(text.slice(i, j+1));
-}
-
-// ─── CLOUD DB ─────────────────────────────────────────────────
-// ─── OPERACOES — API unificada ────────────────────────────────
-async function apiOperacoes(method, body) {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 12000);
-    const opts = { method, headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" }, signal: controller.signal };
-    if (body) opts.body = JSON.stringify(body);
-    const r = await fetch("/api/operacoes", opts);
-    clearTimeout(timer);
-    if (!r.ok) throw new Error("HTTP "+r.status);
-    return await r.json();
-  } catch(e) { console.log("apiOperacoes erro:", e.message); return null; }
-}
-
-async function loadOperacoes() {
-  const local = JSON.parse(localStorage.getItem("operacoes_v1") || "[]");
-  if (local.length > 0) { operacoes = local; renderPortfolio(); renderHistorico(); }
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    const d = await apiOperacoes("GET");
-    if (d !== null) {
-      if (d.operacoes && d.operacoes.length >= operacoes.length) {
-        operacoes = d.operacoes;
-        localStorage.setItem("operacoes_v1", JSON.stringify(operacoes));
-        renderPortfolio(); renderHistorico();
+      const rr = await fetch(`${REDIS_URL}/get/ind_${ticker}`, {
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+      });
+      const rd = await rr.json();
+      if (rd.result) {
+        const cached = JSON.parse(rd.result);
+        cached._from_cache = true;
+        return res.status(200).json(cached);
       }
-      return;
-    }
-    if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
-  }
-}
-
-async function abrirOperacao(dados) {
-  const d = await apiOperacoes("POST", { acao: "ABRIR", ...dados });
-  if (d && d.ok) { operacoes.push(d.operacao); localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); renderHistorico(); }
-  return d;
-}
-
-async function venderOperacao(id, quantidade, preco, motivo) {
-  const d = await apiOperacoes("POST", { acao: "VENDER", id, quantidade, preco, motivo });
-  if (d && d.ok) { const idx = operacoes.findIndex(o=>o.id===id); if(idx>=0) operacoes[idx]=d.operacao; localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); renderHistorico(); }
-  return d;
-}
-
-async function reforcarOperacao(id, quantidade, preco) {
-  const d = await apiOperacoes("POST", { acao: "REFORCAR", id, quantidade, preco });
-  if (d && d.ok) { const idx = operacoes.findIndex(o=>o.id===id); if(idx>=0) operacoes[idx]=d.operacao; localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); }
-  return d;
-}
-
-async function editarOperacao(id, campos) {
-  const d = await apiOperacoes("POST", { acao: "EDITAR", id, ...campos });
-  if (d && d.ok) { const idx = operacoes.findIndex(o=>o.id===id); if(idx>=0) operacoes[idx]=d.operacao; localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); }
-  return d;
-}
-
-async function deletarOperacao(id) {
-  if (!confirm("Deletar esta operação?")) return;
-  const d = await apiOperacoes("DELETE", { id });
-  if (d && d.ok) { operacoes = operacoes.filter(o=>o.id!==id); localStorage.setItem("operacoes_v1", JSON.stringify(operacoes)); renderPortfolio(); renderHistorico(); }
-  return d;
-}
-
-// ─── INFO CAPITAL GURU ────────────────────────────────────────
-function atualizarInfoCapital() {
-  const infoEl = document.getElementById("guruCapitalInfo");
-  if (!infoEl) return;
-
-  const aporte = parseFloat(document.getElementById("guruAporte")?.value) || 0;
-
-  // Valor atual da carteira com cotacoes reais
-  const valorCarteira = portfolio.reduce((a,p)=>{
-    const q = portfolioQuotes[p.ticker];
-    const preco = q ? q.price : parseFloat(p.price)||0;
-    return a + (parseFloat(p.qty)||0) * preco;
-  }, 0);
-
-  // Capital total = carteira atual + aporte
-  const total = valorCarteira + aporte;
-
-  // Reserva obrigatoria = 20% do total
-  const reserva = total * 0.2;
-
-  // Caixa livre = total - investido - reserva
-  const caixaLivre = Math.max(0, total - valorCarteira - reserva);
-
-  if (!portfolio.length) {
-    infoEl.innerHTML = "Carteira vazia - o ATLAS vai montar do zero.<br>"
-      + "Informe o capital inicial no campo acima.";
-    return;
-  }
-
-  infoEl.innerHTML =
-    "Carteira atual: <span style='color:var(--blue)'>R$ "+valorCarteira.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
-    + "Novo aporte: <span style='color:var(--green)'>R$ "+aporte.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
-    + "Reserva (20%): <span style='color:var(--yellow)'>R$ "+reserva.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
-    + "Caixa livre para investir: <span style='color:var(--green);font-weight:700'>R$ "+caixaLivre.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span><br>"
-    + "Capital total: <span style='color:var(--cyan);font-weight:700'>R$ "+total.toLocaleString("pt-BR",{minimumFractionDigits:2})+"</span>";
-}
-
-// ─── INDICADORES MATEMATICOS ──────────────────────────────────
-async function fetchIndicators(ticker) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const r = await fetch("/api/indicators?ticker="+ticker, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!r.ok) return null;
-    return await r.json();
-  } catch(e) {
-    console.log("Indicators error:", e.message);
-    return null;
-  }
-}
-
-function buildIndicatorsContext(ind) {
-  if (!ind) return "INDICADORES: nao disponivel";
-  const i = ind.indicadores;
-  const conf = ind.confluencia;
-  const kelly = ind.kelly_criterion;
-  const candle = ind.candle_pattern;
-  return "=== INDICADORES MATEMATICOS CALCULADOS (200 dias de historico real) ===\n"
-    + "TENDENCIA: "+ind.tendencia+"\n"
-    + "\n--- SCORE DE CONFLUENCIA ---\n"
-    + "CONFLUENCIA: "+conf?.score+"/100 | Direcao: "+conf?.direcao+"\n"
-    + "Pontos ALTA: "+conf?.pontos_alta+" | Pontos BAIXA: "+conf?.pontos_baixa+"\n"
-    + "Sinais confirmadores: "+conf?.sinais_confirmadores?.join(", ")+"\n"
-    + "Sinais negativos: "+conf?.sinais_negativos?.join(", ")+"\n"
-    + "\n--- RSI MULTI-PERIODO ---\n"
-    + "RSI(5): "+i.rsi.rsi5+" | RSI(9): "+i.rsi.rsi9+" | RSI(14): "+i.rsi.rsi14+"\n"
-    + "RSI PONDERADO (5d=40%,9d=35%,14d=25%): "+i.rsi.rsi_ponderado+" - "+i.rsi.zona+"\n"
-    + "\n--- MACD (12,26,9) ---\n"
-    + "MACD: "+i.macd?.macd+" | Signal: "+i.macd?.signal+" | Histograma: "+i.macd?.histogram+"\n"
-    + "Tendencia: "+i.macd?.trend+" | Cruzamento: "+i.macd?.crossover+" | Acelerando: "+i.macd?.acelerando+"\n"
-    + "\n--- MEDIAS MOVEIS ---\n"
-    + "MM9="+i.medias.mm9+" | MM21="+i.medias.mm21+" | MM50="+i.medias.mm50+" | MM200="+i.medias.mm200+"\n"
-    + "EMA9="+i.medias.ema9+" | EMA21="+i.medias.ema21+"\n"
-    + "Acima MM50: "+i.medias.acimaMM50+" | Acima MM200: "+i.medias.acimaMM200+"\n"
-    + "\n--- BOLLINGER BANDS (20,2) ---\n"
-    + "Superior="+i.bollinger?.upper+" | Medio="+i.bollinger?.middle+" | Inferior="+i.bollinger?.lower+"\n"
-    + "%B="+i.bollinger?.pctB+" | Bandwidth="+i.bollinger?.bandwidth+"% | Posicao: "+i.bollinger?.position+"\n"
-    + "Squeeze (volatilidade comprimida): "+i.bollinger?.squeeze+"\n"
-    + "\n--- VWAP (Fluxo Institucional) ---\n"
-    + "VWAP(20d)="+i.vwap?.vwap+" | Diferenca: "+i.vwap?.diferenca_pct+"% | Sinal: "+i.vwap?.sinal+"\n"
-    + "\n--- ATR E VOLUME ---\n"
-    + "ATR(14): "+i.atr+" ("+ind.gestao_risco.atr_pct+"% do preco)\n"
-    + "Volume: Atual="+i.volume?.atual?.toLocaleString()+" | Media20="+i.volume?.media20?.toLocaleString()+" | Ratio="+i.volume?.ratio+"x | Status: "+i.volume?.status+"\n"
-    + "\n--- PADROES DE CANDLESTICK ---\n"
-    + "Padrao detectado: "+candle?.pattern+" | Bias: "+candle?.bias+" | Confianca: "+candle?.confianca+"%\n"
-    + "\n--- SUPORTE E RESISTENCIA ---\n"
-    + "Suporte: "+ind.suporte_resistencia.suporte+" ("+ind.suporte_resistencia.distSuport+"% abaixo)\n"
-    + "Resistencia: "+ind.suporte_resistencia.resistencia+" ("+ind.suporte_resistencia.distResist+"% acima)\n"
-    + "R/R Natural: 1:"+ind.suporte_resistencia.rr_natural+"\n"
-    + "\n--- KELLY CRITERION (Tamanho Otimo da Posicao) ---\n"
-    + "Kelly completo: "+kelly?.kelly_completo+"% | Half Kelly (recomendado): "+kelly?.half_kelly+"%\n"
-    + "Classificacao: "+kelly?.explicacao+"\n"
-    + "\n--- GESTAO DE RISCO ---\n"
-    + "Stop matematico (2x ATR): "+ind.gestao_risco.stop_sugerido+"\n"
-    + "Alvo matematico (3x ATR): "+ind.gestao_risco.alvo_sugerido+"\n"
-    + "Tamanho de posicao recomendado: "+ind.gestao_risco.tamanho_posicao_recomendado+"\n"
-    + "\nUSE TODOS ESSES DADOS como base da analise. Nao estime - use os numeros reais.";
-}
-
-// ─── COTACOES DA CARTEIRA ─────────────────────────────────────
-async function atualizarCotacoesCarteira() {
-  const carteira = getCarteira();
-  if (!carteira.length) return;
-  const results = await Promise.all(
-    carteira.map(async p => {
-      const q = await fetchQuote(p.ticker);
-      return { ticker: p.ticker, quote: q };
-    })
-  );
-  results.forEach(r => {
-    if (r.quote) portfolioQuotes[r.ticker] = r.quote;
-  });
-  renderPortfolio();
-  updateBenchmarkCard();
-}
-
-// ─── TELEGRAM ────────────────────────────────────────────────
-async function sendTelegram(type, data) {
-  try {
-    await fetch("/api/telegram", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type, data }),
-    });
-  } catch(e) {
-    console.log("Telegram erro:", e.message);
-  }
-}
-
-async function testarTelegram() {
-  await sendTelegram("TESTE", {});
-}
-
-// Verifica stops e alvos e notifica via Telegram
-async function verificarAlertas() {
-  const carteira = getCarteira();
-  if (!carteira.length) return;
-  for (const p of carteira) {
-    const quote = await fetchQuote(p.ticker);
-    if (!quote) continue;
-    const atual = quote.price;
-    const stopNum = p.stop_loss || null;
-    const alvoNum = p.alvo || null;
-    if (stopNum && atual <= stopNum) {
-      await sendTelegram("STOP_ATINGIDO", {
-        ticker: p.ticker,
-        preco: quote.currency + atual.toFixed(2),
-        stop: p.stop_loss ? "R$"+p.stop_loss : "--",
-      });
-    } else if (alvoNum && atual >= alvoNum) {
-      await sendTelegram("ALVO_ATINGIDO", {
-        ticker: p.ticker,
-        preco: quote.currency + atual.toFixed(2),
-        alvo: p.alvo ? "R$"+p.alvo : "--",
-        lucro: "+" + (((atual - p.preco_medio) / p.preco_medio) * 100).toFixed(2) + "%",
-      });
+    } catch(e) {
+      // Cache miss — calcula ao vivo
     }
   }
-}
 
-// Aliases de compatibilidade
-async function loadPortfolio() { await loadOperacoes(); }
-async function savePortfolio() { /* incluido em abrirOperacao/venderOperacao */ }
-async function loadHistoricoFn() { /* incluido em loadOperacoes */ }
-
-// ─── HELPERS ──────────────────────────────────────────────────
-const sigCol = s => s==="COMPRA"?"var(--green)":s==="VENDA"?"var(--red)":"var(--yellow)";
-const numCol = n => n>=75?"var(--green)":n>=60?"#88ff44":n>=40?"var(--yellow)":"var(--red)";
-const bar = (v,c) => '<div class="bar-wrap"><div class="bar-fill" style="width:'+Math.min(100,v)+'%;background:linear-gradient(90deg,'+c+',var(--cyan))"></div></div>';
-const kv = (l,v,c) => '<div class="kv"><span class="kv-label">'+l+'</span><span class="kv-val" style="color:'+(c||"var(--txt)")+'">'+String(v||"--")+'</span></div>';
-const sec = l => '<div class="sec"><span class="sec-label">'+l+'</span><div class="sec-line"></div></div>';
-const steps = (arr,cur) => arr.map((s,i) => '<div style="color:'+(i<cur?"var(--dim)":i===cur?"var(--green)":"var(--border)")+'">'+( i<cur?"v":i===cur?">":".")+" "+s+'</div>').join("");
-
-// ─── RENDER ANALISE ───────────────────────────────────────────
-function renderResult(d, quote, indicators) {
-  const sig = d.sinal||"AGUARDA";
-  const sigC = sigCol(sig);
-  const cons = d.sis ? Object.values(d.sis).filter(s=>s.v===sig).length : 0;
-  const travOk = d.trav ? Object.values(d.trav).filter(Boolean).length : 0;
-  const SIS = {tec:"TECNICO",pa:"PRICE ACTION",fun:"FUNDAMENTOS",mac:"MACRO",not:"NOTICIAS"};
-  const TRAV = {rr:"RISCO\nRETORNO",vol:"VOLUME",rsi:"RSI",idx:"TEND\nINDICE",evt:"SEM\nEVENTO",conc:"CONCENTR",atr:"VOLATIL"};
-
-  let qBadge = "";
-  if (quote) {
-    const up = parseFloat(quote.change) >= 0;
-    const isMan = quote.source === "Manual";
-    qBadge = '<div style="display:inline-flex;align-items:center;gap:16px;padding:10px 18px;background:var(--card);margin-bottom:14px;border:1px solid '+(isMan?"rgba(255,204,0,.3)":"rgba(0,255,136,.3)")+'">'
-      +'<div><div style="font-family:monospace;font-size:8px;color:'+(isMan?"var(--yellow)":"var(--green)")+'">'+(isMan?"PRECO MANUAL":"COTACAO REAL - "+quote.source)+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:var(--blue)">'+quote.currency+" "+quote.price.toFixed(2)+'</div></div>'
-      +'<div><div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+(up?"var(--green)":"var(--red)")+'">'+(up?"+":"")+quote.change+'%</div><div style="font-family:monospace;font-size:8px;color:var(--dim)">HOJE</div></div>'
-      +'<div><div style="font-family:monospace;font-size:9px;color:var(--dim)">MAX '+quote.currency+(quote.high||0).toFixed(2)+'</div>'
-      +'<div style="font-family:monospace;font-size:9px;color:var(--dim)">MIN '+quote.currency+(quote.low||0).toFixed(2)+'</div>'
-      +'<div style="font-family:monospace;font-size:9px;color:var(--dim)">ANT '+quote.currency+(quote.prevClose||0).toFixed(2)+'</div></div></div>';
-  }
-
-  const hero = '<div style="display:grid;grid-template-columns:1fr 170px 1fr;gap:10px;margin-bottom:10px;animation:fadeUp .4s ease">'
-    +'<div style="background:var(--card);border:1px solid var(--hi);border-top:2px solid '+sigC+';padding:22px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:30px;font-weight:700;letter-spacing:2px">'+d.ticker+'</div>'
-    +'<div style="font-size:12px;color:var(--sub);margin-bottom:14px">'+d.nome+' - '+d.setor+' - '+d.mercado+'</div>'
-    +'<div style="display:inline-flex;align-items:center;gap:10px;padding:10px 18px;font-family:Rajdhani,sans-serif;font-size:24px;font-weight:700;letter-spacing:3px;color:'+sigC+';background:'+sigC+'15;border:1px solid '+sigC+'44">'+sig+'</div>'
-    +'<div style="margin-top:10px;font-family:monospace;font-size:9px;color:var(--dim)">CONSENSO '+cons+'/5 - '+travOk+'/7 TRAVAS OK</div>'
-    +(d.variacao_hoje?'<div style="margin-top:6px;font-family:monospace;font-size:9px;color:'+(String(d.variacao_hoje).startsWith("-")?"var(--red)":"var(--green)")+'">HOJE: '+d.variacao_hoje+'</div>':"")
-    +'</div>'
-    +'<div style="background:var(--card);border:1px solid var(--hi);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:18px;">'
-    +'<div style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:2px">SCORE</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:52px;font-weight:700;color:'+numCol(d.score)+';line-height:1">'+d.score+'</div>'
-    +'<div style="font-family:monospace;font-size:9px;color:var(--sub)">/100</div>'
-    +bar(d.score,numCol(d.score))
-    +'<div style="font-family:monospace;font-size:8px;color:var(--dim);text-align:center;margin-top:4px">FORCA '+d.forca+'/10 - '+d.confianca+'% CONF.</div>'
-    +'<div>'+[...Array(10)].map((_,i)=>'<span style="color:'+(i<d.forca?numCol(d.score):"var(--border)")+'">|</span>').join("")+'</div>'
-    +'</div>'
-    +'<div style="background:var(--card);border:1px solid var(--hi);padding:18px;">'
-    +kv("PRECO REAL",d.preco,"var(--blue)")
-    +kv("ALVO 30D",d.alvo30,"var(--green)")
-    +kv("ALVO 60D",d.alvo60,"var(--green)")
-    +kv("STOP LOSS",d.stop,"var(--red)")
-    +kv("UPSIDE 30D",d.up30,"var(--green)")
-    +kv("DOWNSIDE",d.downside,"var(--red)")
-    +kv("RISCO/RETORNO",d.rr,"var(--yellow)")
-    +'<div class="kv"><span class="kv-label">ALOCACAO MAX</span><span class="kv-val">'+String(d.aloc||"--")+'</span></div>'
-    +'</div></div>';
-
-  const sis = sec("5 SISTEMAS DE CONFIRMACAO")
-    +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;">'
-    +(d.sis?Object.entries(d.sis).map(([k,s])=>{const vc=sigCol(s.v);return '<div style="background:var(--card);border:1px solid var(--border);border-bottom:2px solid '+vc+';padding:12px 8px;text-align:center;">'
-      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:5px">'+(SIS[k]||k)+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;color:'+vc+';margin-bottom:3px">'+s.v+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+numCol(s.s)+'">'+s.s+'</div>'
-      +'<div style="font-size:9px;color:var(--sub);margin-top:5px;line-height:1.4">'+String(s.r||"")+'</div></div>';}).join(""):"")
-    +'</div>';
-
-  const trav = sec("7 TRAVAS DE SEGURANCA")
-    +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:10px;">'
-    +(d.trav?Object.entries(d.trav).map(([k,ok])=>'<div style="background:var(--card);border:1px solid '+(ok?"rgba(0,255,136,.25)":"rgba(255,51,85,.25)")+';padding:10px 6px;text-align:center;">'
-      +'<div style="font-size:16px;margin-bottom:4px">'+(ok?"OK":"X")+'</div>'
-      +'<div style="font-family:monospace;font-size:7px;color:var(--dim);line-height:1.4;white-space:pre-wrap">'+(TRAV[k]||k)+'</div></div>').join(""):"")
-    +'</div>';
-
-  const temp = sec("PREVISAO TEMPORAL DE VALORIZACAO")
-    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">'
-    +(d.prev||[]).map(p=>'<div style="background:var(--card);border:1px solid var(--border);padding:16px;">'
-      +'<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:5px">'+p.d+' DIAS</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:'+(String(p.u).startsWith("-")?"var(--red)":"var(--green)")+'">'+p.u+'</div>'
-      +'<div style="font-family:monospace;font-size:10px;color:var(--sub);margin-bottom:8px">Alvo: '+p.a+'</div>'
-      +bar(p.c,"var(--green)")
-      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:4px">Conf: '+p.c+'%</div></div>').join("")
-    +'</div>';
-
-  const tecFun = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'
-    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:12px">ANALISE TECNICA</div>'
-    +(d.tec?[["TENDENCIA",d.tec.tend],["RSI",d.tec.rsi],["MACD",d.tec.macd],["MEDIAS",d.tec.mm],["BOLLINGER",d.tec.bol],["VOLUME",d.tec.volume],["SUPORTE",d.tec.sup],["RESISTENCIA",d.tec.res],["CANDLE",d.tec.candle]].map(([k,v])=>'<div style="display:flex;justify-content:space-between;gap:6px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;font-size:11px;"><span style="font-family:monospace;font-size:8px;color:var(--dim);min-width:75px;margin-top:2px">'+k+'</span><span style="color:var(--sub);text-align:right">'+String(v||"--")+'</span></div>').join(""):"")
-    +'</div>'
-    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:12px">FUNDAMENTALISTA</div>'
-    +(d.fun?'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px;">'
-      +[["VALUATION",d.fun.val],["P/L",d.fun.pl],["ROE",d.fun.roe],["DY",d.fun.dy]].map(([k,v])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:8px 10px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">'+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:600;color:'+(k==="VALUATION"&&v==="Barato"?"var(--green)":k==="VALUATION"&&v==="Caro"?"var(--red)":"var(--txt)")+'">'+String(v||"--")+'</div></div>').join("")
-      +'</div>'
-      +[["MARGEM",d.fun.mg],["DIV/EBITDA",d.fun.div],["CRESCIMENTO",d.fun.cr],["MOAT",d.fun.moat]].map(([k,v])=>'<div style="display:flex;justify-content:space-between;gap:6px;border-bottom:1px solid var(--border);padding-bottom:6px;margin-bottom:6px;font-size:11px;"><span style="font-family:monospace;font-size:8px;color:var(--dim);min-width:75px;margin-top:2px">'+k+'</span><span style="color:var(--sub);text-align:right">'+String(v||"--")+'</span></div>').join(""):"")
-    +'</div></div>';
-
-  const catRis = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'
-    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px">CATALISADORES</div>'
-    +(d.cat||[]).map(c=>'<div style="display:flex;gap:8px;font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:7px"><span style="color:var(--green);font-weight:700">&gt;</span>'+c+'</div>').join("")
-    +'</div>'
-    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px">RISCOS</div>'
-    +(d.ris||[]).map(r=>'<div style="display:flex;gap:8px;font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:7px"><span style="color:var(--red)">!</span>'+r+'</div>').join("")
-    +'</div></div>';
-
-  const cen = sec("CENARIOS DE PROBABILIDADE")
-    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">'
-    +(d.cen?[["oti","OTIMISTA","var(--green)"],["bas","BASE","var(--blue)"],["pes","PESSIMISTA","var(--red)"]].map(([k,lbl,col])=>'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:'+col+';margin-bottom:6px">'+lbl+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:'+col+';margin-bottom:8px">'+String(d.cen[k]&&d.cen[k].p||0)+'%</div>'
-      +'<div style="font-size:11px;color:var(--sub);line-height:1.5">'+String(d.cen[k]&&d.cen[k].d||"")+'</div></div>').join(""):"")
-    +'</div>';
-
-  const said = sec("GESTAO DE SAIDA")
-    +'<div style="background:var(--card);border:1px solid var(--hi);padding:20px;margin-bottom:10px;">'
-    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;">'
-    +(d.said?[["SAIDA PARCIAL 50%",d.said.p50,"var(--green)"],["SAIDA TOTAL 100%",d.said.tot,"var(--cyan)"],["STOP LOSS",d.said.stop,"var(--red)"],["EMERGENCIA",d.said.eme,"var(--yellow)"]].map(([t,a,c])=>'<div style="border-left:2px solid '+c+';padding-left:12px;">'
-      +'<div style="font-family:monospace;font-size:8px;color:'+c+';letter-spacing:1px;margin-bottom:5px">'+t+'</div>'
-      +'<div style="font-size:11px;color:var(--sub);line-height:1.5">'+String(a||"--")+'</div></div>').join(""):"")
-    +'</div></div>';
-
-  const prof = '<div style="padding:14px 18px;margin-bottom:10px;background:'+(d.ok?"rgba(0,255,136,.06)":"rgba(255,51,85,.06)")+';border:1px solid '+(d.ok?"rgba(0,255,136,.3)":"rgba(255,51,85,.3)")+'">'
-    +'<div style="font-family:monospace;font-size:9px;color:'+(d.ok?"var(--green)":"var(--red)")+';letter-spacing:1px;margin-bottom:6px">'+(d.ok?"OK - ADEQUADO AO SEU PERFIL":"ATENCAO - FORA DO PERFIL")+'</div>'
-    +'<div style="font-size:12px;color:var(--sub);line-height:1.6">'+String(d.just||"")+'</div></div>';
-
-  // Indicadores matematicos card
-  const indCard = indicators ? (function() {
-    const i = indicators.indicadores;
-    const conf = indicators.confluencia;
-    const candle = indicators.candle_pattern;
-    const kelly = indicators.kelly_criterion;
-    const confColor = conf?.score >= 65 ? "var(--green)" : conf?.score >= 50 ? "var(--yellow)" : "var(--red)";
-    return '<div style="background:var(--card);border:1px solid var(--hi);padding:20px;margin-bottom:10px;">'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:14px;">INDICADORES MATEMATICOS CALCULADOS</div>'+
-
-    // Score de confluencia
-    '<div style="background:var(--bg);border:1px solid '+confColor+'44;padding:12px;margin-bottom:12px;display:grid;grid-template-columns:120px 1fr 1fr;">'+
-    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">SCORE CONFLUENCIA</div>'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:32px;font-weight:700;color:'+confColor+'">'+conf?.score+'</div>'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:13px;color:'+confColor+'">'+conf?.direcao+'</div></div>'+
-    '<div><div style="font-family:monospace;font-size:8px;color:var(--green);margin-bottom:6px;">CONFIRMADORES</div>'+
-    (conf?.sinais_confirmadores||[]).map(s=>'<div style="font-size:9px;color:var(--green);margin-bottom:2px;">> '+s+'</div>').join("")+'</div>'+
-    '<div><div style="font-family:monospace;font-size:8px;color:var(--red);margin-bottom:6px;">NEGATIVOS</div>'+
-    (conf?.sinais_negativos||[]).map(s=>'<div style="font-size:9px;color:var(--red);margin-bottom:2px;">x '+s+'</div>').join("")+'</div>'+
-    '</div>'+
-
-    // Grid indicadores
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'+
-    [
-      ["RSI PONDERADO", i.rsi.rsi_ponderado, i.rsi.zona==="SOBRECOMPRADO"?"var(--red)":i.rsi.zona==="SOBREVENDIDO"?"var(--green)":"var(--yellow)"],
-      ["TENDENCIA", indicators.tendencia, indicators.tendencia.includes("ALTA")?"var(--green)":indicators.tendencia.includes("BAIXA")?"var(--red)":"var(--yellow)"],
-      ["VWAP", i.vwap?.sinal?.replace(/_/g," "), i.vwap?.acima?"var(--green)":"var(--red)"],
-      ["VOLUME", i.volume?.status, i.volume?.status==="EXPLOSIVO"||i.volume?.status==="MUITO_ACIMA"?"var(--green)":i.volume?.status==="ABAIXO"?"var(--red)":"var(--dim)"],
-      ["MACD", i.macd?.crossover==="NENHUM"?i.macd?.trend:i.macd?.crossover?.replace(/_/g," "), i.macd?.trend==="ALTA"?"var(--green)":"var(--red)"],
-      ["BOLLINGER", i.bollinger?.position?.replace(/_/g," "), i.bollinger?.position==="DENTRO_DAS_BANDAS"?"var(--green)":"var(--yellow)"],
-      ["CANDLE", candle?.pattern?.replace(/_/g," "), candle?.bias==="ALTA"?"var(--green)":candle?.bias==="BAIXA"?"var(--red)":"var(--dim)"],
-      ["ACIMA MM50", i.medias.acimaMM50?"SIM":"NAO", i.medias.acimaMM50?"var(--green)":"var(--red)"],
-    ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'+
-      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
-      '<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+c+'">'+String(v||"--")+'</div></div>'
-    ).join("")+'</div>'+
-
-    // Medias e gestao de risco
-    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px;">'+
-    [
-      ["MM9", i.medias.mm9,"var(--sub)"],["MM21", i.medias.mm21,"var(--sub)"],
-      ["MM50", i.medias.mm50,"var(--sub)"],["MM200", i.medias.mm200,"var(--sub)"],
-      ["SUPORTE", indicators.suporte_resistencia.suporte,"var(--green)"],
-      ["RESISTENCIA", indicators.suporte_resistencia.resistencia,"var(--red)"],
-      ["STOP ATR", indicators.gestao_risco.stop_sugerido,"var(--red)"],
-      ["ALVO ATR", indicators.gestao_risco.alvo_sugerido,"var(--green)"],
-    ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'+
-      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
-      '<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:600;color:'+c+'">'+String(v||"--")+'</div></div>'
-    ).join("")+'</div>'+
-
-    // Kelly Criterion
-    '<div style="background:rgba(255,204,0,.05);border:1px solid rgba(255,204,0,.2);padding:12px;display:grid;grid-template-columns:1fr 1fr 1fr;">'+
-    '<div><div style="font-family:monospace;font-size:8px;color:var(--yellow);margin-bottom:4px;">KELLY CRITERION</div>'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--yellow)">'+kelly?.half_kelly+'%</div>'+
-    '<div style="font-family:monospace;font-size:8px;color:var(--dim)">do capital (half kelly)</div></div>'+
-    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">CLASSIFICACAO</div>'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:13px;color:var(--yellow)">'+String(kelly?.explicacao||"--").replace(/_/g," ")+'</div></div>'+
-    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">R/R NATURAL</div>'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:13px;color:var(--txt)">1:'+indicators.suporte_resistencia.rr_natural+'</div>'+
-    '<div style="font-size:9px;color:var(--dim)">suporte/resistencia</div></div>'+
-    '</div></div>';
-  })() : "";
-
-  const res = '<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:20px;margin-bottom:20px;font-size:13px;color:var(--sub);line-height:1.8;font-style:italic;">'
-    +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;font-style:normal">RESUMO EXECUTIVO</div>'
-    +'"'+String(d.res||"")+'"\n</div>';
-
-  return qBadge + hero + sis + trav + temp + indCard + tecFun + catRis + cen + said + prof + res;
-}
-
-// ─── PROMPTS ──────────────────────────────────────────────────
-function buildAnalyzePrompt(ticker, quote, manualPrice, indicators) {
-  const pi = manualPrice
-    ? "PRECO ATUAL (manual): "+(quote&&quote.currency||"R$")+" "+manualPrice
-    : quote
-      ? "PRECO REAL (Yahoo Finance): "+quote.currency+" "+quote.price+" | Variacao hoje: "+quote.change+"% | Max: "+quote.high+" | Min: "+quote.low+" | Vol: "+(quote.volume||0).toLocaleString()+" | Fech.ant.: "+quote.prevClose
-      : "PRECO: nao disponivel - use conhecimento mais recente";
-
-  return "Voce e ATLAS, o gestor quantitativo de elite do ATLAS WEALTH. Seu unico objetivo e maximizar o retorno mensal do investidor.\n\nPERFIL DO INVESTIDOR:\n- Capital: R$5.000 a R$20.000 + aportes mensais crescentes\n- Objetivo: RETORNO MENSAL MAXIMO - meta de +8% ao mes\n- Horizonte por operacao: 5 a 20 dias (swing trade agressivo)\n- Estrategia: girar capital rapidamente, realizar lucro, reinvestir\n- Mercados: B3 + NYSE/NASDAQ\n- Corretora: BTG Pactual\n- Perfil: aceita risco calculado para maximizar retorno\n- NAO e investidor de longo prazo - quer resultado este mes\n\nATIVO: "+ticker+"\n"+pi+"\nMERCADO: "+(quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"))+"\n\nCRITERIOS DE ANALISE (em ordem de prioridade):\n1. MOMENTUM - o ativo esta em movimento agora? Volume acima da media?\n2. CATALISADOR - ha evento proximo que pode impulsionar o preco nos proximos 5-20 dias?\n3. TECNICO - RSI, MACD, rompimento de resistencia, price action favoravel\n4. RISCO/RETORNO - minimo 1:2, ideal 1:3 ou mais\n5. FUNDAMENTALISTA - saude da empresa como suporte\n6. MACRO - setor e indice favoraveis\n\nCALCULOS OBRIGATORIOS com o preco real:\n- Alvo 7 dias: preco realista para swing de curto prazo\n- Alvo 15 dias: objetivo principal da operacao\n- Stop loss: maximo 5% abaixo da entrada\n- Upside minimo aceitavel: 8% em ate 15 dias\n- Risco/retorno minimo: 1:2\n\n7 TRAVAS DE SEGURANCA:\nrisco/retorno>=1:2, volume acima media, RSI entre 30-70, tendencia do indice favoravel, sem evento de risco iminente, alocacao max 20% por ativo, volatilidade dentro do normal\n\nSCORE (baseado em potencial de retorno nos proximos 15 dias):\n<40=VENDA | 40-59=AGUARDA | 60-74=COMPRA MODERADA | 75-89=COMPRA FORTE | 90+=COMPRA MAXIMA\n\nRetorne APENAS JSON sem texto extra:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo30\":\"\",\"alvo60\":\"\",\"stop\":\"\",\"up30\":\"\",\"up60\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54},{\"d\":60,\"a\":\"\",\"u\":\"\",\"c\":44}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"val\":\"\",\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"div\":\"\",\"cr\":\"\",\"dy\":\"\",\"moat\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"said\":{\"p50\":\"\",\"tot\":\"\",\"stop\":\"\",\"eme\":\"\"},\"aloc\":\"\",\"ok\":true,\"just\":\"\",\"res\":\"\"}";
-}
-
-function buildRadarPrompt(tickers, quotes, indicadoresRadar) {
-  const info = tickers.slice(0,80).map(t=>{const q=quotes[t];return q?t+"("+q.currency+q.price+","+q.change+"%hoje)":t;}).join(",");
-
-  // Adiciona indicadores dos top candidatos
-  const indInfo = Object.entries(indicadoresRadar||{}).map(([t, ind]) => {
-    const conf = ind.confluencia;
-    const candle = ind.candle_pattern;
-    const vwap = ind.indicadores?.vwap;
-    return t+": CONFLUENCIA="+conf?.score+"/"+conf?.direcao
-      +"|RSI_POND="+ind.indicadores?.rsi?.rsi_ponderado
-      +"|MACD="+ind.indicadores?.macd?.trend+(ind.indicadores?.macd?.crossover!=="NENHUM"?"("+ind.indicadores?.macd?.crossover+")":"")
-      +"|VWAP="+vwap?.sinal
-      +"|VOLUME="+ind.indicadores?.volume?.status
-      +"|CANDLE="+candle?.pattern+"("+candle?.bias+")"
-      +"|STOP_ATR="+ind.gestao_risco?.stop_sugerido
-      +"|ALVO_ATR="+ind.gestao_risco?.alvo_sugerido
-      +"|KELLY="+ind.kelly_criterion?.half_kelly+"%";
-  }).join(" | ");
-
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: identificar as melhores oportunidades de RETORNO MAXIMO nos proximos 5 a 15 dias.\n\nPERFIL: Investidor agressivo de curto prazo, meta +8% ao mes, gira capital rapidamente, B3+NYSE/NASDAQ, capital R$5k-20k.\n\nATIVOS COM PRECOS REAIS:\n"+info+"\n\nINDICADORES MATEMATICOS (top candidatos):\n"+indInfo+"\n\nCRITERIOS DE SELECAO (rigorosos):\n1. CONFLUENCIA alta (score >60) - multiplos sistemas confirmando\n2. MOMENTUM FORTE - subindo com volume acima da media AGORA\n3. VWAP favoravel - institucional comprando\n4. CATALISADOR IMINENTE - resultado, evento nos proximos 15 dias\n5. SETUP TECNICO - rompimento, pullback, candle de reversao\n6. UPSIDE MINIMO 8% em ate 15 dias | STOP MAXIMO 5%\n7. RISCO/RETORNO minimo 1:2, preferir 1:3\n\nSelecione TOP 8. Para ativos com indicadores matematicos disponíveis, USE OS DADOS REAIS para calcular alvos e stops.\nListe os ativos a EVITAR com motivo claro.\n\nRetorne APENAS JSON:\n{\"macro\":\"\",\"ops\":[{\"rank\":1,\"ticker\":\"\",\"nome\":\"\",\"mkt\":\"\",\"score\":80,\"up\":\"\",\"prazo\":\"\",\"ref\":\"\",\"stop\":\"\",\"alvo\":\"\",\"razao\":\"\",\"cat\":\"\",\"risco\":\"\"}],\"evitar\":[\"\"]}";
-}
-
-function buildGuruPrompt(quotes, cap, indicadoresGuru) {
-  const info = Object.entries(quotes).slice(0,60).map(([t,q])=>t+":"+q.currency+q.price+"("+q.change+"%)").join(",");
-  const temCarteira = portfolio.length > 0;
-  const capitalInvestido = portfolio.reduce((a,p)=>{
-    const q = quotes[p.ticker];
-    const precoAtual = q ? q.price : parseFloat(p.price)||0;
-    return a + (parseFloat(p.qty)||0) * precoAtual;
-  }, 0);
-  const reserva = cap * 0.2;
-  const caixaDisponivel = Math.max(0, cap - capitalInvestido - reserva);
-  const modo = temCarteira ? "REBALANCEAMENTO" : "MONTAGEM_INICIAL";
-
-  const posicoes = temCarteira ? portfolio.map(p => {
-    const q = quotes[p.ticker];
-    const atual = q ? q.price : parseFloat(p.price)||0;
-    const entrada = parseFloat(p.price)||0;
-    const qty = parseFloat(p.qty)||0;
-    const pl = entrada > 0 ? (((atual - entrada) / entrada) * 100).toFixed(2) : "0";
-    const valorAtual = (qty * atual).toFixed(2);
-    const stopN = p.stop ? parseFloat(String(p.stop).replace(/[^0-9.]/g,"")) : null;
-    const alvoN = p.target ? parseFloat(String(p.target).replace(/[^0-9.]/g,"")) : null;
-    const dStop = stopN && atual ? (((atual - stopN) / atual) * 100).toFixed(2) : "?";
-    const dAlvo = alvoN && atual ? (((alvoN - atual) / atual) * 100).toFixed(2) : "?";
-    return p.ticker+":entrada=R$"+entrada+",atual=R$"+atual.toFixed(2)+",qty="+qty+",valor=R$"+valorAtual+",PL="+pl+"%,stop="+(p.stop||"nao definido")+",alvo="+(p.target||"nao definido")+",dist_stop="+dStop+"%,dist_alvo="+dAlvo+"%";
-  }).join(" | ") : "Nenhuma posicao aberta";
-
-  const instrucoes = temCarteira
-    ? "MODO REBALANCEAMENTO - ja tenho posicoes abertas.\nPARA CADA POSICAO DECIDA:\n- MANTER: posicao saudavel, longe do stop, caminhando para o alvo\n- VENDER: atingiu alvo, proximo do stop (<2%), ou ha oportunidade muito melhor\n- REFORCAR: posicao vencedora com espaco para mais\n\nDepois, com o CAIXA LIVRE de R$"+caixaDisponivel.toFixed(2)+", sugira NOVAS ENTRADAS apenas se houver oportunidades com upside >8% em 15 dias e R/R >1:2. Se nao houver, mantenha o caixa. NAO force entradas."
-    : "MODO MONTAGEM INICIAL - carteira vazia.\nSelecione 5-6 ativos com maior potencial nos proximos 15 dias.\nCapital para investir: R$"+caixaDisponivel.toFixed(2);
-
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Missao: MAXIMIZAR RETORNO DESTE MES.\n\nCAPITAL TOTAL: R$"+cap+"\nCAPITAL INVESTIDO: R$"+capitalInvestido.toFixed(2)+"\nCAIXA LIVRE: R$"+caixaDisponivel.toFixed(2)+"\nRESERVA (20%): R$"+reserva.toFixed(2)+"\nMETA: +8% ao mes | Swing trade 5-20 dias | BTG Pactual\n\nPOSICOES ATUAIS:\n"+posicoes+"\n\nMERCADO HOJE: "+info+"\n\n"+instrucoes+("\n\nINDICADORES MATEMATICOS DOS CANDIDATOS:\n"
-    + Object.entries(indicadoresGuru||{}).map(([t,ind])=>{
-        const conf = ind.confluencia;
-        const candle = ind.candle_pattern;
-        return t+": CONFLUENCIA="+conf?.score+"/"+conf?.direcao
-          +"|RSI="+ind.indicadores?.rsi?.rsi_ponderado
-          +"|MACD="+ind.indicadores?.macd?.trend
-          +"|VWAP="+ind.indicadores?.vwap?.sinal
-          +"|CANDLE="+candle?.pattern+"("+candle?.bias+")"
-          +"|KELLY="+ind.kelly_criterion?.half_kelly+"%"
-          +"|STOP_ATR="+ind.gestao_risco?.stop_sugerido
-          +"|ALVO_ATR="+ind.gestao_risco?.alvo_sugerido;
-      }).join(" | ")
-    )+"\n\nREGRAS: max 6 ativos, 20% caixa intocavel, max 20% por ativo, stop max 5%, R/R min 1:2, linguagem simples. USE OS INDICADORES MATEMATICOS para calcular stops e alvos quando disponíveis.\n\nRetorne APENAS JSON:\n{\"resumo_mercado\":\"\",\"humor_mercado\":\"FAVORAVEL\",\"capital_total\":"+cap+",\"capital_investido\":"+capitalInvestido.toFixed(2)+",\"caixa_disponivel\":"+caixaDisponivel.toFixed(2)+",\"reserva_caixa\":"+reserva.toFixed(2)+",\"modo\":\""+modo+"\",\"posicoes_atuais\":[{\"ticker\":\"\",\"acao\":\"MANTER\",\"motivo\":\"\",\"pl_atual\":\"\",\"recomendacao_saida\":\"\"}],\"acoes_imediatas\":[{\"prioridade\":1,\"acao\":\"COMPRAR\",\"ticker\":\"\",\"nome\":\"\",\"motivo\":\"\",\"valor_recomendado\":0,\"percentual_carteira\":\"0%\",\"preco_entrada\":\"\",\"stop_loss\":\"\",\"alvo_30d\":\"\",\"upside\":\"\",\"risco_retorno\":\"1:2\",\"urgencia\":\"ALTA\"}],\"alocacao_ideal\":[{\"ticker\":\"\",\"nome\":\"\",\"setor\":\"\",\"valor\":0,\"percentual\":\"0%\",\"motivo\":\"\"}],\"nao_fazer_agora\":[\"\"],\"proxima_revisao\":\"\",\"mensagem_guru\":\"\"}";
-}
-
-
-function buildBriefingPrompt(quotes, cap) {
-  const hoje = Object.entries(quotes).slice(0,30).map(([t,q])=>t+":"+q.change+"%").join(",");
-  const pos = portfolio.length>0?portfolio.map(p=>{
-    const q=quotes[p.ticker];const atual=q?q.price:null;
-    const v=atual?(((atual-p.price)/p.price)*100).toFixed(2):"?";
-    const sn=p.stop?parseFloat(String(p.stop).replace("R$","").replace(",",".")):null;
-    const an=p.target?parseFloat(String(p.target).replace("R$","").replace(",",".")):null;
-    return p.ticker+":entrada="+p.price+",atual="+(atual||"?")+",var="+v+"%,stop="+(p.stop||"?")+",alvo="+(p.target||"?")+",STOP_ATING="+(atual&&sn&&atual<=sn)+",ALVO_ATING="+(atual&&an&&atual>=an);
-  }).join(" | "):"Sem posicoes abertas";
-  return "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Faca o briefing diario focado em MAXIMIZAR O RETORNO DO MES.\n\nCARTEIRA: "+pos+"\nCAPITAL TOTAL: R$"+cap+"\nMETA DO MES: +8% = R$"+(cap*0.08).toFixed(2)+"\nMERCADO HOJE: "+hoje+"\n\nPARA CADA POSICAO ANALISE:\n1. Esta perto do stop? Risco de perda?\n2. Esta perto do alvo? Hora de realizar?\n3. Deveria reforcar a posicao?\n4. Ha motivo para sair antes do alvo?\n\nIDENTIFIQUE:\n- Oportunidade do dia com maior potencial de retorno rapido\n- Ativos da carteira que devem ser vendidos hoje\n- Proxima entrada recomendada quando houver caixa disponivel\n\nLinguagem direta e objetiva. Foco em ACAO - o que fazer AGORA.\n\nRetorne APENAS JSON:\n{\"situacao_carteira\":\"VERDE\",\"resumo\":\"\",\"alertas\":[{\"tipo\":\"INFO\",\"ticker\":\"\",\"mensagem\":\"\",\"acao_recomendada\":\"\"}],\"posicoes\":[{\"ticker\":\"\",\"status\":\"LUCRO\",\"variacao_hoje\":\"0%\",\"variacao_desde_entrada\":\"0%\",\"distancia_stop\":\"\",\"distancia_alvo\":\"\",\"recomendacao\":\"MANTER\"}],\"oportunidade_do_dia\":{\"ticker\":\"\",\"motivo\":\"\",\"acao\":\"\"},\"mensagem_guru\":\"\"}";
-}
-
-// ─── ANALISAR ─────────────────────────────────────────────────
-const STEPS_A = ["Buscando cotacao...","Carregando fundamentos...","Calculando indicadores...","Analisando price action...","Contexto macro...","Catalisadores...","5 sistemas...","7 travas...","Previsao temporal...","Gerando sinal..."];
-
-async function analyze(tickerOverride) {
-  const ticker = (tickerOverride || document.getElementById("tickerInput").value).trim().toUpperCase();
-  if (!ticker) return;
-  const mp = parseFloat(document.getElementById("manualPrice").value) || null;
-  document.getElementById("emptyA").style.display = "none";
-  document.getElementById("errA").style.display = "none";
-  document.getElementById("resA").style.display = "none";
-  document.getElementById("loadA").style.display = "flex";
-  document.getElementById("btnAnalyze").disabled = true;
-
-  let si = 0;
-  const iv = setInterval(() => { if(si<STEPS_A.length-1){si++;document.getElementById("stepsA").innerHTML=steps(STEPS_A,si);} }, 400);
-  document.getElementById("stepsA").innerHTML = steps(STEPS_A, 0);
+  // ── CALCULO AO VIVO (fallback) ─────────────────────────────
+  const isB3 = /^[A-Z]{4}[0-9]{1,2}$/.test(ticker) && !ticker.includes("-");
+  const sym = isB3 ? `${ticker}.SA` : ticker;
 
   try {
-    // Busca cotacao e indicadores em paralelo
-    const [quoteRaw, indicators] = await Promise.all([
-      fetchQuote(ticker),
-      fetchIndicators(ticker)
-    ]);
-    let quote = quoteRaw;
-    if (mp) quote = { price:mp, change:quote&&quote.change||"0.00", high:quote&&quote.high||mp, low:quote&&quote.low||mp, volume:quote&&quote.volume||0, prevClose:quote&&quote.prevClose||mp, market:quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"), currency:quote&&quote.currency||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"R$":"US$"), name:quote&&quote.name||ticker, source:"Manual" };
-    const data = await callClaude(buildAnalyzePrompt(ticker, quote, mp, indicators));
-    historyArr = [ticker, ...historyArr.filter(x=>x!==ticker)].slice(0,8);
-    localStorage.setItem("ai_history", JSON.stringify(historyArr));
-    renderHistory();
-    clearInterval(iv);
-    document.getElementById("loadA").style.display = "none";
-    document.getElementById("resA").innerHTML = renderResult(data, quote, indicators);
-    document.getElementById("resA").style.display = "block";
-    // Renderiza graficos se tiver dados de indicadores
-    if (indicators && indicators.historico_recente) {
-      setTimeout(() => renderCharts(indicators, 60), 300);
-      setChartPeriod(60);
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=200d`,
+      { headers: { "Accept": "application/json", "User-Agent": "Mozilla/5.0" } }
+    );
+    if (!r.ok) throw new Error(`Yahoo Finance error: ${r.status}`);
+    const data = await r.json();
+    const result = data?.chart?.result?.[0];
+    if (!result) throw new Error("No data returned");
+
+    const meta = result.meta;
+    const timestamps = result.timestamp || [];
+    const q0 = result.indicators?.quote?.[0] || {};
+    const closes = q0.close || [];
+    const highs = q0.high || [];
+    const lows = q0.low || [];
+    const opens = q0.open || [];
+    const volumes = q0.volume || [];
+
+    const validData = timestamps.map((t, i) => ({
+      date: new Date(t * 1000).toISOString().split("T")[0],
+      open: opens[i], close: closes[i],
+      high: highs[i], low: lows[i], volume: volumes[i],
+    })).filter(d => d.close != null);
+
+    const c = validData.map(d => d.close);
+    const h = validData.map(d => d.high);
+    const l = validData.map(d => d.low);
+    const o = validData.map(d => d.open);
+    const v = validData.map(d => d.volume);
+    const n = c.length;
+
+    function calcRSI(prices, period = 14) {
+      if (prices.length < period + 1) return null;
+      let gains = 0, losses = 0;
+      for (let i = 1; i <= period; i++) {
+        const diff = prices[i] - prices[i - 1];
+        if (diff > 0) gains += diff; else losses += Math.abs(diff);
+      }
+      let ag = gains / period, al = losses / period;
+      for (let i = period + 1; i < prices.length; i++) {
+        const diff = prices[i] - prices[i - 1];
+        ag = (ag * (period - 1) + (diff > 0 ? diff : 0)) / period;
+        al = (al * (period - 1) + (diff < 0 ? Math.abs(diff) : 0)) / period;
+      }
+      if (al === 0) return 100;
+      return parseFloat((100 - 100 / (1 + ag / al)).toFixed(2));
     }
-  } catch(e) {
-    clearInterval(iv);
-    document.getElementById("loadA").style.display = "none";
-    document.getElementById("errA").textContent = "ERRO: "+e.message;
-    document.getElementById("errA").style.display = "block";
-  }
-  document.getElementById("btnAnalyze").disabled = false;
-}
 
-function renderHistory() {
-  const histDiv = document.getElementById("histRow");
-  if (!histDiv) return;
-  histDiv.style.display = historyArr.length ? "flex" : "none";
-  histDiv.innerHTML = historyArr.map(h=>'<div style="padding:5px 12px;background:var(--card);border:1px solid var(--border);font-family:monospace;font-size:10px;color:var(--sub);cursor:pointer;" onclick="document.getElementById(\'tickerInput\').value=\''+h+'\';analyze(\''+h+'\')">'+h+'</div>').join("");
-}
-renderHistory();
-
-// ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
-function scorePrefiltro(ticker, quote) {
-  if (!quote) return 0;
-  let score = 0;
-  const var_ = parseFloat(quote.change || 0);
-  const isB3 = /^[A-Z]{4}[0-9]{1,2}$/.test(ticker);
-
-  // 1. Momentum positivo forte
-  if (var_ > 5) score += 35;
-  else if (var_ > 3) score += 28;
-  else if (var_ > 1.5) score += 20;
-  else if (var_ > 0.5) score += 12;
-
-  // 2. Pullback saudavel (possivel reversao)
-  // Ativos caindo -2% a -5% podem estar em suporte
-  if (var_ < -2 && var_ > -5) score += 22;
-  else if (var_ < -1 && var_ > -2) score += 10;
-
-  // 3. Mercado prestando atencao (volatilidade)
-  if (Math.abs(var_) > 4) score += 15;
-  else if (Math.abs(var_) > 2) score += 8;
-
-  // 4. Bonus por tipo de ativo
-  // FIIs e ETFs - mais estabilidade
-  if (/11$/.test(ticker)) score += 5;
-  // BDRs - exposicao internacional
-  if (/34$/.test(ticker)) score += 5;
-
-  // 5. Bonus para ativos da carteira atual
-  if (portfolio.some(p => p.ticker === ticker)) score += 30;
-
-  return score;
-}
-
-function selecionarCandidatos(tickers, quotes, maxCandidatos = 30) {
-  // Calcula score para todos e ordena
-  const scored = tickers
-    .filter(t => quotes[t])
-    .map(t => ({ ticker: t, score: scorePrefiltro(t, quotes[t]), quote: quotes[t] }))
-    .sort((a, b) => b.score - a.score);
-
-  // Garante diversificacao: max 40% de um mesmo mercado
-  const result = [];
-  const b3Count = { count: 0, max: Math.ceil(maxCandidatos * 0.6) };
-  const usaCount = { count: 0, max: Math.ceil(maxCandidatos * 0.5) };
-
-  for (const item of scored) {
-    if (result.length >= maxCandidatos) break;
-    const isB3 = /^[A-Z]{4}[0-9]{1,2}$/.test(item.ticker);
-    if (isB3 && b3Count.count >= b3Count.max) continue;
-    if (!isB3 && usaCount.count >= usaCount.max) continue;
-    result.push(item.ticker);
-    if (isB3) b3Count.count++; else usaCount.count++;
-  }
-
-  // Sempre inclui ativos da carteira
-  portfolio.forEach(p => {
-    if (!result.includes(p.ticker)) result.unshift(p.ticker);
-  });
-
-  return [...new Set(result)].slice(0, maxCandidatos);
-}
-
-// ─── RADAR ────────────────────────────────────────────────────
-const RADAR_TICKERS = ["PETR4","VALE3","ITUB4","BBDC4","WEGE3","RENT3","BBAS3","ABEV3","ELET3","SUZB3","CSAN3","PRIO3","VBBR3","BRFS3","JBSS3","CMIG4","CPFE3","EGIE3","ENGI11","TAEE11","TIMS3","VIVT3","AZUL4","EMBR3","RADL3","HAPV3","RDOR3","HYPE3","LREN3","MGLU3","EQTL3","BPAC11","ITSA4","SANB11","KLBN11","CYRE3","MRVE3","PETZ3","BLAU3","INTER3","CRFB3","ASAI3","KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","BTLG11","KNCR11","AAPL","MSFT","GOOGL","AMZN","META","NVDA","JPM","V","MA","AVGO","MRK","ABBV","AMD","ADBE","CRM","MCD","BAC","DDOG","NET","CRWD","PANW","COIN","UBER","SPY","QQQ","GLD"];
-const STEPS_R = ["Iniciando scanner...","Buscando cotacoes B3...","Buscando cotacoes NYSE/NASDAQ...","Score de pre-filtro (100+ ativos)...","Indicadores matematicos (top 30)...","Score de confluencia...","ATLAS gerando relatorio..."];
-
-async function runRadar() {
-  document.getElementById("emptyR").style.display = "none";
-  document.getElementById("errR").style.display = "none";
-  document.getElementById("resR").style.display = "none";
-  document.getElementById("loadR").style.display = "flex";
-  document.getElementById("btnRadar").disabled = true;
-  let si = 0;
-  document.getElementById("stepsR").innerHTML = steps(STEPS_R, 0);
-
-  const quotes = {};
-  for (let i = 0; i < RADAR_TICKERS.length; i += 8) {
-    si = i < 35 ? 1 : 2;
-    document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
-    await Promise.all(RADAR_TICKERS.slice(i, i+8).map(async t => { const q=await fetchQuote(t); if(q) quotes[t]=q; }));
-  }
-  si = 3; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
-
-  // NIVEL 1: Score de pre-filtro para todos os ativos
-  si = 3; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
-  const top30 = selecionarCandidatos(RADAR_TICKERS, quotes, 30);
-  console.log("Top 30 selecionados:", top30);
-
-  // NIVEL 2: Indicadores matematicos dos top 30 em paralelo
-  si = 4; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
-  const indicadoresRadar = {};
-  await Promise.all(top30.map(async t => {
-    const ind = await fetchIndicators(t);
-    if (ind) indicadoresRadar[t] = ind;
-  }));
-
-  // Enriquece quotes com score de confluencia real
-  top30.forEach(t => {
-    if (indicadoresRadar[t] && quotes[t]) {
-      quotes[t].confluencia = indicadoresRadar[t].confluencia?.score;
-      quotes[t].sinal_tecnico = indicadoresRadar[t].confluencia?.direcao;
+    function calcEMA(prices, period) {
+      if (prices.length < period) return null;
+      const k = 2 / (period + 1);
+      let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+      for (let i = period; i < prices.length; i++) ema = prices[i] * k + ema * (1 - k);
+      return parseFloat(ema.toFixed(4));
     }
-  });
 
-  si = 5; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
-
-  try {
-    const data = await callClaude(buildRadarPrompt(RADAR_TICKERS, quotes, indicadoresRadar));
-    document.getElementById("loadR").style.display = "none";
-    document.getElementById("resR").innerHTML = renderRadar(data, quotes, indicadoresRadar);
-    document.getElementById("resR").style.display = "block";
-  } catch(e) {
-    document.getElementById("loadR").style.display = "none";
-    document.getElementById("errR").textContent = "ERRO: "+e.message;
-    document.getElementById("errR").style.display = "block";
-  }
-  document.getElementById("btnRadar").disabled = false;
-}
-
-function renderRadar(data, quotes) {
-  const macro = '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;margin-bottom:16px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.8;"><span style="color:var(--cyan);margin-right:8px">MACRO:</span>'+String(data.macro||"")+'</div>';
-  const ops = sec("TOP OPORTUNIDADES COM COTACAO REAL")
-    +(data.ops||[]).map(op=>{const q=quotes[op.ticker];return '<div style="background:var(--card);border:1px solid var(--border);padding:14px 18px;display:grid;grid-template-columns:60px 170px 1fr 100px 130px 120px;align-items:center;gap:14px;cursor:pointer;margin-bottom:6px;" onclick="showTab(\'analisar\');document.getElementById(\'tickerInput\').value=\''+op.ticker+'\';analyze(\''+op.ticker+'\')">'
-      +'<div style="text-align:center"><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+(op.rank===1?"var(--yellow)":"var(--dim)")+'">#'+op.rank+'</div><div style="font-family:monospace;font-size:8px;color:var(--dim)">SCORE '+op.score+'</div></div>'
-      +'<div><div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:var(--green)">'+op.ticker+'</div>'
-      +'<div style="font-size:10px;color:var(--dim);font-family:monospace">'+String(op.nome||"")+'</div>'
-      +'<div style="font-size:9px;color:var(--dim);margin-top:2px">'+String(op.mkt||"")+" - "+String(op.prazo||"")+'</div>'
-      +(q?'<div style="font-size:9px;color:var(--blue);margin-top:3px;font-family:monospace">'+q.currency+q.price.toFixed(2)+' <span style="color:'+(parseFloat(q.change)>=0?"var(--green)":"var(--red)")+'">'+(parseFloat(q.change)>=0?"+":"")+q.change+'%</span></div>':"")+'</div>'
-      +'<div style="font-size:11px;color:var(--sub);line-height:1.4">'+String(op.razao||"")+'</div>'
-      +'<div style="text-align:center"><div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--green)">'+String(op.up||"")+'</div><div style="font-family:monospace;font-size:8px;color:var(--dim)">UPSIDE</div></div>'
-      +'<div style="display:flex;flex-direction:column;gap:3px;font-size:11px;">'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--blue)">REAL </span>'+(q?q.currency+q.price.toFixed(2):String(op.ref||"--"))+'</div>'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--green)">ALVO </span>'+String(op.alvo||"--")+'</div>'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--red)">STOP </span>'+String(op.stop||"--")+'</div></div>'
-      +'<button style="background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);color:var(--green);padding:8px 14px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">VER ANALISE</button></div>';}).join("");
-  const ev = data.evitar&&data.evitar.length?'<div style="background:rgba(255,51,85,.04);border:1px solid rgba(255,51,85,.25);padding:18px;margin-top:16px;">'+sec("EVITAR AGORA")+data.evitar.map(x=>'<div style="font-family:monospace;font-size:10px;color:var(--sub);display:flex;gap:8px;margin-bottom:5px;"><span style="color:var(--red)">X</span>'+x+'</div>').join("")+'</div>':"";
-  return macro+ops+ev;
-}
-
-// ─── GURU ─────────────────────────────────────────────────────
-const GURU_TICKERS = ["PETR4","VALE3","ITUB4","BBDC4","WEGE3","RENT3","BBAS3","ABEV3","ELET3","SUZB3","CSAN3","PRIO3","VBBR3","BRFS3","JBSS3","CMIG4","EGIE3","ENGI11","TAEE11","TIMS3","VIVT3","AZUL4","EMBR3","RADL3","HAPV3","RDOR3","HYPE3","LREN3","MGLU3","EQTL3","BPAC11","ITSA4","SANB11","KLBN11","CYRE3","MRVE3","PETZ3","BLAU3","INTER3","CRFB3","KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","KNCR11","AAPL","MSFT","GOOGL","AMZN","META","NVDA","JPM","V","MA","AVGO","MRK","ABBV","AMD","ADBE","CRM","MCD","BAC","DDOG","NET","CRWD","PANW","COIN","UBER","SPY","QQQ"];
-const STEPS_G = ["Analisando mercado...","Varrendo B3...","Varrendo NYSE/NASDAQ...","Selecionando melhores...","Calculando alocacao...","Definindo stops e alvos...","Montando plano..."];
-const STEPS_B = ["Verificando posicoes...","Analisando mercado...","Checando stops e alvos...","Identificando oportunidades...","Preparando briefing..."];
-
-function renderGuruResult(d) {
-  const hc = d.humor_mercado==="FAVORAVEL"?"var(--green)":d.humor_mercado==="NEUTRO"?"var(--yellow)":"var(--red)";
-  const header = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px;animation:fadeUp .4s ease">'
-    +'<div style="background:var(--card);border:1px solid var(--hi);padding:18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">HUMOR DO MERCADO</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:'+hc+'">'+String(d.humor_mercado||"NEUTRO")+'</div>'
-    +'<div style="font-size:11px;color:var(--sub);line-height:1.6;margin-top:8px">'+String(d.resumo_mercado||"")+'</div></div>'
-    +'<div style="background:var(--card);border:1px solid var(--hi);padding:18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">CAPITAL PARA INVESTIR</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:var(--green)">R$ '+Number(d.capital_para_investir||0).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div>'
-    +'<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-top:4px">RESERVA: R$ '+Number(d.reserva_caixa||0).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'
-    +'<div style="background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.3);padding:18px;"><div style="font-family:monospace;font-size:8px;color:var(--green);letter-spacing:1px;margin-bottom:8px;">GURU DIZ</div>'
-    +'<div style="font-size:12px;color:var(--sub);line-height:1.7;font-style:italic">"'+String(d.mensagem_guru||"")+'"</div></div></div>'
-    +(d.modo?'<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:10px;display:flex;gap:20px;flex-wrap:wrap;">'
-      +'<span>MODO: <span style="color:var(--cyan)">'+d.modo+'</span></span>'
-      +(d.capital_investido!==undefined?'<span>INVESTIDO: <span style="color:var(--blue)">R$ '+Number(d.capital_investido).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</span></span>':"")
-      +(d.caixa_disponivel!==undefined?'<span>CAIXA LIVRE: <span style="color:var(--green)">R$ '+Number(d.caixa_disponivel).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</span></span>':"")
-      +(d.reserva_caixa!==undefined?'<span>RESERVA: <span style="color:var(--yellow)">R$ '+Number(d.reserva_caixa).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</span></span>':"")
-      +'</div>':"");
-
-  // Posicoes atuais com recomendacao
-  const posCard = d.posicoes_atuais&&d.posicoes_atuais.length&&d.posicoes_atuais[0].ticker?
-    sec("SUAS POSICOES - O QUE FAZER COM CADA UMA")
-    +'<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">'
-    +d.posicoes_atuais.map(p=>{
-      const ac = p.acao==="MANTER"?"var(--green)":p.acao==="VENDER"?"var(--red)":p.acao==="REFORCAR"?"var(--cyan)":"var(--yellow)";
-      return '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid '+ac+';padding:14px 20px;display:grid;grid-template-columns:100px 80px 1fr 1fr;align-items:center;gap:14px;">'
-        +'<div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;">'+String(p.ticker||"")+'</div>'
-        +'<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+ac+'">'+String(p.acao||"")+'</div>'
-        +'<div style="font-size:11px;color:var(--sub);">'+String(p.motivo||"")+'</div>'
-        +'<div style="font-size:11px;color:var(--dim);">'+String(p.recomendacao_saida||"")+'</div>'
-        +'</div>';
-    }).join("")+'</div>'
-    : "";
-
-  const acoes = d.acoes_imediatas&&d.acoes_imediatas.length?sec("ACOES IMEDIATAS - O QUE FAZER AGORA")
-    +'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">'
-    +d.acoes_imediatas.map(a=>{const ac=a.acao==="COMPRAR"?"var(--green)":a.acao==="VENDER"?"var(--red)":"var(--yellow)";return '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid '+ac+';padding:16px 20px;display:grid;grid-template-columns:80px 60px 180px 1fr 120px 120px 100px;align-items:center;gap:14px;">'
-      +'<div style="text-align:center"><div style="font-family:monospace;font-size:8px;color:var(--dim)">PRIORIDADE</div><div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:'+(a.urgencia==="ALTA"?"var(--red)":"var(--yellow)")+'">#'+a.prioridade+'</div></div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:'+ac+'">'+String(a.acao||"")+'</div>'
-      +'<div><div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;">'+String(a.ticker||"")+'</div><div style="font-family:monospace;font-size:9px;color:var(--dim)">'+String(a.nome||"")+'</div></div>'
-      +'<div style="font-size:11px;color:var(--sub);line-height:1.5">'+String(a.motivo||"")+'</div>'
-      +'<div style="display:flex;flex-direction:column;gap:3px;font-size:11px;">'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--blue)">VALOR </span>R$ '+Number(a.valor_recomendado||0).toFixed(2)+'</div>'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--dim)">ENTRA </span>'+String(a.preco_entrada||"--")+'</div>'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--green)">ALVO </span>'+String(a.alvo_30d||"--")+'</div></div>'
-      +'<div style="display:flex;flex-direction:column;gap:3px;font-size:11px;">'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--red)">STOP </span>'+String(a.stop_loss||"--")+'</div>'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--green)">UPSIDE </span>'+String(a.upside||"--")+'</div>'
-      +'<div><span style="font-family:monospace;font-size:8px;color:var(--yellow)">R/R </span>'+String(a.risco_retorno||"--")+'</div></div>'
-      +'<div style="text-align:center"><div style="font-family:monospace;font-size:8px;color:'+(a.urgencia==="ALTA"?"var(--red)":"var(--yellow)")+'">'+String(a.urgencia||"")+'</div><div style="font-family:Rajdhani,sans-serif;font-size:13px;color:var(--sub)">'+String(a.percentual_carteira||"")+'</div></div></div>';}).join("")+'</div>':"";
-
-  const aloc = d.alocacao_ideal&&d.alocacao_ideal.length?sec("ALOCACAO IDEAL DA CARTEIRA")
-    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">'
-    +d.alocacao_ideal.map(a=>'<div style="background:var(--card);border:1px solid var(--border);padding:16px;">'
-      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:var(--green)">'+String(a.ticker||"")+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">'+String(a.percentual||"")+'</div></div>'
-      +'<div style="font-size:11px;color:var(--dim);margin-bottom:6px">'+String(a.nome||"")+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:600;margin-bottom:8px">R$ '+Number(a.valor||0).toFixed(2)+'</div>'
-      +'<div style="font-size:10px;color:var(--sub);line-height:1.5">'+String(a.motivo||"")+'</div></div>').join("")
-    +'<div style="background:rgba(255,204,0,.05);border:1px solid rgba(255,204,0,.2);padding:16px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:var(--yellow)">CAIXA</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--yellow)">20%</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:600;margin:8px 0">R$ '+Number(d.reserva_caixa||0).toFixed(2)+'</div>'
-    +'<div style="font-size:10px;color:var(--sub)">Reserva obrigatoria. Nunca mexa.</div></div></div>':"";
-
-  const nao = d.nao_fazer_agora&&d.nao_fazer_agora.length?'<div style="background:rgba(255,51,85,.04);border:1px solid rgba(255,51,85,.2);padding:18px;margin-bottom:16px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--red);margin-bottom:10px;">NAO FAZER AGORA</div>'
-    +d.nao_fazer_agora.map(x=>'<div style="font-family:monospace;font-size:10px;color:var(--sub);display:flex;gap:8px;margin-bottom:6px;"><span style="color:var(--red)">X</span>'+x+'</div>').join("")+'</div>':"";
-
-  const rev = '<div style="font-family:monospace;font-size:10px;color:var(--dim);text-align:center;margin-bottom:20px;">PROXIMA REVISAO: <span style="color:var(--cyan)">'+String(d.proxima_revisao||"amanha antes da abertura")+'</span></div>';
-
-  return header+posCard+acoes+aloc+nao+rev;
-}
-
-function renderBriefing(d) {
-  const sc = d.situacao_carteira==="VERDE"?"var(--green)":d.situacao_carteira==="AMARELO"?"var(--yellow)":"var(--red)";
-  const header = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;animation:fadeUp .4s ease">'
-    +'<div style="background:var(--card);border:1px solid var(--hi);padding:18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">SITUACAO DA CARTEIRA</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:28px;font-weight:700;color:'+sc+'">'+String(d.situacao_carteira||"NEUTRO")+'</div>'
-    +'<div style="font-size:12px;color:var(--sub);margin-top:8px;line-height:1.6">'+String(d.resumo||"")+'</div></div>'
-    +'<div style="background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.3);padding:18px;"><div style="font-family:monospace;font-size:8px;color:var(--green);letter-spacing:1px;margin-bottom:8px;">GURU DIZ</div>'
-    +'<div style="font-size:13px;color:var(--sub);line-height:1.7;font-style:italic">"'+String(d.mensagem_guru||"")+'"</div></div></div>';
-
-  const alertas = d.alertas&&d.alertas.length?sec("ALERTAS")
-    +'<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">'
-    +d.alertas.map(a=>{const tc=a.tipo==="STOP_ATINGIDO"?"var(--red)":a.tipo==="ALVO_ATINGIDO"?"var(--green)":a.tipo==="ATENCAO"?"var(--yellow)":"var(--blue)";
-    return '<div style="background:var(--card);border:1px solid '+tc+'44;border-left:3px solid '+tc+';padding:14px 18px;display:grid;grid-template-columns:130px 1fr 1fr;gap:14px;align-items:center;">'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;color:'+tc+'">'+String(a.tipo||"").replace("_"," ")+'</div>'
-      +'<div><div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;">'+String(a.ticker||"")+'</div><div style="font-size:11px;color:var(--sub);margin-top:4px">'+String(a.mensagem||"")+'</div></div>'
-      +'<div style="font-size:11px;color:'+tc+';font-weight:600">'+String(a.acao_recomendada||"")+'</div></div>';}).join("")+'</div>':"";
-
-  const posicoes = d.posicoes&&d.posicoes.length?sec("SUAS POSICOES HOJE")
-    +'<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px;">'
-    +d.posicoes.map(p=>{const sc2=p.status==="LUCRO"?"var(--green)":p.status==="PREJUIZO"?"var(--red)":"var(--yellow)";const rc=p.recomendacao==="MANTER"?"var(--green)":p.recomendacao==="VENDER"?"var(--red)":"var(--blue)";
-    return '<div style="background:var(--card);border:1px solid var(--border);padding:14px 18px;display:grid;grid-template-columns:100px 80px 120px 120px 1fr 100px;align-items:center;gap:14px;">'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;">'+String(p.ticker||"")+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+sc2+'">'+String(p.status||"")+'</div>'
-      +'<div style="font-family:monospace;font-size:11px;color:var(--sub)">HOJE: '+String(p.variacao_hoje||"--")+'</div>'
-      +'<div style="font-family:monospace;font-size:11px;color:'+sc2+'">ENTRADA: '+String(p.variacao_desde_entrada||"--")+'</div>'
-      +'<div style="font-size:11px;color:var(--dim)">Stop: '+String(p.distancia_stop||"--")+' | Alvo: '+String(p.distancia_alvo||"--")+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+rc+';text-align:center;">'+String(p.recomendacao||"MANTER")+'</div></div>';}).join("")+'</div>':"";
-
-  const op = d.oportunidade_do_dia&&d.oportunidade_do_dia.ticker&&d.oportunidade_do_dia.ticker!=="NENHUMA"?
-    '<div style="background:rgba(0,170,255,.06);border:1px solid rgba(0,170,255,.3);padding:18px;margin-bottom:16px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--blue);margin-bottom:8px;">OPORTUNIDADE DO DIA</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--green);margin-bottom:6px;">'+String(d.oportunidade_do_dia.ticker||"")+'</div>'
-    +'<div style="font-size:11px;color:var(--sub);margin-bottom:8px">'+String(d.oportunidade_do_dia.motivo||"")+'</div>'
-    +'<div style="font-family:monospace;font-size:10px;color:var(--cyan)">'+String(d.oportunidade_do_dia.acao||"")+'</div></div>':"";
-
-  return header+alertas+posicoes+op;
-}
-
-async function guruMontar() {
-  // Capital total = valor atual da carteira + novo aporte
-  const aporte = parseFloat(document.getElementById("guruAporte").value) || 0;
-  const valorCarteira = portfolio.reduce((a,p)=>{
-    const q = portfolioQuotes[p.ticker];
-    const preco = q ? q.price : parseFloat(p.price)||0;
-    return a + (parseFloat(p.qty)||0) * preco;
-  }, 0);
-  const cap = valorCarteira + aporte;
-  // Atualiza info visual
-  const infoEl = document.getElementById("guruCapitalInfo");
-  atualizarInfoCapital();
-  document.getElementById("emptyG").style.display = "none";
-  document.getElementById("errG").style.display = "none";
-  document.getElementById("resG").style.display = "none";
-  document.getElementById("loadG").style.display = "flex";
-  document.getElementById("btnGuruMontar").disabled = true;
-  document.getElementById("btnGuruBriefing").disabled = true;
-  let si = 0;
-  document.getElementById("stepsG").innerHTML = steps(STEPS_G, 0);
-
-  const quotes = {};
-  for (let i = 0; i < GURU_TICKERS.length; i += 8) {
-    si = i < 20 ? 1 : 2;
-    document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
-    await Promise.all(GURU_TICKERS.slice(i,i+8).map(async t=>{const q=await fetchQuote(t);if(q)quotes[t]=q;}));
-  }
-  si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
-
-  // NIVEL 1: Pre-filtro quantitativo — seleciona top 25
-  si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
-  const carteiraTickers = portfolio.map(p => p.ticker);
-  const top25Base = selecionarCandidatos(GURU_TICKERS, quotes, 25);
-  // Garante que ativos da carteira sempre entram
-  const top25Guru = [...new Set([...carteiraTickers, ...top25Base])].slice(0, 28);
-
-  // NIVEL 2: Indicadores matematicos em paralelo
-  si = 4; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
-  const indicadoresGuru = {};
-  await Promise.all(top25Guru.map(async t => {
-    const ind = await fetchIndicators(t);
-    if (ind) indicadoresGuru[t] = ind;
-  }));
-
-  // NIVEL 3: Ordena por score de confluencia real
-  top25Guru.sort((a, b) => {
-    // Ativos da carteira sempre primeiro
-    const aCart = carteiraTickers.includes(a) ? 1000 : 0;
-    const bCart = carteiraTickers.includes(b) ? 1000 : 0;
-    const sa = (indicadoresGuru[a]?.confluencia?.score || 0) + aCart;
-    const sb = (indicadoresGuru[b]?.confluencia?.score || 0) + bCart;
-    return sb - sa;
-  });
-
-  // Enriquece quotes com confluencia real
-  top25Guru.forEach(t => {
-    if (indicadoresGuru[t] && quotes[t]) {
-      quotes[t].confluencia = indicadoresGuru[t].confluencia?.score;
-      quotes[t].sinal_tecnico = indicadoresGuru[t].confluencia?.direcao;
+    function calcSMA(prices, period) {
+      if (prices.length < period) return null;
+      return parseFloat((prices.slice(-period).reduce((a, b) => a + b, 0) / period).toFixed(4));
     }
-  });
-  si = 5; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
 
-  try {
-    const data = await callClaude(buildGuruPrompt(quotes, cap, indicadoresGuru));
-    si = 6; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
-    document.getElementById("loadG").style.display = "none";
-    document.getElementById("resG").innerHTML = renderGuruResult(data);
-    document.getElementById("resG").style.display = "block";
-  } catch(e) {
-    document.getElementById("loadG").style.display = "none";
-    document.getElementById("errG").textContent = "ERRO: "+e.message;
-    document.getElementById("errG").style.display = "block";
-  }
-  document.getElementById("btnGuruMontar").disabled = false;
-  document.getElementById("btnGuruBriefing").disabled = false;
-}
+    function calcMACD(prices) {
+      if (prices.length < 35) return null;
+      const macdValues = [];
+      for (let i = 26; i <= prices.length; i++) {
+        const e12 = calcEMA(prices.slice(0, i), 12);
+        const e26 = calcEMA(prices.slice(0, i), 26);
+        if (e12 && e26) macdValues.push(e12 - e26);
+      }
+      const macdLine = macdValues[macdValues.length - 1];
+      const signal = calcEMA(macdValues, 9);
+      const histogram = signal ? macdLine - signal : null;
+      const prevHist = macdValues.length > 1 && signal ?
+        macdValues[macdValues.length - 2] - (calcEMA(macdValues.slice(0, -1), 9) || 0) : 0;
+      return {
+        macd: parseFloat(macdLine.toFixed(4)),
+        signal: signal ? parseFloat(signal.toFixed(4)) : null,
+        histogram: histogram ? parseFloat(histogram.toFixed(4)) : null,
+        trend: histogram > 0 ? "ALTA" : "BAIXA",
+        crossover: histogram > 0 && prevHist < 0 ? "CRUZAMENTO_ALTA" :
+                   histogram < 0 && prevHist > 0 ? "CRUZAMENTO_BAIXA" : "NENHUM",
+        acelerando: histogram && prevHist ? Math.abs(histogram) > Math.abs(prevHist) : false,
+      };
+    }
 
-async function guruBriefing() {
-  const aporte = parseFloat(document.getElementById("guruAporte").value) || 0;
-  const valorCarteira = portfolio.reduce((a,p)=>{
-    const q = portfolioQuotes[p.ticker];
-    const preco = q ? q.price : parseFloat(p.price)||0;
-    return a + (parseFloat(p.qty)||0) * preco;
-  }, 0);
-  const cap = valorCarteira + aporte;
-  document.getElementById("emptyG").style.display = "none";
-  document.getElementById("errG").style.display = "none";
-  document.getElementById("resG").style.display = "none";
-  document.getElementById("loadG").style.display = "flex";
-  document.getElementById("btnGuruMontar").disabled = true;
-  document.getElementById("btnGuruBriefing").disabled = true;
-  let si = 0;
-  document.getElementById("stepsG").innerHTML = steps(STEPS_B, 0);
+    function calcBollinger(prices, period = 20, std = 2) {
+      if (prices.length < period) return null;
+      const slice = prices.slice(-period);
+      const sma = slice.reduce((a, b) => a + b, 0) / period;
+      const variance = slice.reduce((a, b) => a + Math.pow(b - sma, 2), 0) / period;
+      const sd = Math.sqrt(variance);
+      const upper = sma + std * sd;
+      const lower = sma - std * sd;
+      const current = prices[prices.length - 1];
+      const pctB = (current - lower) / (upper - lower) * 100;
+      return {
+        upper: parseFloat(upper.toFixed(4)),
+        middle: parseFloat(sma.toFixed(4)),
+        lower: parseFloat(lower.toFixed(4)),
+        bandwidth: parseFloat(((upper - lower) / sma * 100).toFixed(2)),
+        pctB: parseFloat(pctB.toFixed(2)),
+        position: current > upper ? "ACIMA_BANDA_SUPERIOR" :
+                  current < lower ? "ABAIXO_BANDA_INFERIOR" : "DENTRO_DAS_BANDAS",
+        squeeze: ((upper - lower) / sma * 100) < 5,
+      };
+    }
 
-  const quotes = {};
-  const tickers = portfolio.length>0?[...new Set([...portfolio.map(p=>p.ticker),...GURU_TICKERS.slice(0,20)])]:GURU_TICKERS.slice(0,30);
-  for (const t of tickers) {
-    si = 1;
-    document.getElementById("stepsG").innerHTML = steps(STEPS_B, si);
-    const q = await fetchQuote(t);
-    if (q) quotes[t] = q;
-  }
-  si = 2; document.getElementById("stepsG").innerHTML = steps(STEPS_B, si);
+    function calcATR(highs, lows, closes, period = 14) {
+      if (highs.length < period + 1) return null;
+      const trs = [];
+      for (let i = 1; i < highs.length; i++) {
+        trs.push(Math.max(highs[i] - lows[i], Math.abs(highs[i] - closes[i-1]), Math.abs(lows[i] - closes[i-1])));
+      }
+      return parseFloat((trs.slice(-period).reduce((a, b) => a + b, 0) / period).toFixed(4));
+    }
 
-  try {
-    const data = await callClaude(buildBriefingPrompt(quotes, cap));
-    document.getElementById("loadG").style.display = "none";
-    document.getElementById("resG").innerHTML = renderBriefing(data);
-    document.getElementById("resG").style.display = "block";
-    // Envia briefing via Telegram automaticamente
-    sendTelegram("BRIEFING", {
-      situacao: data.situacao_carteira || "NEUTRO",
-      resumo: data.resumo || "",
-      mensagem: data.mensagem_guru || "",
-    });
-  } catch(e) {
-    document.getElementById("loadG").style.display = "none";
-    document.getElementById("errG").textContent = "ERRO: "+e.message;
-    document.getElementById("errG").style.display = "block";
-  }
-  document.getElementById("btnGuruMontar").disabled = false;
-  document.getElementById("btnGuruBriefing").disabled = false;
-}
+    function calcVWAP(highs, lows, closes, volumes, period = 20) {
+      const n = Math.min(period, highs.length);
+      const slice = Array.from({length: n}, (_, i) => ({
+        tp: (highs[highs.length-n+i] + lows[lows.length-n+i] + closes[closes.length-n+i]) / 3,
+        v: volumes[volumes.length-n+i] || 0,
+      }));
+      const sumTPV = slice.reduce((a, x) => a + x.tp * x.v, 0);
+      const sumV = slice.reduce((a, x) => a + x.v, 0);
+      if (!sumV) return null;
+      const vwap = parseFloat((sumTPV / sumV).toFixed(4));
+      const current = closes[closes.length - 1];
+      return {
+        vwap,
+        diferenca_pct: parseFloat(((current - vwap) / vwap * 100).toFixed(2)),
+        acima: current > vwap,
+        sinal: current > vwap ? "INSTITUCIONAL_COMPRANDO" : "INSTITUCIONAL_VENDENDO",
+      };
+    }
 
-// ─── CARTEIRA ─────────────────────────────────────────────────
-// ─── CARTEIRA ─────────────────────────────────────────────────
-function addPosition() {
-  const ticker = document.getElementById("pTicker").value.trim().toUpperCase();
-  const qty = parseFloat(document.getElementById("pQty").value);
-  const price = parseFloat(document.getElementById("pPrice").value);
-  const stop = parseFloat(document.getElementById("pStop").value) || null;
-  const target = parseFloat(document.getElementById("pTarget").value) || null;
-  const market = document.getElementById("pMarket").value;
-  if (!ticker||!qty||!price) { alert("Preencha Ticker, Quantidade e Preco."); return; }
-  abrirOperacao({ ticker, quantidade: qty, preco: price, stop, alvo: target, mercado: market });
-  ["pTicker","pQty","pPrice","pStop","pTarget"].forEach(id => document.getElementById(id).value = "");
-}
+    function detectSmartMoney(closes, volumes, highs, lows, lookback = 20) {
+      if (closes.length < lookback + 5) return null;
+      const recentV = volumes.slice(-lookback);
+      const avgVol = recentV.reduce((a,b)=>a+b,0) / lookback;
+      const last5Vol = recentV.slice(-5);
+      const avgVol5 = last5Vol.reduce((a,b)=>a+b,0) / 5;
+      const volRatio5d = parseFloat((avgVol5 / avgVol).toFixed(2));
+      let mfPos = 0, mfNeg = 0;
+      for (let i = 1; i < lookback; i++) {
+        const tp = (highs[highs.length-lookback+i]+lows[lows.length-lookback+i]+closes[closes.length-lookback+i])/3;
+        const tpPrev = (highs[highs.length-lookback+i-1]+lows[lows.length-lookback+i-1]+closes[closes.length-lookback+i-1])/3;
+        const mf = tp * (volumes[volumes.length-lookback+i]||0);
+        if (tp > tpPrev) mfPos += mf; else mfNeg += mf;
+      }
+      const mfIndex = parseFloat((mfPos/(mfPos+mfNeg)*100).toFixed(2));
+      const last3C = closes.slice(-3);
+      const last3V = volumes.slice(-3);
+      const divergenciaAltista = last3C[2]<last3C[0] && last3V[2]>last3V[0] && mfIndex>55;
+      let score = 0;
+      if (volRatio5d>=2.0) score+=30; else if (volRatio5d>=1.5) score+=20; else if (volRatio5d>=1.2) score+=10;
+      if (mfIndex>65) score+=25; else if (mfIndex>55) score+=15;
+      if (divergenciaAltista) score+=25;
+      score = Math.min(100, score);
+      let sinal = "NEUTRO";
+      if (score>=70) sinal="ACUMULACAO_FORTE";
+      else if (score>=50) sinal="ACUMULACAO";
+      else if (mfIndex<35) sinal="DISTRIBUICAO";
+      return { score, sinal, money_flow_index: mfIndex, volume_ratio_5d: volRatio5d, divergencia_altista: divergenciaAltista };
+    }
 
-async function venderParcial(id) {
-  const op = operacoes.find(o => o.id === id);
-  if (!op) return;
-  const qtd = parseFloat(prompt("Quantas acoes de "+op.ticker+" deseja vender?\nVoce tem: "+op.quantidade_atual+" acoes"));
-  if (!qtd || isNaN(qtd) || qtd <= 0) return;
-  if (qtd > op.quantidade_atual) { alert("Quantidade maior que a posicao atual ("+op.quantidade_atual+")"); return; }
-  const preco = parseFloat(prompt("Preco de saida (R$):"));
-  if (!preco || isNaN(preco)) return;
-  const motivos = ["ALVO ATINGIDO","SAIDA PARCIAL PROGRAMADA","REALIZACAO PARCIAL","REBALANCEAMENTO","STOP ATINGIDO"];
-  const idx = prompt("Motivo:\n0 - ALVO ATINGIDO\n1 - SAIDA PARCIAL PROGRAMADA\n2 - REALIZACAO PARCIAL\n3 - REBALANCEAMENTO\n4 - STOP ATINGIDO");
-  const motivo = motivos[parseInt(idx)] || "REALIZACAO PARCIAL";
-  const d = await venderOperacao(id, qtd, preco, motivo);
-  if (d && d.ok) {
-    const res = d.operacao;
-    alert("Venda registrada!\n"+qtd+" acoes de "+op.ticker+"\nEntrada: R$"+op.preco_medio.toFixed(2)+" | Saida: R$"+preco.toFixed(2)+"\nResultado: "+(res.resultado_pct>=0?"+":"")+res.resultado_pct+"% | R$ "+res.lucro_total+"\n"+(res.quantidade_atual>0?"Restam: "+res.quantidade_atual+" acoes":"Posicao encerrada!"));
-  }
-}
+    function detectCandlePattern(opens, highs, lows, closes) {
+      const n = closes.length;
+      if (n < 3) return { pattern: "NENHUM", bias: "NEUTRO", confianca: 0 };
+      const c0=closes[n-1],o0=opens[n-1],h0=highs[n-1],l0=lows[n-1];
+      const c1=closes[n-2],o1=opens[n-2];
+      const c2=closes[n-3],o2=opens[n-3];
+      const body0=Math.abs(c0-o0),range0=h0-l0;
+      const upperShadow0=h0-Math.max(c0,o0),lowerShadow0=Math.min(c0,o0)-l0;
+      const body1=Math.abs(c1-o1);
+      const patterns=[];
+      if (c1<o1&&lowerShadow0>body0*2&&upperShadow0<body0*0.5&&range0>0) patterns.push({name:"MARTELO",bias:"ALTA",confianca:72});
+      if (c1>o1&&upperShadow0>body0*2&&lowerShadow0<body0*0.5&&range0>0) patterns.push({name:"ESTRELA_CADENTE",bias:"BAIXA",confianca:70});
+      if (c1<o1&&c0>o0&&c0>o1&&o0<c1) patterns.push({name:"ENGOLFO_ALTA",bias:"ALTA",confianca:78});
+      if (c1>o1&&c0<o0&&c0<o1&&o0>c1) patterns.push({name:"ENGOLFO_BAIXA",bias:"BAIXA",confianca:76});
+      if (body0<range0*0.1&&range0>0) patterns.push({name:"DOJI",bias:"NEUTRO",confianca:60});
+      if (c2<o2&&body1<Math.abs(c2-o2)*0.3&&c0>o0&&c0>(c2+o2)/2) patterns.push({name:"MORNING_STAR",bias:"ALTA",confianca:82});
+      if (!patterns.length) return {pattern:"NENHUM",bias:"NEUTRO",confianca:0};
+      const best=patterns.reduce((a,b)=>b.confianca>a.confianca?b:a);
+      return {pattern:best.name,bias:best.bias,confianca:best.confianca};
+    }
 
-async function removePosition(id) {
-  const op = operacoes.find(o => o.id === id);
-  if (!op) return;
-  const preco = parseFloat(prompt("Preco de saida total de "+op.ticker+" (R$):"));
-  if (!preco || isNaN(preco)) return;
-  const motivos = ["ALVO ATINGIDO","STOP ATINGIDO","SAIDA MANUAL","REBALANCEAMENTO"];
-  const idx = prompt("Motivo:\n0 - ALVO ATINGIDO\n1 - STOP ATINGIDO\n2 - SAIDA MANUAL\n3 - REBALANCEAMENTO");
-  const motivo = motivos[parseInt(idx)] || "SAIDA MANUAL";
-  const d = await venderOperacao(id, op.quantidade_atual, preco, motivo);
-  if (d && d.ok) {
-    const res = d.operacao;
-    alert("Operacao encerrada!\n"+op.ticker+"\nResultado: "+(res.resultado_pct>=0?"+":"")+res.resultado_pct+"% | R$ "+res.lucro_total+"\nATLAS acertou: "+(res.atlas_acertou?"SIM":"NAO"));
-  }
-}
+    function calcConfluencia(rsiPond, macd, bollinger, volume, vwap, tendencia, candle) {
+      let pontosAlta=0,pontosBaixa=0;
+      const sinais=[];
+      if (rsiPond) {
+        if (rsiPond>55&&rsiPond<70){sinais.push("RSI_ALTA");pontosAlta++;}
+        else if (rsiPond<45&&rsiPond>30){sinais.push("RSI_COMPRA");pontosAlta+=2;}
+        else if (rsiPond>=70){sinais.push("RSI_SOBRECOMPRADO");pontosBaixa++;}
+        else if (rsiPond<=30){sinais.push("RSI_SOBREVENDIDO");pontosAlta+=3;}
+      }
+      if (macd) {
+        if (macd.crossover==="CRUZAMENTO_ALTA"){sinais.push("MACD_CRUZAMENTO_ALTA");pontosAlta+=3;}
+        else if (macd.crossover==="CRUZAMENTO_BAIXA"){sinais.push("MACD_CRUZAMENTO_BAIXA");pontosBaixa+=3;}
+        else if (macd.trend==="ALTA"&&macd.acelerando){sinais.push("MACD_ACELERANDO");pontosAlta+=2;}
+        else if (macd.trend==="ALTA"){sinais.push("MACD_ALTA");pontosAlta++;}
+        else{sinais.push("MACD_BAIXA");pontosBaixa++;}
+      }
+      if (bollinger) {
+        if (bollinger.position==="ABAIXO_BANDA_INFERIOR"){sinais.push("BOLLINGER_SOBREVENDIDO");pontosAlta+=2;}
+        else if (bollinger.position==="ACIMA_BANDA_SUPERIOR"){sinais.push("BOLLINGER_SOBRECOMPRADO");pontosBaixa+=2;}
+        if (bollinger.squeeze){sinais.push("BOLLINGER_SQUEEZE");pontosAlta++;}
+      }
+      if (volume&&(volume.status==="EXPLOSIVO"||volume.status==="MUITO_ACIMA")){sinais.push("VOLUME_CONFIRMADOR");pontosAlta++;}
+      if (vwap){if(vwap.acima){sinais.push("ACIMA_VWAP");pontosAlta+=2;}else{sinais.push("ABAIXO_VWAP");pontosBaixa+=2;}}
+      if (tendencia==="ALTA_FORTE"){sinais.push("TENDENCIA_ALTA_FORTE");pontosAlta+=3;}
+      else if (tendencia==="ALTA"){sinais.push("TENDENCIA_ALTA");pontosAlta+=2;}
+      else if (tendencia==="BAIXA_FORTE"){sinais.push("TENDENCIA_BAIXA_FORTE");pontosBaixa+=3;}
+      else if (tendencia==="BAIXA"){sinais.push("TENDENCIA_BAIXA");pontosBaixa+=2;}
+      if (candle&&candle.bias==="ALTA"){sinais.push("CANDLE_"+candle.pattern);pontosAlta+=Math.round(candle.confianca/25);}
+      else if (candle&&candle.bias==="BAIXA"){sinais.push("CANDLE_"+candle.pattern);pontosBaixa+=Math.round(candle.confianca/25);}
+      const total=pontosAlta+pontosBaixa;
+      const score=total>0?Math.round((pontosAlta/total)*100):50;
+      const direcao=score>=65?"COMPRA_FORTE":score>=55?"COMPRA":score<=35?"VENDA_FORTE":score<=45?"VENDA":"NEUTRO";
+      return {
+        score,direcao,pontos_alta:pontosAlta,pontos_baixa:pontosBaixa,
+        sinais_confirmadores:sinais.filter(s=>s.includes("ALTA")||s.includes("COMPRA")||s.includes("SQUEEZE")||s.includes("ACIMA")),
+        sinais_negativos:sinais.filter(s=>s.includes("BAIXA")||s.includes("VENDA")||s.includes("FRACO")||s.includes("ABAIXO")),
+        total_sinais:sinais.length,
+      };
+    }
 
-async function reforcarPosicao(id) {
-  const op = operacoes.find(o => o.id === id);
-  if (!op) return;
-  const qtd = parseFloat(prompt("Quantas acoes de "+op.ticker+" deseja adicionar?"));
-  if (!qtd || isNaN(qtd) || qtd <= 0) return;
-  const preco = parseFloat(prompt("Preco de entrada (R$):"));
-  if (!preco || isNaN(preco)) return;
-  const d = await reforcarOperacao(id, qtd, preco);
-  if (d && d.ok) {
-    alert("Posicao reforcada!\n"+op.ticker+" | Novo preco medio: R$"+d.operacao.preco_medio.toFixed(2)+"\nQuantidade total: "+d.operacao.quantidade_atual+" acoes");
-  }
-}
+    // ── HISTORICOS ─────────────────────────────────────────────
+    function calcRSIPonderadoHistorico(prices) {
+      const result=[];
+      for (let i=15;i<prices.length;i++) {
+        const slice=prices.slice(0,i+1);
+        const r5=calcRSI(slice,5),r9=calcRSI(slice,9),r14=calcRSI(slice,14);
+        if (r5&&r9&&r14) result.push({date:validData[i].date,value:parseFloat((r5*0.40+r9*0.35+r14*0.25).toFixed(2))});
+      }
+      return result;
+    }
 
-async function editarStop(id) {
-  const op = operacoes.find(o => o.id === id);
-  if (!op) return;
-  const stop = parseFloat(prompt("Novo stop loss para "+op.ticker+" (atual: R$"+(op.stop_loss||"--")+"):"));
-  if (!stop || isNaN(stop)) return;
-  await editarOperacao(id, { stop });
-}
+    function calcMACDHistorico(prices) {
+      const macdLine=[];
+      for (let i=26;i<prices.length;i++) {
+        const e12=calcEMA(prices.slice(0,i+1),12),e26=calcEMA(prices.slice(0,i+1),26);
+        if (e12&&e26) macdLine.push({date:validData[i].date,value:parseFloat((e12-e26).toFixed(4))});
+      }
+      const signalLine=[],histogram=[];
+      const macdVals=macdLine.map(d=>d.value);
+      for (let i=9;i<macdVals.length;i++) {
+        const sig=calcEMA(macdVals.slice(0,i+1),9);
+        if (sig) {
+          signalLine.push({date:macdLine[i].date,value:parseFloat(sig.toFixed(4))});
+          histogram.push({date:macdLine[i].date,value:parseFloat((macdVals[i]-sig).toFixed(4))});
+        }
+      }
+      return {macdLine:macdLine.slice(9),signalLine,histogram};
+    }
 
-async function editarAlvo(id) {
-  const op = operacoes.find(o => o.id === id);
-  if (!op) return;
-  const alvo = parseFloat(prompt("Novo alvo para "+op.ticker+" (atual: R$"+(op.alvo||"--")+"):"));
-  if (!alvo || isNaN(alvo)) return;
-  await editarOperacao(id, { alvo });
-}
+    function calcMMHistorico(prices,period) {
+      const result=[];
+      for (let i=period-1;i<prices.length;i++) {
+        const sma=prices.slice(i-period+1,i+1).reduce((a,b)=>a+b,0)/period;
+        result.push({date:validData[i].date,value:parseFloat(sma.toFixed(4))});
+      }
+      return result;
+    }
 
-function renderPortfolio() {
-  const el = document.getElementById("portfolioContent");
-  if (!el) return;
-  const carteira = getCarteira();
+    // ── CALCULOS ───────────────────────────────────────────────
+    const rsi14=calcRSI(c,14),rsi9=calcRSI(c,9),rsi5=calcRSI(c,5);
+    const rsiPonderado=rsi5&&rsi9&&rsi14?parseFloat((rsi5*0.40+rsi9*0.35+rsi14*0.25).toFixed(2)):null;
+    const macd=calcMACD(c);
+    const bollinger=calcBollinger(c);
+    const atr=calcATR(h,l,c);
+    const vwap=calcVWAP(h,l,c,v,20);
+    const smartMoney=detectSmartMoney(c,v,h,l,20);
+    const candle=detectCandlePattern(o,h,l,c);
+    const mm9=calcSMA(c,9),mm21=calcSMA(c,21),mm50=calcSMA(c,50),mm200=calcSMA(c,200);
+    const ema9=calcEMA(c,9),ema21=calcEMA(c,21);
+    const precoAtual=meta.regularMarketPrice||c[n-1];
+    const prev=meta.chartPreviousClose||c[n-2];
+    const avgVol=v.slice(-20).reduce((a,b)=>a+b,0)/20;
+    const volRatio=parseFloat((v[n-1]/avgVol).toFixed(2));
+    const resistencia=parseFloat(Math.max(...h.slice(-20)).toFixed(4));
+    const suporte=parseFloat(Math.min(...l.slice(-20)).toFixed(4));
+    const distResist=parseFloat(((resistencia-precoAtual)/precoAtual*100).toFixed(2));
+    const distSuport=parseFloat(((precoAtual-suporte)/precoAtual*100).toFixed(2));
+    const rrNatural=parseFloat(((resistencia-precoAtual)/(precoAtual-suporte)).toFixed(2));
+    const acimaMM50=precoAtual>mm50,acimaMM200=precoAtual>mm200,mm9acimaMM21=mm9>mm21;
+    let tendencia="LATERAL";
+    if (acimaMM50&&acimaMM200&&mm9acimaMM21) tendencia="ALTA_FORTE";
+    else if (acimaMM50&&mm9acimaMM21) tendencia="ALTA";
+    else if (!acimaMM50&&!acimaMM200&&!mm9acimaMM21) tendencia="BAIXA_FORTE";
+    else if (!acimaMM50&&!mm9acimaMM21) tendencia="BAIXA";
+    const volume={atual:v[n-1],media20:Math.round(avgVol),ratio:volRatio,status:volRatio>2?"EXPLOSIVO":volRatio>1.5?"MUITO_ACIMA":volRatio>1?"ACIMA":volRatio>0.7?"NORMAL":"ABAIXO"};
+    const confluencia=calcConfluencia(rsiPonderado,macd,bollinger,volume,vwap,tendencia,candle);
+    const taxaAcerto=confluencia.score>60?60:confluencia.score>50?55:45;
+    const rrEst=rrNatural>0?Math.min(rrNatural,3):1.5;
+    const p=taxaAcerto/100,q2=1-p,kelly=Math.max(0,Math.min((p*rrEst-q2)/rrEst*100,25));
+    const rsiHistorico=calcRSIPonderadoHistorico(c);
+    const macdHistorico=calcMACDHistorico(c);
+    const mm9Historico=calcMMHistorico(c,9);
+    const mm21Historico=calcMMHistorico(c,21);
+    const mm50Historico=calcMMHistorico(c,50);
 
-  if (!carteira.length) {
-    el.innerHTML = '<div class="empty">NENHUMA POSICAO ABERTA - CLIQUE EM &quot;+ ABRIR&quot; PARA COMECAR</div>';
-    updateBenchmarkCard();
-    return;
-  }
+    const payload = {
+      ticker,mercado:isB3?"B3":"NYSE/NASDAQ",moeda:isB3?"R$":"US$",
+      preco_atual:precoAtual,
+      variacao_hoje:prev?parseFloat(((precoAtual-prev)/prev*100).toFixed(2)):0,
+      dias_historico:validData.length,tendencia,confluencia,
+      candle_pattern:candle,smart_money:smartMoney,
+      indicadores:{
+        rsi:{rsi5,rsi9,rsi14,rsi_ponderado:rsiPonderado,zona:rsiPonderado>70?"SOBRECOMPRADO":rsiPonderado<30?"SOBREVENDIDO":"NEUTRO"},
+        macd,
+        medias:{mm9,mm21,mm50,mm200,ema9,ema21,acimaMM50,acimaMM200},
+        bollinger,atr,vwap,volume,
+      },
+      suporte_resistencia:{suporte,resistencia,distResist,distSuport,rr_natural:rrNatural},
+      kelly_criterion:{kelly_completo:parseFloat(kelly.toFixed(2)),half_kelly:parseFloat((kelly/2).toFixed(2)),recomendado:parseFloat((kelly/2).toFixed(2)),explicacao:kelly/2<5?"NAO_OPERAR":kelly/2<10?"POSICAO_PEQUENA":kelly/2<15?"POSICAO_MEDIA":"POSICAO_GRANDE"},
+      gestao_risco:{stop_sugerido:atr?parseFloat((precoAtual-2*atr).toFixed(4)):null,alvo_sugerido:atr?parseFloat((precoAtual+3*atr).toFixed(4)):null,atr_pct:atr?parseFloat((atr/precoAtual*100).toFixed(2)):null,tamanho_posicao_recomendado:(kelly/2).toFixed(2)+"% do capital"},
+      historico_recente:validData,
+      historico_rsi:rsiHistorico,historico_macd:macdHistorico,
+      historico_mm9:mm9Historico,historico_mm21:mm21Historico,historico_mm50:mm50Historico,
+      cached_at:new Date().toISOString(),
+    };
 
-  try {
-    const totalInv = carteira.reduce((a,p) => a + p.quantidade_atual * p.preco_medio, 0);
-    const totalAtual = carteira.reduce((a,p) => {
-      const q = portfolioQuotes[p.ticker];
-      return a + p.quantidade_atual * (q ? q.price : p.preco_medio);
-    }, 0);
-    const totalPL = totalAtual - totalInv;
-    const totalPLpct = totalInv > 0 ? ((totalPL/totalInv)*100).toFixed(2) : "0.00";
-    const totalOntem = carteira.reduce((a,p) => {
-      const q = portfolioQuotes[p.ticker];
-      const prev = q && q.prevClose ? q.prevClose : (q ? q.price : p.preco_medio);
-      return a + p.quantidade_atual * prev;
-    }, 0);
-    const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
-    const hasQ = Object.keys(portfolioQuotes).length > 0;
-    const plC = totalPL >= 0 ? "var(--green)" : "var(--red)";
-    const plB = totalPL >= 0 ? "rgba(0,255,136,.3)" : "rgba(255,51,85,.3)";
+    // Salva no cache para proxima vez
+    if (REDIS_URL && REDIS_TOKEN) {
+      try {
+        await fetch(`${REDIS_URL}/pipeline`, {
+          method:"POST",
+          headers:{Authorization:`Bearer ${REDIS_TOKEN}`,"Content-Type":"application/json"},
+          body:JSON.stringify([["SET",`ind_${ticker}`,JSON.stringify(payload),"EX",86400]])
+        });
+      } catch(e) {}
+    }
 
-    el.innerHTML = '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">'+
-      '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">POSICOES</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+carteira.length+'</div></div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">CUSTO MEDIO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">R$ '+totalInv.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
-      (hasQ
-        ? '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
-          '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+( totalPL>=0?"+":"")+totalPL.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+( parseFloat(totalPLpct)>=0?"+":"")+totalPLpct+'%)</div>'+'<div style="font-family:monospace;font-size:9px;color:'+( parseFloat(varDia)>=0?"var(--green)":"var(--red)")+'">'+( parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div></div>'
-        : '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;opacity:.5;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:monospace;font-size:10px;color:var(--dim)">Buscando...</div></div>'
-      )+
-      '<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'+
-      '</div>'+
-      '<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'+
-      ["TICKER","STATUS","QTDE","P.MEDIO","P.ATUAL","TOTAL","RESULT","HOJE","STOP","ALVO","D.STOP","D.ALVO","ACOES"].map(h=>'<th>'+h+'</th>').join("")+
-      '</tr></thead><tbody>'+
-      carteira.map(p => {
-        const pm = parseFloat(p.preco_medio)||0;
-        const qty = parseFloat(p.quantidade_atual)||0;
-        const q = portfolioQuotes[p.ticker];
-        const atual = q ? q.price : null;
-        const prev = q && q.prevClose ? q.prevClose : atual;
-        const totalP = qty * pm;
-        const totalA = atual ? qty * atual : null;
-        const plP = atual ? ((atual - pm) / pm * 100).toFixed(2) : null;
-        const plH = atual && prev ? ((atual - prev) / prev * 100).toFixed(2) : null;
-        const cur = (p.mercado||"B3").includes("NYSE") || (p.mercado||"B3").includes("NASDAQ") ? "US$" : "R$";
-        const stopN = p.stop_loss || null;
-        const alvoN = p.alvo || null;
-        const dStop = stopN && atual ? ((atual - stopN) / atual * 100).toFixed(2) : null;
-        const dAlvo = alvoN && atual ? ((alvoN - atual) / atual * 100).toFixed(2) : null;
-        const plColor = plP !== null ? (parseFloat(plP)>=0?"var(--green)":"var(--red)") : "var(--dim)";
-        const hColor = plH !== null ? (parseFloat(plH)>=0?"var(--green)":"var(--red)") : "var(--dim)";
-        const statusBadge = p.status === "PARCIAL"
-          ? '<span style="font-size:9px;color:var(--yellow);background:rgba(255,204,0,.1);padding:2px 6px;border-radius:3px;">PARCIAL</span>'
-          : '<span style="font-size:9px;color:var(--green);background:rgba(0,255,136,.1);padding:2px 6px;border-radius:3px;">ABERTA</span>';
-        return '<tr>'+
-          '<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+p.ticker+'</td>'+
-          '<td>'+statusBadge+'</td>'+
-          '<td>'+qty+'</td>'+
-          '<td style="color:var(--sub)">'+cur+' '+pm.toFixed(2)+'</td>'+
-          '<td style="color:var(--blue);font-weight:600">'+( atual?cur+' '+atual.toFixed(2):"--")+'</td>'+
-          '<td style="color:var(--cyan)">'+( totalA?"R$ "+totalA.toLocaleString("pt-BR",{minimumFractionDigits:2}):"--")+'</td>'+
-          '<td style="font-weight:700;color:'+plColor+'">'+( plP?(parseFloat(plP)>=0?"+":"")+plP+"%":"--")+'</td>'+
-          '<td style="color:'+hColor+'">'+( plH?(parseFloat(plH)>=0?"+":"")+plH+"%":"--")+'</td>'+
-          '<td style="color:var(--red);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarStop('+p.id+')">'+( stopN?"R$"+stopN.toFixed(2):"--")+'</td>'+
-          '<td style="color:var(--green);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarAlvo('+p.id+')">'+( alvoN?"R$"+alvoN.toFixed(2):"--")+'</td>'+
-          '<td style="color:'+( dStop&&parseFloat(dStop)<3?"var(--red)":"var(--dim)")+';font-family:monospace;font-size:10px;">'+( dStop?(parseFloat(dStop)>=0?"+":"")+dStop+"%":"--")+'</td>'+
-          '<td style="color:var(--dim);font-family:monospace;font-size:10px;">'+( dAlvo?(parseFloat(dAlvo)>=0?"+":"")+dAlvo+"%":"--")+'</td>'+
-          '<td style="display:flex;gap:4px;">'+
-          '<button class="btn-sm" style="background:rgba(0,170,255,.12);border:1px solid rgba(0,170,255,.3);color:var(--blue);" onclick="reforcarPosicao('+p.id+')">+</button>'+
-          '<button class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.3);color:var(--yellow);" onclick="venderParcial('+p.id+')">PARCIAL</button>'+
-          '<button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.3);color:var(--red);" onclick="removePosition('+p.id+')">TOTAL</button>'+
-          '</td></tr>';
-      }).join("")+
-      '</tbody></table></div>';
+    return res.status(200).json(payload);
 
   } catch(e) {
-    el.innerHTML = '<div class="error-box">Erro: '+e.message+'</div>';
-  }
-  updateBenchmarkCard();
-}
-
-// ─── HISTORICO ─────────────────────────────────────────────────
-function registrarOperacao() {
-  const ticker = document.getElementById("hTicker").value.trim().toUpperCase();
-  const sinal = document.getElementById("hSinal").value;
-  const entrada = parseFloat(document.getElementById("hEntrada").value);
-  const qty = parseFloat(document.getElementById("hQty").value);
-  const stop = parseFloat(document.getElementById("hStop").value) || null;
-  const alvo = parseFloat(document.getElementById("hAlvo").value) || null;
-  const score = parseInt(document.getElementById("hScore").value) || null;
-  if (!ticker||!entrada||!qty) { alert("Preencha Ticker, Preco de Entrada e Quantidade."); return; }
-  abrirOperacao({ ticker, quantidade: qty, preco: entrada, stop, alvo, mercado: "B3", score, sinal });
-  ["hTicker","hEntrada","hQty","hStop","hAlvo","hScore"].forEach(id => document.getElementById(id).value = "");
-}
-
-async function encerrarOperacao(id) {
-  const op = operacoes.find(o => o.id === id);
-  if (!op) return;
-  const saida = parseFloat(prompt("Preco de saida:"));
-  if (!saida||isNaN(saida)) return;
-  const motivo = prompt("Motivo (ALVO ATINGIDO / STOP ATINGIDO / SAIDA MANUAL):")||"SAIDA MANUAL";
-  await venderOperacao(id, op.quantidade_atual, saida, motivo);
-  renderHistorico();
-}
-
-async function deleteOperacao(id) {
-  await deletarOperacao(id);
-}
-
-function calcPerf() {
-  const enc = getHistorico();
-  if (!enc.length) return null;
-  const ac = enc.filter(h => h.atlas_acertou === true).length;
-  const lucro = enc.reduce((a,h) => a + parseFloat(h.lucro_total||0), 0);
-  const melhor = enc.reduce((a,h) => parseFloat(h.resultado_pct)>parseFloat(a.resultado_pct||"-999")?h:a, enc[0]);
-  const pior = enc.reduce((a,h) => parseFloat(h.resultado_pct)<parseFloat(a.resultado_pct||"999")?h:a, enc[0]);
-  return { total:enc.length, acertos:ac, taxa:((ac/enc.length)*100).toFixed(1), lucro, melhor, pior };
-}
-
-function renderHistorico() {
-  const perf = calcPerf();
-  const perfEl = document.getElementById("perfSummary");
-  if (perfEl) {
-    if (!perf) {
-      perfEl.innerHTML = '<div style="font-family:monospace;font-size:10px;color:var(--dim);text-align:center;padding:20px;">Sem operacoes encerradas ainda.</div>';
-    } else {
-      perfEl.innerHTML = [
-        ["OPERACOES", perf.total, "var(--txt)"],
-        ["TAXA ACERTO", perf.taxa+"%", parseFloat(perf.taxa)>=60?"var(--green)":"var(--red)"],
-        ["LUCRO TOTAL", "R$ "+perf.lucro.toFixed(2), perf.lucro>=0?"var(--green)":"var(--red)"],
-        ["ACERTOS", perf.acertos+"/"+perf.total, "var(--cyan)"],
-        ["MELHOR", perf.melhor.ticker+" +"+(perf.melhor.resultado_pct||0)+"%", "var(--green)"],
-        ["PIOR", perf.pior.ticker+" "+(perf.pior.resultado_pct||0)+"%", "var(--red)"],
-      ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px">'+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+c+'">'+v+'</div></div>').join("");
-    }
-  }
-
-  const el = document.getElementById("historicoContent");
-  if (!el) return;
-  const abertas = getCarteira();
-  const enc = getHistorico().slice().sort((a,b)=>new Date(b.data_entrada)-new Date(a.data_entrada));
-  let html = "";
-
-  if (abertas.length) {
-    html += sec("POSICOES ABERTAS / PARCIAIS")+
-      '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px;">'+
-      abertas.map(op=>'<div style="background:var(--card);border:1px solid rgba(0,255,136,.2);border-left:3px solid var(--green);padding:14px 18px;display:grid;grid-template-columns:80px 80px 100px 100px 100px 100px 80px 1fr;align-items:center;gap:12px;">'+
-        '<div style="font-family:Rajdhani,sans-serif;font-size:17px;font-weight:700;color:var(--green)">'+op.ticker+'</div>'+
-        '<div style="font-size:11px;color:'+( op.status==="PARCIAL"?"var(--yellow)":"var(--green)")+'">'+op.status+'</div>'+
-        '<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">ENTRADA</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--blue)">R$ '+op.preco_medio.toFixed(2)+'</div></div>'+
-        '<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">QTDE</div><div style="font-family:Rajdhani,sans-serif;font-size:14px">'+op.quantidade_atual+'</div></div>'+
-        '<div><div style="font-family:monospace;font-size:8px;color:var(--red)">STOP</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--red)">'+( op.stop_loss?"R$"+op.stop_loss:"--")+'</div></div>'+
-        '<div><div style="font-family:monospace;font-size:8px;color:var(--green)">ALVO</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--green)">'+( op.alvo?"R$"+op.alvo:"--")+'</div></div>'+
-        '<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">SCORE</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;color:var(--yellow)">'+( op.score_atlas||"--")+'</div></div>'+
-        '<div style="display:flex;gap:8px;justify-content:flex-end;">'+
-        '<button onclick="encerrarOperacao('+op.id+')" style="background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);color:var(--green);padding:6px 14px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ENCERRAR</button>'+
-        '<button onclick="deleteOperacao('+op.id+')" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.3);color:var(--red);padding:6px 10px;cursor:pointer;font-family:monospace;font-size:9px;">DEL</button>'+
-        '</div></div>').join("")+'</div>';
-  }
-
-  if (enc.length) {
-    html += sec("OPERACOES ENCERRADAS")+
-      '<div style="overflow-x:auto;"><table class="portfolio-table" style="min-width:900px;">'+
-      '<thead><tr>'+["DATA","TICKER","ENTROU","SAIU","DIAS","RESULT%","RESULT R$","MOTIVO","ATLAS",""].map(h=>'<th>'+h+'</th>').join("")+'</tr></thead>'+
-      '<tbody>'+enc.map(op => {
-        const res = parseFloat(op.resultado_pct||0);
-        const rc = res>=0?"var(--green)":"var(--red)";
-        const g = op.atlas_acertou===true?"SIM OK":op.atlas_acertou===false?"NAO X":"--";
-        const gc = op.atlas_acertou===true?"var(--green)":op.atlas_acertou===false?"var(--red)":"var(--dim)";
-        const dataEntrada = op.data_entrada || "--";
-        const dataSaida = op.saidas && op.saidas.length ? op.saidas[op.saidas.length-1].data : "--";
-        const dias = dataEntrada!=="--"&&dataSaida!=="--" ? Math.round((new Date(dataSaida)-new Date(dataEntrada))/(1000*60*60*24)) : "--";
-        const ultimoMotivo = op.saidas && op.saidas.length ? op.saidas[op.saidas.length-1].motivo : "--";
-        const precoSaida = op.saidas && op.saidas.length ? "R$"+op.saidas[op.saidas.length-1].preco.toFixed(2) : "--";
-        return '<tr>'+
-          '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+dataSaida+'</td>'+
-          '<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+op.ticker+'</td>'+
-          '<td style="color:var(--sub)">R$ '+op.preco_medio.toFixed(2)+'</td>'+
-          '<td>'+precoSaida+'</td>'+
-          '<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+dias+'d</td>'+
-          '<td style="font-weight:700;color:'+rc+'">'+( res>=0?"+":"")+res.toFixed(2)+'%</td>'+
-          '<td style="font-weight:600;color:'+rc+'">'+( op.lucro_total>=0?"+ R$ ":"- R$ ")+Math.abs(op.lucro_total).toFixed(2)+'</td>'+
-          '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+ultimoMotivo+'</td>'+
-          '<td style="font-weight:700;color:'+gc+'">'+g+'</td>'+
-          '<td><button onclick="deleteOperacao('+op.id+')" class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);">DEL</button></td></tr>';
-      }).join("")+'</tbody></table></div>';
-  }
-
-  if (!abertas.length && !enc.length) {
-    html = '<div class="empty">Nenhuma operacao ainda.<br><span style="font-size:9px;margin-top:8px;display:block">Abra sua primeira operacao na aba CARTEIRA.</span></div>';
-  }
-  el.innerHTML = html;
-}
-
-
-// ─── RELATORIO MENSAL ──────────────────────────────────────────
-function renderRelatorioTab() {
-  // Popula o select de meses com os meses que tem operacoes
-  const sel = document.getElementById("relatorioMes");
-  if (!sel) return;
-  const meses = {};
-  historico.forEach(h => {
-    const d = h.dataSaida || h.dataEntrada;
-    if (!d) return;
-    const [ano, mes] = d.split("-");
-    const key = ano+"-"+mes;
-    const label = new Date(ano, mes-1, 1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
-    meses[key] = label;
-  });
-  const keys = Object.keys(meses).sort().reverse();
-  if (!keys.length) {
-    sel.innerHTML = '<option>Nenhum mes disponivel</option>';
-    return;
-  }
-  sel.innerHTML = keys.map(k=>'<option value="'+k+'">'+meses[k]+'</option>').join("");
-}
-
-function buildRelatorioPrompt(mes, ops, capitalInicial) {
-  const enc = ops.filter(o=>o.status==="ENCERRADA");
-  const abertas = ops.filter(o=>o.status==="ABERTA");
-  const acertos = enc.filter(o=>o.guruAcertou===true).length;
-  const erros = enc.filter(o=>o.guruAcertou===false).length;
-  const taxaAcerto = enc.length > 0 ? ((acertos/enc.length)*100).toFixed(1) : 0;
-  const lucroTotal = enc.reduce((a,o)=>a+parseFloat(o.lucroReais||0),0);
-  const retornoPct = capitalInicial > 0 ? ((lucroTotal/capitalInicial)*100).toFixed(2) : 0;
-  const melhor = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado)>parseFloat(a.resultado||"-999")?o:a,enc[0]) : null;
-  const pior = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado)<parseFloat(a.resultado||"999")?o:a,enc[0]) : null;
-  const detalhes = enc.map(o=>o.ticker+": entrada R$"+o.entrada+", saida R$"+o.saida+", resultado "+o.resultado+"%, lucro R$"+o.lucroReais+", motivo: "+o.motivo+", ATLAS acertou: "+o.guruAcertou).join(" | ");
-  const abertasInfo = abertas.length > 0 ? "POSICOES ABERTAS: "+abertas.map(o=>o.ticker).join(", ") : "";
-  const p = [
-    "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Gere o relatorio mensal.",
-    "MES: "+mes,
-    "OPERACOES ENCERRADAS: "+enc.length,
-    "ACERTOS: "+acertos+" | ERROS: "+erros+" | TAXA: "+taxaAcerto+"%",
-    "LUCRO/PREJUIZO: R$ "+lucroTotal.toFixed(2),
-    "RETORNO: "+retornoPct+"% | META: +8% | META BATIDA: "+(parseFloat(retornoPct)>=8?"SIM":"NAO"),
-    melhor?"MELHOR: "+melhor.ticker+" +"+melhor.resultado+"%":"",
-    pior?"PIOR: "+pior.ticker+" "+pior.resultado+"%":"",
-    abertasInfo,
-    "OPERACOES: "+detalhes,
-    benchmark ? "CDI NO MES: +"+benchmark.cdi.var_mes+"% | IBOVESPA NO MES: "+(benchmark.ibovespa.var_mes>=0?"+":"")+benchmark.ibovespa.var_mes+"% | CDI NO ANO: +"+benchmark.cdi.var_ano+"% | IBOVESPA NO ANO: "+(benchmark.ibovespa.var_ano>=0?"+":"")+benchmark.ibovespa.var_ano+"%" : "",
-    "ATLAS BATEU CDI: "+(parseFloat(retornoPct) > (benchmark?.cdi?.var_mes||0.87) ? "SIM" : "NAO"),
-    "ATLAS BATEU IBOV: "+(parseFloat(retornoPct) > (benchmark?.ibovespa?.var_mes||0) ? "SIM" : "NAO"),
-    "Gere relatorio completo, honesto e em linguagem simples. Considere os benchmarks na nota. Calcule nota com rigor.",
-    'Retorne APENAS JSON: {"mes":"","resumo_executivo":"","meta_batida":false,"retorno_real":"","taxa_acerto":"","lucro_total":"","operacoes_total":0,"acertos":0,"erros":0,"melhor_operacao":{"ticker":"","resultado":"","motivo_sucesso":""},"pior_operacao":{"ticker":"","resultado":"","motivo_falha":""},"o_que_funcionou":"","o_que_nao_funcionou":"","erros_cometidos":"","licoes_aprendidas":"","analise_atlas":"","estrategia_proximo_mes":"","meta_proximo_mes":"+8%","nota_atlas":"A","justificativa_nota":"","mensagem_motivacional":""}',
-  ].filter(Boolean).join("\n");
-  return p;
-}
-
-
-function renderRelatorioResult(d, stats) {
-  const notaCor = d.nota_atlas==="A"?"var(--green)":d.nota_atlas==="B"?"var(--cyan)":d.nota_atlas==="C"?"var(--yellow)":"var(--red)";
-  const metaCor = d.meta_batida ? "var(--green)" : "var(--red)";
-  const metaEmoji = d.meta_batida ? "BATIDA" : "NAO BATIDA";
-  const lucroCor = parseFloat(String(d.lucro_total||"0").replace(/[^0-9.-]/g,"")) >= 0 ? "var(--green)" : "var(--red)";
-
-  return '<div style="animation:fadeUp .4s ease">'
-
-    // Header cards
-    +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px;">'
-    +[
-      ["MES", d.mes, "var(--txt)"],
-      ["RETORNO REAL", d.retorno_real, lucroCor],
-      ["META +8%", metaEmoji, metaCor],
-      ["TAXA ACERTO", d.taxa_acerto, parseFloat(d.taxa_acerto)>=60?"var(--green)":"var(--red)"],
-      ["NOTA DO ATLAS", d.nota_atlas, notaCor],
-    ].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:16px;text-align:center;">'
-      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">'+k+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:'+c+';">'+String(v||"--")+'</div>'
-      +'</div>').join("")
-    +'</div>'
-
-    // Benchmark comparison
-    +(benchmark ? '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">'+
-      [
-        ["SUA CARTEIRA", d.retorno_real, parseFloat(String(d.retorno_real||"0").replace("%",""))>=8?"var(--green)":"var(--yellow)"],
-        ["CDI NO MES", "+"+(benchmark.cdi.var_mes)+"%", "var(--yellow)"],
-        ["IBOVESPA NO MES", (benchmark.ibovespa.var_mes>=0?"+":"")+benchmark.ibovespa.var_mes+"%", benchmark.ibovespa.var_mes>=0?"var(--green)":"var(--red)"],
-      ].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:16px;text-align:center;">'+
-        '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">'+k+'</div>'+
-        '<div style="font-family:Rajdhani,sans-serif;font-size:24px;font-weight:700;color:'+c+';">'+String(v||"--")+'</div>'+
-        '</div>').join("")+
-      '</div>' : "")
-
-    // Stats row
-    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">'
-    +[
-      ["LUCRO TOTAL", d.lucro_total, lucroCor],
-      ["OPERACOES", d.operacoes_total, "var(--txt)"],
-      ["ACERTOS", d.acertos, "var(--green)"],
-      ["ERROS", d.erros, "var(--red)"],
-    ].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:14px;">'
-      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+';">'+String(v||"0")+'</div>'
-      +'</div>').join("")
-    +'</div>'
-
-    // Resumo executivo
-    +'<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:22px;margin-bottom:16px;">'
-    +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;">RESUMO EXECUTIVO</div>'
-    +'<div style="font-size:14px;color:var(--sub);line-height:1.8;font-style:italic;">"'+String(d.resumo_executivo||"")+'"</div>'
-    +'</div>'
-
-    // Melhor e pior operacao
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">'
-    +'<div style="background:var(--card);border:1px solid rgba(0,255,136,.3);padding:18px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--green);margin-bottom:10px;">MELHOR OPERACAO</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:24px;font-weight:700;color:var(--green);margin-bottom:4px;">'+String(d.melhor_operacao?.ticker||"--")+'</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:18px;color:var(--green);margin-bottom:8px;">'+String(d.melhor_operacao?.resultado||"")+'</div>'
-    +'<div style="font-size:11px;color:var(--sub);line-height:1.6;">'+String(d.melhor_operacao?.motivo_sucesso||"")+'</div>'
-    +'</div>'
-    +'<div style="background:var(--card);border:1px solid rgba(255,51,85,.3);padding:18px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--red);margin-bottom:10px;">PIOR OPERACAO</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:24px;font-weight:700;color:var(--red);margin-bottom:4px;">'+String(d.pior_operacao?.ticker||"--")+'</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:18px;color:var(--red);margin-bottom:8px;">'+String(d.pior_operacao?.resultado||"")+'</div>'
-    +'<div style="font-size:11px;color:var(--sub);line-height:1.6;">'+String(d.pior_operacao?.motivo_falha||"")+'</div>'
-    +'</div>'
-    +'</div>'
-
-    // Analise detalhada
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">'
-    +[
-      ["O QUE FUNCIONOU","var(--green)",d.o_que_funcionou],
-      ["O QUE NAO FUNCIONOU","var(--red)",d.o_que_nao_funcionou],
-      ["ERROS COMETIDOS","var(--yellow)",d.erros_cometidos],
-      ["LICOES APRENDIDAS","var(--cyan)",d.licoes_aprendidas],
-    ].map(([t,c,v])=>'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
-      +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:'+c+';margin-bottom:10px;">'+t+'</div>'
-      +'<div style="font-size:12px;color:var(--sub);line-height:1.7;">'+String(v||"--")+'</div>'
-      +'</div>').join("")
-    +'</div>'
-
-    // Analise do ATLAS
-    +'<div style="background:rgba(255,204,0,.04);border:1px solid rgba(255,204,0,.2);padding:20px;margin-bottom:16px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:10px;">AUTOCRITICA DO ATLAS</div>'
-    +'<div style="font-size:12px;color:var(--sub);line-height:1.7;">'+String(d.analise_atlas||"")+'</div>'
-    +'</div>'
-
-    // Estrategia proximo mes
-    +'<div style="background:rgba(0,170,255,.05);border:1px solid rgba(0,170,255,.25);padding:20px;margin-bottom:16px;">'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--blue);margin-bottom:10px;">ESTRATEGIA PARA O PROXIMO MES</div>'
-    +'<div style="font-size:12px;color:var(--sub);line-height:1.7;margin-bottom:10px;">'+String(d.estrategia_proximo_mes||"")+'</div>'
-    +'<div style="font-family:monospace;font-size:10px;color:var(--blue);">META: '+String(d.meta_proximo_mes||"+8%")+'</div>'
-    +'</div>'
-
-    // Nota e mensagem
-    +'<div style="display:grid;grid-template-columns:150px 1fr;gap:10px;margin-bottom:20px;">'
-    +'<div style="background:var(--card);border:2px solid '+notaCor+';padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;">'
-    +'<div style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:2px;margin-bottom:8px;">NOTA DO ATLAS</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:72px;font-weight:700;color:'+notaCor+';line-height:1;">'+String(d.nota_atlas||"--")+'</div>'
-    +'<div style="font-size:10px;color:var(--sub);margin-top:8px;line-height:1.5;">'+String(d.justificativa_nota||"")+'</div>'
-    +'</div>'
-    +'<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:22px;display:flex;flex-direction:column;justify-content:center;">'
-    +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:12px;">MENSAGEM DO ATLAS PARA VOCE</div>'
-    +'<div style="font-size:14px;color:var(--sub);line-height:1.8;font-style:italic;">"'+String(d.mensagem_motivacional||"")+'"</div>'
-    +'</div>'
-    +'</div>'
-
-    +'</div>';
-}
-
-async function gerarRelatorio() {
-  const sel = document.getElementById("relatorioMes");
-  const mesSel = sel?.value;
-  if (!mesSel || mesSel === "Nenhum mes disponivel") {
-    alert("Nenhuma operacao registrada ainda. Faca operacoes primeiro!");
-    return;
-  }
-
-  const [ano, mes] = mesSel.split("-");
-  const mesNome = new Date(ano, mes-1, 1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
-
-  // Filtra operacoes do mes
-  const opsDoMes = historico.filter(h=>{
-    const d = h.dataSaida || h.dataEntrada;
-    if (!d) return false;
-    const [a,m] = d.split("-");
-    return a===ano && m===mes;
-  });
-
-  if (!opsDoMes.length) {
-    alert("Nenhuma operacao encontrada para "+mesNome);
-    return;
-  }
-
-  document.getElementById("emptyRelatorio").style.display = "none";
-  document.getElementById("errRelatorio").style.display = "none";
-  document.getElementById("resultRelatorio").style.display = "none";
-  document.getElementById("loadRelatorio").style.display = "flex";
-  document.getElementById("stepsRelatorio").innerHTML = [
-    "Calculando resultados...",
-    "Analisando operacoes...",
-    "Avaliando performance do ATLAS...",
-    "Gerando relatorio com IA...",
-    "Calculando nota final..."
-  ].map((s,i)=>'<div style="color:var(--green);font-family:monospace;font-size:10px;">'+( i===0?">":".")+" "+s+'</div>').join("");
-
-  // Calcula capital inicial (valor da carteira no inicio do mes)
-  const capitalInicial = portfolio.reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.price)||0),0) || 5000;
-
-  try {
-    const data = await callClaude(buildRelatorioPrompt(mesNome, opsDoMes, capitalInicial));
-    document.getElementById("loadRelatorio").style.display = "none";
-    document.getElementById("resultRelatorio").innerHTML = renderRelatorioResult(data, {});
-    document.getElementById("resultRelatorio").style.display = "block";
-  } catch(e) {
-    document.getElementById("loadRelatorio").style.display = "none";
-    document.getElementById("errRelatorio").textContent = "ERRO: "+e.message;
-    document.getElementById("errRelatorio").style.display = "block";
+    return res.status(500).json({ error: e.message });
   }
 }
-
-
-// ─── GRAFICOS INTERATIVOS ──────────────────────────────────────
-let currentChartData = null;
-let currentChartTicker = null;
-let mainChart = null;
-let rsiChart = null;
-let macdChart = null;
-
-function destroyCharts() {
-  if (mainChart) { try { mainChart.remove(); } catch(e) {} mainChart = null; }
-  if (rsiChart) { try { rsiChart.remove(); } catch(e) {} rsiChart = null; }
-  if (macdChart) { try { macdChart.remove(); } catch(e) {} macdChart = null; }
-}
-
-function renderCharts(indicatorData, period) {
-  if (!indicatorData || !indicatorData.historico_recente) return;
-  currentChartData = indicatorData;
-  period = period || 60;
-
-  destroyCharts();
-
-  const hist = indicatorData.historico_recente || [];
-  if (!hist.length) return;
-
-  // Slice para o periodo selecionado
-  const data = hist.slice(-period);
-
-  const chartOpts = {
-    layout: {
-      background: { color: "#090f18" },
-      textColor: "#7a9bb5",
-    },
-    grid: {
-      vertLines: { color: "#0f2035" },
-      horzLines: { color: "#0f2035" },
-    },
-    crosshair: { mode: 1 },
-    rightPriceScale: { borderColor: "#0f2035" },
-    timeScale: { borderColor: "#0f2035", timeVisible: true },
-    handleScroll: true,
-    handleScale: true,
-  };
-
-  // ── GRAFICO PRINCIPAL — Candlestick + Volume + MMs ──────────
-  const mainEl = document.getElementById("chartMain");
-  mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
-
-  const candleSeries = mainChart.addCandlestickSeries({
-    upColor: "#00ff88",
-    downColor: "#ff3355",
-    borderUpColor: "#00ff88",
-    borderDownColor: "#ff3355",
-    wickUpColor: "#00ff88",
-    wickDownColor: "#ff3355",
-  });
-
-  const candleData = data.map(d => ({
-    time: d.date,
-    open: parseFloat(d.open||d.close),
-    high: parseFloat(d.high),
-    low: parseFloat(d.low),
-    close: parseFloat(d.close),
-  })).filter(d => d.open && d.high && d.low && d.close);
-
-  candleSeries.setData(candleData);
-
-  // Volume como histograma
-  const volumeSeries = mainChart.addHistogramSeries({
-    color: "rgba(0,170,255,0.3)",
-    priceFormat: { type: "volume" },
-    priceScaleId: "volume",
-    scaleMargins: { top: 0.85, bottom: 0 },
-  });
-
-  const volumeData = data.map(d => ({
-    time: d.date,
-    value: d.volume || 0,
-    color: parseFloat(d.close) >= parseFloat(d.open||d.close) ? "rgba(0,255,136,0.3)" : "rgba(255,51,85,0.3)",
-  }));
-  volumeSeries.setData(volumeData);
-
-  // Medias moveis — dados reais historicos
-  const ind = indicatorData.indicadores;
-  const mmDefs = [
-    { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
-    { key: "historico_mm21", color: "#00aaff", label: "MM21", width: 1 },
-    { key: "historico_mm50", color: "#ff8800", label: "MM50", width: 1.5 },
-  ];
-  mmDefs.forEach(mm => {
-    const hist = (indicatorData[mm.key] || []).slice(-period);
-    if (!hist.length) return;
-    const mmSeries = mainChart.addLineSeries({
-      color: mm.color, lineWidth: mm.width,
-      priceLineVisible: false, lastValueVisible: true,
-      title: mm.label,
-    });
-    mmSeries.setData(hist.map(d => ({ time: d.date, value: d.value })));
-  });
-
-  // Suporte e Resistencia como linhas horizontais
-  if (indicatorData.suporte_resistencia) {
-    const sup = indicatorData.suporte_resistencia.suporte;
-    const res = indicatorData.suporte_resistencia.resistencia;
-    if (sup) candleSeries.createPriceLine({ price: sup, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Suporte" });
-    if (res) candleSeries.createPriceLine({ price: res, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Resistencia" });
-    if (indicatorData.gestao_risco?.stop_sugerido) {
-      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.stop_sugerido, color: "#ff3355", lineWidth: 1, lineStyle: 3, title: "Stop ATR" });
-    }
-    if (indicatorData.gestao_risco?.alvo_sugerido) {
-      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.alvo_sugerido, color: "#00ff88", lineWidth: 1, lineStyle: 3, title: "Alvo ATR" });
-    }
-  }
-
-  mainChart.timeScale().fitContent();
-
-  // ── RSI REAL ──────────────────────────────────────────────────
-  const rsiEl = document.getElementById("chartRSI");
-  rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
-
-  const rsiSeries = rsiChart.addLineSeries({
-    color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
-  });
-
-  // Usa dados historicos reais do indicators.js
-  const rsiHistData = (indicatorData.historico_rsi || []).slice(-period);
-  if (rsiHistData.length) {
-    rsiSeries.setData(rsiHistData.map(d => ({ time: d.date, value: d.value })));
-  }
-
-  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomp." });
-  rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
-  rsiSeries.createPriceLine({ price: 50, color: "#3a5570", lineWidth: 1, lineStyle: 2 });
-  rsiChart.timeScale().fitContent();
-
-  // ── MACD REAL ─────────────────────────────────────────────────
-  const macdEl = document.getElementById("chartMACD");
-  macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
-
-  const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
-  const signalSeries = macdChart.addLineSeries({ color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
-  const histSeries = macdChart.addHistogramSeries({ priceLineVisible: false, title: "Hist" });
-
-  const macdHistData = indicatorData.historico_macd || {};
-  const macdLineData = (macdHistData.macdLine || []).slice(-period);
-  const signalLineData = (macdHistData.signalLine || []).slice(-period);
-  const histData = (macdHistData.histogram || []).slice(-period);
-
-  if (macdLineData.length) macdSeries.setData(macdLineData.map(d => ({ time: d.date, value: d.value })));
-  if (signalLineData.length) signalSeries.setData(signalLineData.map(d => ({ time: d.date, value: d.value })));
-  if (histData.length) histSeries.setData(histData.map(d => ({
-    time: d.date, value: d.value,
-    color: d.value >= 0 ? "rgba(0,255,136,0.6)" : "rgba(255,51,85,0.6)"
-  })));
-
-  macdChart.timeScale().fitContent();
-
-  // Sincroniza zoom entre os 3 graficos
-  mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-    if (range) {
-      rsiChart.timeScale().setVisibleLogicalRange(range);
-      macdChart.timeScale().setVisibleLogicalRange(range);
-    }
-  });
-
-  document.getElementById("chartContainer").style.display = "block";
-}
-
-function setChartPeriod(period) {
-  ["btn30","btn60","btn90","btn200"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.color = "var(--dim)";
-  });
-  const map = {30:"btn30",60:"btn60",90:"btn90",200:"btn200"};
-  const el = document.getElementById(map[period]);
-  if (el) el.style.color = "var(--cyan)";
-  if (currentChartData) renderCharts(currentChartData, period);
-}
-
-</script>
-</body>
-</html>
