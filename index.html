@@ -1951,10 +1951,11 @@ async function analyze(tickerOverride) {
   document.getElementById("stepsA").innerHTML = steps(STEPS_A, 0);
 
   try {
-    // Busca cotacao e indicadores em paralelo
-    const [quoteRaw, indicators] = await Promise.all([
+    // Busca cotacao, indicadores e fundamentalista em paralelo
+    const [quoteRaw, indicators, fundamentals] = await Promise.all([
       fetchQuote(ticker),
-      fetchIndicators(ticker)
+      fetchIndicators(ticker),
+      fetchFundamentals(ticker)
     ]);
     let quote = quoteRaw;
     if (mp) quote = { price:mp, change:quote&&quote.change||"0.00", high:quote&&quote.high||mp, low:quote&&quote.low||mp, volume:quote&&quote.volume||0, prevClose:quote&&quote.prevClose||mp, market:quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"), currency:quote&&quote.currency||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"R$":"US$"), name:quote&&quote.name||ticker, source:"Manual" };
