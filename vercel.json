@@ -1,14 +1,14 @@
 {
+  "functions": {
+    "api/indicators.js": { "maxDuration": 30 },
+    "api/analyze.js": { "maxDuration": 30 },
+    "api/precalc.js": { "maxDuration": 300 }
+  },
   "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/$1"
-    }
+    { "source": "/api/(.*)", "destination": "/api/$1" }
   ],
   "crons": [
-    {
-      "path": "/api/monitor",
-      "schedule": "0 13 * * 1-5"
-    }
+    { "path": "/api/precalc", "schedule": "45 12 * * 1-5" },
+    { "path": "/api/monitor", "schedule": "0 13 * * 1-5" }
   ]
 }
