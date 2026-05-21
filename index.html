@@ -1830,6 +1830,8 @@ Retorne APENAS JSON:
 
 // ─── ANALISAR ─────────────────────────────────────────────────
 const STEPS_A = ["Buscando cotacao...","Carregando fundamentos...","Calculando indicadores...","Analisando price action...","Contexto macro...","Catalisadores...","5 sistemas...","7 travas...","Previsao temporal...","Gerando sinal..."];
+const STEPS_G = ["Iniciando...","Buscando cotacoes...","Calculando capital...","Score pre-filtro...","Indicadores matematicos...","Travas e confluencia...","ATLAS consultando..."];
+const STEPS_B = ["Iniciando briefing...","Buscando cotacoes...","Analisando carteira..."];
 
 async function analyze(tickerOverride) {
   const ticker = (tickerOverride || document.getElementById("tickerInput").value).trim().toUpperCase();
