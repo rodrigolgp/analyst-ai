@@ -751,6 +751,12 @@ function renderJournalCard(operacao) {
 
   <!-- CONFIG -->
   <div id="tab-config" style="display:none;">
+    <div style="background:var(--card);border:1px solid rgba(0,255,136,.3);padding:18px;margin-bottom:16px;">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--green);margin-bottom:8px;">CACHE DE INDICADORES</div>
+      <div id="precalcStatus" style="font-family:monospace;font-size:10px;color:var(--dim);margin-bottom:12px;">Verificando cache...</div>
+      <button class="btn" onclick="rodarPrecalc()" id="btnPrecalc" style="width:100%;background:rgba(0,255,136,.15);border-color:var(--green);color:var(--green);">RECALCULAR INDICADORES AGORA</button>
+      <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-top:8px;line-height:1.8;">Automatico: 9h45 e 12h (seg-sex) | Manual: clique acima</div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
 
       <!-- Telegram -->
