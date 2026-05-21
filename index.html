@@ -1712,7 +1712,8 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru, travasGuru) {
       +(p.nota?", nota=["+p.nota+"]":"");
   }).join("\n") : "Nenhuma posicao aberta";
 
-  const candidatos = Object.entries(indicadoresGuru||{})
+  const todosIndicadores = Object.entries(indicadoresGuru||{});
+  const candidatos = todosIndicadores
     .filter(([t]) => !carteira.some(p => p.ticker === t))
     .map(([t, ind]) => {
       const q = quotes[t];
@@ -1738,8 +1739,8 @@ CAIXA DISPONIVEL: R$`+caixaDisponivel.toFixed(2)+` (reserva minima 20%: R$`+rese
 POSICOES ATUAIS:
 `+posicoes+`
 
-CANDIDATOS PARA NOVAS ENTRADAS (pre-filtrados):
-`+candidatos+`
+CANDIDATOS PARA NOVAS ENTRADAS:
+`+(candidatos || "Nenhum candidato aprovado hoje - mercado sem setup claro. Recomende aguardar.")+`
 
 INSTRUCOES:
 POSICOES ABERTAS - REGRA DE OURO:
@@ -2379,26 +2380,33 @@ async function guruMontar() {
     }
 
     if (isCarteira) {
-      // Ativos da carteira SEMPRE analisados (para decidir manter/vender)
       carteiraSemTravas.push(t);
-    } else if (trava.passou && (ind?.confluencia?.score || 0) >= 65) {
-      // Novos candidatos precisam passar nas travas
+    } else if (trava.passou && (ind?.confluencia?.score || 0) >= 60) {
       novosCandidatos.push(t);
     }
   });
 
-  // Ordena novos candidatos por confluencia
   novosCandidatos.sort((a,b) =>
     (indicadoresGuru[b]?.confluencia?.score||0) - (indicadoresGuru[a]?.confluencia?.score||0)
   );
 
-  // Se poucos candidatos aprovados, relaxa para 4/7 travas
-  const candidatosGuruFinal = novosCandidatos.length >= 3
-    ? novosCandidatos
-    : top25Guru.filter(t => !carteiraTickers.includes(t) && travasGuru[t]?.aprovadas >= 4)
-               .sort((a,b) => (indicadoresGuru[b]?.confluencia?.score||0) - (indicadoresGuru[a]?.confluencia?.score||0));
+  // Fallback progressivo se poucos candidatos
+  let candidatosGuruFinal = novosCandidatos;
+  if (candidatosGuruFinal.length < 3) {
+    // Relaxa para 3/7 travas com score >= 50
+    candidatosGuruFinal = top25Guru
+      .filter(t => !carteiraTickers.includes(t) && (travasGuru[t]?.aprovadas >= 3) && (indicadoresGuru[t]?.confluencia?.score||0) >= 50)
+      .sort((a,b) => (indicadoresGuru[b]?.confluencia?.score||0) - (indicadoresGuru[a]?.confluencia?.score||0));
+  }
+  if (candidatosGuruFinal.length < 3) {
+    // Ultimo fallback: top 5 por confluencia independente de travas
+    candidatosGuruFinal = top25Guru
+      .filter(t => !carteiraTickers.includes(t) && indicadoresGuru[t])
+      .sort((a,b) => (indicadoresGuru[b]?.confluencia?.score||0) - (indicadoresGuru[a]?.confluencia?.score||0))
+      .slice(0, 5);
+  }
 
-  console.log(`Guru travas: ${carteiraSemTravas.length} carteira + ${candidatosGuruFinal.length} novos aprovados`);
+  console.log(`Guru: ${carteiraSemTravas.length} carteira + ${candidatosGuruFinal.length} candidatos`);
 
   // Monta indicadores apenas dos ativos relevantes
   const indicadoresGuruFiltrado = {};
