@@ -83,6 +83,45 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
 }
 </style>
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js">
+// ─── PRECALC / CACHE ──────────────────────────────────────────
+async function verificarCachePrecalc() {
+  try {
+    const r = await fetch("/api/indicators?ticker=PETR4");
+    if (r.ok) {
+      const d = await r.json();
+      const el = document.getElementById("precalcStatus");
+      if (!el) return;
+      if (d._from_cache) {
+        const cached_at = d.cached_at ? new Date(d.cached_at).toLocaleString("pt-BR") : "desconhecido";
+        el.innerHTML = '<span style="color:var(--green)">Cache ATIVO</span> - Calculado em: '+cached_at;
+      } else {
+        el.innerHTML = '<span style="color:var(--yellow)">Cache INATIVO</span> - Calculando ao vivo (mais lento)';
+      }
+    }
+  } catch(e) {}
+}
+
+async function rodarPrecalc() {
+  const btn = document.getElementById("btnPrecalc");
+  const status = document.getElementById("precalcStatus");
+  btn.disabled = true;
+  btn.textContent = "Calculando... (pode demorar 2-3 min)";
+  status.innerHTML = '<span style="color:var(--yellow)">Calculando indicadores de todos os ativos...</span>';
+  try {
+    const r = await fetch("/api/precalc");
+    if (r.ok) {
+      const d = await r.json();
+      status.innerHTML = '<span style="color:var(--green)">Concluido!</span> '+d.message;
+    } else {
+      status.innerHTML = '<span style="color:var(--red)">Erro no precalc</span>';
+    }
+  } catch(e) {
+    status.innerHTML = '<span style="color:var(--red)">Erro: '+e.message+'</span>';
+  }
+  btn.disabled = false;
+  btn.textContent = "RECALCULAR INDICADORES AGORA";
+}
+
 // ─── GRAFICOS INTERATIVOS ──────────────────────────────────────
 let currentChartData = null;
 let currentChartTicker = null;
@@ -2028,13 +2067,17 @@ async function runRadar() {
   const top30 = selecionarCandidatos(RADAR_TICKERS, quotes, 30);
   console.log("Top 30 selecionados:", top30);
 
-  // NIVEL 2: Indicadores matematicos dos top 30 em paralelo
+  // NIVEL 2: Indicadores matematicos — sequencial para evitar timeout
   si = 4; document.getElementById("stepsR").innerHTML = steps(STEPS_R, si);
   const indicadoresRadar = {};
-  await Promise.all(top30.map(async t => {
-    const ind = await fetchIndicators(t);
-    if (ind) indicadoresRadar[t] = ind;
-  }));
+  // Calcula em lotes de 3 com delay para evitar timeout no Vercel
+  for (let i = 0; i < top30.length; i += 3) {
+    await Promise.all(top30.slice(i, i+3).map(async t => {
+      const ind = await fetchIndicators(t);
+      if (ind) indicadoresRadar[t] = ind;
+    }));
+    if (i + 3 < top30.length) await new Promise(r => setTimeout(r, 500));
+  }
 
   // NIVEL 3: Aplica travas matematicas - filtra antes de enviar ao ATLAS
   const resultadosTravas = {};
@@ -2367,10 +2410,14 @@ async function guruMontar() {
   // NIVEL 2: Indicadores matematicos em paralelo
   si = 4; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
   const indicadoresGuru = {};
-  await Promise.all(top25Guru.map(async t => {
-    const ind = await fetchIndicators(t);
-    if (ind) indicadoresGuru[t] = ind;
-  }));
+  // Indicadores em lotes de 3 para evitar timeout
+  for (let i = 0; i < top25Guru.length; i += 3) {
+    await Promise.all(top25Guru.slice(i, i+3).map(async t => {
+      const ind = await fetchIndicators(t);
+      if (ind) indicadoresGuru[t] = ind;
+    }));
+    if (i + 3 < top25Guru.length) await new Promise(r => setTimeout(r, 500));
+  }
 
   // NIVEL 3: Aplica travas - separa carteira de novos candidatos
   const travasGuru = {};
@@ -3156,6 +3203,45 @@ async function gerarRelatorio() {
   }
 }
 
+
+// ─── PRECALC / CACHE ──────────────────────────────────────────
+async function verificarCachePrecalc() {
+  try {
+    const r = await fetch("/api/indicators?ticker=PETR4");
+    if (r.ok) {
+      const d = await r.json();
+      const el = document.getElementById("precalcStatus");
+      if (!el) return;
+      if (d._from_cache) {
+        const cached_at = d.cached_at ? new Date(d.cached_at).toLocaleString("pt-BR") : "desconhecido";
+        el.innerHTML = '<span style="color:var(--green)">Cache ATIVO</span> - Calculado em: '+cached_at;
+      } else {
+        el.innerHTML = '<span style="color:var(--yellow)">Cache INATIVO</span> - Calculando ao vivo (mais lento)';
+      }
+    }
+  } catch(e) {}
+}
+
+async function rodarPrecalc() {
+  const btn = document.getElementById("btnPrecalc");
+  const status = document.getElementById("precalcStatus");
+  btn.disabled = true;
+  btn.textContent = "Calculando... (pode demorar 2-3 min)";
+  status.innerHTML = '<span style="color:var(--yellow)">Calculando indicadores de todos os ativos...</span>';
+  try {
+    const r = await fetch("/api/precalc");
+    if (r.ok) {
+      const d = await r.json();
+      status.innerHTML = '<span style="color:var(--green)">Concluido!</span> '+d.message;
+    } else {
+      status.innerHTML = '<span style="color:var(--red)">Erro no precalc</span>';
+    }
+  } catch(e) {
+    status.innerHTML = '<span style="color:var(--red)">Erro: '+e.message+'</span>';
+  }
+  btn.disabled = false;
+  btn.textContent = "RECALCULAR INDICADORES AGORA";
+}
 
 // ─── GRAFICOS INTERATIVOS ──────────────────────────────────────
 let currentChartData = null;
