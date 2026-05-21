@@ -2416,6 +2416,11 @@ async function guruMontar() {
 
   si = 5; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
 
+  // Debug log
+  console.log("indicadoresGuruFiltrado keys:", Object.keys(indicadoresGuruFiltrado));
+  console.log("carteiraSemTravas:", carteiraSemTravas);
+  console.log("candidatosGuruFinal:", candidatosGuruFinal);
+
   try {
     const data = await callClaude(buildGuruPrompt(quotes, cap, indicadoresGuruFiltrado, travasGuru));
     si = 6; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
