@@ -3283,10 +3283,10 @@ function buildFundamentalsContext(fun) {
   if (fun.crescimento_receita !== null) items.push("Cresc.Rec="+fun.crescimento_receita+"%");
   if (fun.setor) items.push("Setor="+fun.setor);
   if (!items.length) return "";
-  return "
---- DADOS FUNDAMENTALISTAS REAIS ("+fun.fonte+") ---
-"+items.join(" | ")+"
-";
+  if (!items.length) return "";
+  return "\n--- DADOS FUNDAMENTALISTAS REAIS ("+fun.fonte+") ---\n"+items.join(" | ")+"\n";
+
+
 }
 
 // ─── PRECALC / CACHE ──────────────────────────────────────────
