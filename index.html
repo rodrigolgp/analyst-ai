@@ -568,7 +568,6 @@ function renderJournalCard(operacao) {
     <div class="loading" id="loadA" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsA"></div></div>
     <div class="error-box" id="errA" style="display:none;"></div>
     <div id="resA" style="display:none;"></div>
-    <div id="avisoHorarioA" style="display:none;background:rgba(255,204,0,.08);border:1px solid rgba(255,204,0,.3);padding:10px 16px;margin-bottom:10px;font-family:monospace;font-size:10px;color:var(--yellow);">⚠ FORA DO PREGAO — Volume do dia pode ser zero. Analise baseada em dados historicos dos indicadores.</div>
     <div id="chartContainer" style="display:none;margin-bottom:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
         <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--cyan);">GRAFICO INTERATIVO</div>
@@ -1622,7 +1621,7 @@ CRITERIOS INEGOCIAVEIS (valem para QUALQUER recomendacao):
 2. R/R minimo 1:2, preferir 1:3
 3. Upside minimo 4% em 15 dias (operacoes acima de 8% sao PRIORIDADE ALTA)
 4. Stop maximo 5% abaixo da entrada
-5. Volume nao zerado no dia (exceto fora do pregao: use volume historico dos indicadores)
+5. Volume nao zerado no dia
 6. RSI ponderado entre 30 e 70
 7. MACD sem cruzamento baixista recente
 
@@ -1913,16 +1912,9 @@ async function analyze(tickerOverride) {
     document.getElementById("loadA").style.display = "none";
     // Salva ultima analise para pre-preencher abertura de posicao
     window._ultimaAnalise = { data, quote, indicators, ticker };
-    // Aviso fora do pregao
-    const _agora = new Date();
-    const _dia = _agora.getDay();
-    const _hora = _agora.getHours();
-    const _foraPregao = _dia === 0 || _dia === 6 || _hora < 10 || _hora > 17;
-    const _avisoEl = document.getElementById("avisoHorarioA");
-    if (_avisoEl) _avisoEl.style.display = _foraPregao ? "block" : "none";
-
     document.getElementById("resA").innerHTML = renderResult(data, quote, indicators);
     document.getElementById("resA").style.display = "block";
+    // Renderiza graficos se tiver dados de indicadores
     if (indicators && indicators.historico_recente) {
       setTimeout(() => renderCharts(indicators, 60), 300);
       setChartPeriod(60);
@@ -3606,4 +3598,4 @@ function renderJournalCard(operacao) {
 
 </script>
 </body>
-</html>
+</html> 
