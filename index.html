@@ -125,7 +125,7 @@ function renderCharts(indicatorData, period) {
     handleScale: true,
   };
 
-  // ── GRAFICO PRINCIPAL — Candlestick + Volume + MMs ──────────
+  // ── GRAFICO PRINCIPAL - Candlestick + Volume + MMs ──────────
   const mainEl = document.getElementById("chartMain");
   mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
 
@@ -163,7 +163,7 @@ function renderCharts(indicatorData, period) {
   }));
   volumeSeries.setData(volumeData);
 
-  // Medias moveis — dados reais historicos
+  // Medias moveis - dados reais historicos
   const ind = indicatorData.indicadores;
   const mmDefs = [
     { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
@@ -329,7 +329,7 @@ async function renderMapa() {
 
   let html = "";
 
-  // Header — sentimento geral
+  // Header - sentimento geral
   html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">'+
     [
       ["SENTIMENTO", sentimento, sentCor],
@@ -568,7 +568,7 @@ function renderJournalCard(operacao) {
     <div class="loading" id="loadA" style="display:none;"><div class="spinner"></div><div class="load-steps" id="stepsA"></div></div>
     <div class="error-box" id="errA" style="display:none;"></div>
     <div id="resA" style="display:none;"></div>
-    <div id="avisoHorarioA" style="display:none;background:rgba(255,204,0,.08);border:1px solid rgba(255,204,0,.3);padding:10px 16px;margin-bottom:10px;font-family:monospace;font-size:10px;color:var(--yellow);">⚠ FORA DO PREGAO — Volume do dia pode ser zero. Analise baseada em dados historicos dos indicadores.</div>
+    <div id="avisoHorarioA" style="display:none;background:rgba(255,204,0,.08);border:1px solid rgba(255,204,0,.3);padding:10px 16px;margin-bottom:10px;font-family:monospace;font-size:10px;color:var(--yellow);">ATENCAO: FORA DO PREGAO - Volume do dia pode ser zero. Analise baseada em dados historicos dos indicadores.</div>
     <div id="chartContainer" style="display:none;margin-bottom:20px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
         <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--cyan);">GRAFICO INTERATIVO</div>
@@ -614,7 +614,7 @@ function renderJournalCard(operacao) {
         <div style="font-family:'Rajdhani',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;margin-bottom:6px;">GURU INVESTIDOR</div>
         <div style="font-family:monospace;font-size:10px;color:var(--dim);line-height:1.8;margin-bottom:16px;">Seu gestor pessoal. Decide o que comprar, quanto, quando vender.</div>
         <div style="margin-bottom:12px;">
-          <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">NOVO APORTE (R$) — deixe 0 se nao vai aportar agora</div>
+          <div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">NOVO APORTE (R$) - deixe 0 se nao vai aportar agora</div>
           <input type="number" id="guruAporte" value="0" step="100"
             oninput="atualizarInfoCapital()"
             style="width:100%;background:var(--card);border:1px solid var(--hi);padding:10px 14px;outline:none;font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--green);"/>
@@ -736,7 +736,7 @@ function renderJournalCard(operacao) {
 
     <!-- App Info -->
     <div style="background:var(--card);border:1px solid var(--border);padding:20px;">
-      <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--cyan);">ATLAS WEALTH — INFORMACOES DO SISTEMA</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;margin-bottom:14px;color:var(--cyan);">ATLAS WEALTH - INFORMACOES DO SISTEMA</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
         <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">VERSAO</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--txt)">1.0.0</div></div>
         <div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">COTACOES</div><div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--green)">Yahoo Finance</div></div>
@@ -775,7 +775,7 @@ function renderJournalCard(operacao) {
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
       <div>
         <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;letter-spacing:2px;">MAPA DE CALOR</div>
-        <div style="font-family:monospace;font-size:10px;color:var(--dim);">Performance em tempo real por setor — B3 + NYSE/NASDAQ</div>
+        <div style="font-family:monospace;font-size:10px;color:var(--dim);">Performance em tempo real por setor - B3 + NYSE/NASDAQ</div>
       </div>
       <button class="btn" id="btnMapa" onclick="renderMapa()">ATUALIZAR</button>
     </div>
@@ -847,7 +847,7 @@ function calcTravas(ind, quote) {
   const rsi = i.rsi?.rsi_ponderado || 50;
   travas.rsi = rsi >= 25 && rsi <= 75;
 
-  // TRAVA 2: Volume — usa ratio historico como principal (cotacao ao vivo pode atrasar)
+  // TRAVA 2: Volume - usa ratio historico como principal (cotacao ao vivo pode atrasar)
   const volRatio = i.volume?.ratio || 0;
   const volDia = quote?.volume || 0;
   const volMedia = i.volume?.media20 || 0;
@@ -882,58 +882,6 @@ function calcTravas(ind, quote) {
   return { passou, aprovadas, total, travas };
 }
 // ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
-function scorePrefiltro(ticker, quote) {
-  let score = 0;
-  const var_ = parseFloat(quote.change || 0);
-  const vol = quote.volume || 0;
-
-  // Momentum positivo forte
-  if (var_ > 5) score += 35;
-  else if (var_ > 3) score += 28;
-  else if (var_ > 1.5) score += 20;
-  else if (var_ > 0.5) score += 12;
-
-  // Pullback saudavel (possivel reversao)
-  if (var_ < -2 && var_ > -6) score += 22;
-  else if (var_ < -1 && var_ > -2) score += 10;
-
-  // Mercado prestando atencao (volatilidade)
-  if (Math.abs(var_) > 4) score += 15;
-  else if (Math.abs(var_) > 2) score += 8;
-
-  // Volume como confirmador (quando disponivel)
-  if (vol > 0) {
-    // Ativos B3 com volume alto
-    if (vol > 50000000) score += 15;
-    else if (vol > 20000000) score += 10;
-    else if (vol > 5000000) score += 5;
-  }
-
-  // Bonus para ativos com preco razoavel (mais liquidos)
-  const price = quote.price || 0;
-  if (price > 5 && price < 500) score += 5;
-
-  return score;
-}
-
-function selecionarCandidatos(tickers, quotes, n) {
-  // Calcula score rapido para todos os ativos com cotacao
-  const scored = tickers
-    .filter(t => quotes[t])
-    .map(t => ({ ticker: t, score: scorePrefiltro(t, quotes[t]) }))
-    .sort((a, b) => b.score - a.score);
-
-  // Retorna top N garantindo diversificacao B3 + EUA
-  const b3 = scored.filter(x => /^[A-Z]{4}[0-9]{1,2}$/.test(x.ticker)).slice(0, Math.ceil(n * 0.6));
-  const eua = scored.filter(x => !/^[A-Z]{4}[0-9]{1,2}$/.test(x.ticker) && !/11$/.test(x.ticker)).slice(0, Math.floor(n * 0.3));
-  const fiis = scored.filter(x => /11$/.test(x.ticker)).slice(0, Math.floor(n * 0.1));
-
-  return [...b3, ...eua, ...fiis]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, n)
-    .map(x => x.ticker);
-}
-
 // ─── BENCHMARK ────────────────────────────────────────────────
 async function updateBenchmarkCard() {
   const carteira = getCarteira();
@@ -1083,7 +1031,7 @@ async function callClaude(prompt) {
 }
 
 // ─── CLOUD DB ─────────────────────────────────────────────────
-// ─── OPERACOES — API unificada ────────────────────────────────
+// ─── OPERACOES - API unificada ────────────────────────────────
 async function apiOperacoes(method, body) {
   try {
     const controller = new AbortController();
@@ -1263,27 +1211,27 @@ function buildIndicatorsContext(ind) {
     + "SCORE: "+conf?.score+"/100 | DIRECAO: "+conf?.direcao+"\n"
     + "Sinais confirmadores ("+conf?.pontos_alta+" pts): "+conf?.sinais_confirmadores?.join(", ")+"\n"
     + "Sinais negativos ("+conf?.pontos_baixa+" pts): "+conf?.sinais_negativos?.join(", ")+"\n"
-    + "\n--- RSI — TENDENCIA TEMPORAL ---\n"
+    + "\n--- RSI - TENDENCIA TEMPORAL ---\n"
     + "RSI(5)="+i.rsi.rsi5+" | RSI(9)="+i.rsi.rsi9+" | RSI(14)="+i.rsi.rsi14+"\n"
     + "RSI PONDERADO ATUAL: "+i.rsi.rsi_ponderado+" ("+i.rsi.zona+")\n"
-    + (rsiTend ? "RSI HA 5 DIAS: "+rsiTend.anterior+" → HOJE: "+rsiTend.atual+" | MOVIMENTO: "+rsiTend.diff+" pts | DIRECAO: "+rsiTend.dir+"\n" : "")
-    + (rsiTend && rsiTend.diff > 10 ? "*** RSI ACELEROU FORTEMENTE — sinal de momentum crescente ***\n" : "")
-    + (rsiTend && rsiTend.atual < 35 && rsiTend.dir.includes("SUBINDO") ? "*** RSI SAINDO DE ZONA SOBREVENDIDA — possivel reversao ***\n" : "")
-    + "\n--- MACD — TENDENCIA TEMPORAL ---\n"
+    + (rsiTend ? "RSI HA 5 DIAS: "+rsiTend.anterior+" -> HOJE: "+rsiTend.atual+" | MOVIMENTO: "+rsiTend.diff+" pts | DIRECAO: "+rsiTend.dir+"\n" : "")
+    + (rsiTend && rsiTend.diff > 10 ? "*** RSI ACELEROU FORTEMENTE - sinal de momentum crescente ***\n" : "")
+    + (rsiTend && rsiTend.atual < 35 && rsiTend.dir.includes("SUBINDO") ? "*** RSI SAINDO DE ZONA SOBREVENDIDA - possivel reversao ***\n" : "")
+    + "\n--- MACD - TENDENCIA TEMPORAL ---\n"
     + "MACD atual: "+i.macd?.macd+" | Signal: "+i.macd?.signal+" | Histograma: "+i.macd?.histogram+"\n"
     + "Tendencia: "+i.macd?.trend+" | Cruzamento atual: "+i.macd?.crossover+"\n"
-    + (macdTend ? "Histograma 5d atras: "+macdTend.h5d+" → 3d atras: "+macdTend.h3d+" → hoje: "+macdTend.atual+"\n" : "")
+    + (macdTend ? "Histograma 5d atras: "+macdTend.h5d+" -> 3d atras: "+macdTend.h3d+" -> hoje: "+macdTend.atual+"\n" : "")
     + (macdTend ? "Histograma acelerando: "+macdTend.acelerando+" | Status cruzamento: "+macdTend.virando+"\n" : "")
-    + (macdTend?.virando === "CRUZOU_POSITIVO_RECENTE" ? "*** MACD CRUZOU PARA POSITIVO NOS ULTIMOS 5 DIAS — sinal forte de compra ***\n" : "")
-    + "\n--- MEDIAS MOVEIS — TENDENCIA TEMPORAL ---\n"
+    + (macdTend?.virando === "CRUZOU_POSITIVO_RECENTE" ? "*** MACD CRUZOU PARA POSITIVO NOS ULTIMOS 5 DIAS - sinal forte de compra ***\n" : "")
+    + "\n--- MEDIAS MOVEIS - TENDENCIA TEMPORAL ---\n"
     + "MM9="+i.medias.mm9+" | MM21="+i.medias.mm21+" | MM50="+i.medias.mm50+" | MM200="+i.medias.mm200+"\n"
     + "Preco acima MM50: "+i.medias.acimaMM50+" | Preco acima MM200: "+i.medias.acimaMM200+"\n"
     + (mmTend ? "MM9 subindo nos ultimos 3 dias: "+mmTend.mm9Subindo+" | Preco acima MM9: "+mmTend.precoAcimaMM9+"\n" : "")
-    + (mmTend?.cruzouRecente ? "*** MM9 CRUZOU MM21 NOS ULTIMOS 5 DIAS — cruzamento dourado/mortifero recente ***\n" : "")
+    + (mmTend?.cruzouRecente ? "*** MM9 CRUZOU MM21 NOS ULTIMOS 5 DIAS - cruzamento dourado/mortifero recente ***\n" : "")
     + "\n--- BOLLINGER BANDS ---\n"
     + "Superior="+i.bollinger?.upper+" | Medio="+i.bollinger?.middle+" | Inferior="+i.bollinger?.lower+"\n"
     + "%B="+i.bollinger?.pctB+" | Bandwidth="+i.bollinger?.bandwidth+"% | Posicao: "+i.bollinger?.position+"\n"
-    + (i.bollinger?.squeeze ? "*** BOLLINGER SQUEEZE — volatilidade comprimida, movimento explosivo iminente ***\n" : "")
+    + (i.bollinger?.squeeze ? "*** BOLLINGER SQUEEZE - volatilidade comprimida, movimento explosivo iminente ***\n" : "")
     + "\n--- VWAP (FLUXO INSTITUCIONAL) ---\n"
     + "VWAP(20d)="+i.vwap?.vwap+" | Diferenca: "+i.vwap?.diferenca_pct+"% | Sinal: "+i.vwap?.sinal+"\n"
     + "\n--- VOLUME E ATR ---\n"
@@ -1606,7 +1554,7 @@ function renderResult(d, quote, indicators) {
 }
 
 // ─── PROMPTS ──────────────────────────────────────────────────
-// ─── ATLAS CONTEXTO BASE — compartilhado pelos 3 modulos ──────
+// ─── ATLAS CONTEXTO BASE - compartilhado pelos 3 modulos ──────
 function buildAtlasContext() {
   return `Voce e ATLAS, gestor quantitativo de elite do ATLAS WEALTH.
 
@@ -1699,7 +1647,7 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
 
   return buildAtlasContext()+`
 
-MODO: RADAR DE OPORTUNIDADES — B3
+MODO: RADAR DE OPORTUNIDADES - B3
 
 CANDIDATOS (ja pre-filtrados matematicamente):
 `+infoFinal+`
@@ -1794,12 +1742,12 @@ CANDIDATOS PARA NOVAS ENTRADAS (pre-filtrados):
 `+candidatos+`
 
 INSTRUCOES:
-POSICOES ABERTAS — REGRA DE OURO:
+POSICOES ABERTAS - REGRA DE OURO:
 Se a posicao esta DENTRO_DO_PRAZO=SIM e stop NAO foi atingido:
-→ Recomendacao padrao e MANTER. Nao questione o setup original.
-→ Oscilacoes de 1-3% sao normais. NAO sugira saida por isso.
-→ Apenas sugira saida se: stop atingido, prazo expirado, ou deterioracao CLARA do setup.
-→ Confie no plano original — foi calculado com dados reais.
+-> Recomendacao padrao e MANTER. Nao questione o setup original.
+-> Oscilacoes de 1-3% sao normais. NAO sugira saida por isso.
+-> Apenas sugira saida se: stop atingido, prazo expirado, ou deterioracao CLARA do setup.
+-> Confie no plano original - foi calculado com dados reais.
 
 Se PRAZO_EXPIRADO: avalie se setup ainda valido para estender ou encerrar.
 
@@ -1865,7 +1813,7 @@ PARA CADA POSICAO RESPONDA:
 : `SEM POSICOES ABERTAS.
 `+(temCapital ? `Capital disponivel para operar: R$`+cap.toFixed(2)+`
 Identifique a MELHOR oportunidade do dia para entrada considerando os criterios inegociaveis.
-Se nao houver oportunidade clara hoje, diga isso — prefira caixa a entrada ruim.`
+Se nao houver oportunidade clara hoje, diga isso - prefira caixa a entrada ruim.`
 : `Sem capital informado. Analise o mercado e indique o melhor momento para entrar quando houver capital.`))+`
 
 MERCADO HOJE: `+mercadoHoje+`
@@ -1874,7 +1822,7 @@ INSTRUCOES:
 - Seja direto. Sem drama sobre capital.
 - Com carteira vazia: foque em 1-2 oportunidades do dia ou diga que nao ha entrada boa agora
 - Com posicoes: avalie cada uma pelo plano original
-- Nao repita o contexto de volta — va direto para a recomendacao
+- Nao repita o contexto de volta - va direto para a recomendacao
 
 Retorne APENAS JSON:
 {"situacao_carteira":"VERDE","resumo":"","alertas":[{"tipo":"INFO","ticker":"","mensagem":"","acao_recomendada":""}],"posicoes":[{"ticker":"","status":"LUCRO","variacao_hoje":"0%","variacao_desde_entrada":"0%","distancia_stop":"","distancia_alvo":"","recomendacao":"MANTER"}],"oportunidade_do_dia":{"ticker":"","motivo":"","acao":""},"mensagem_guru":""}`;
@@ -2040,7 +1988,7 @@ const RADAR_TICKERS = [
   "SUZB3","KLBN11","RANI3",
   // DIVERSIFICADOS
   "MULT3","BRML3","ALUP11","CPRE3","GMAT3","MOVI3","BLAU3","BRFS3","JBSS3",
-  // FIIS — Top por liquidez
+  // FIIS - Top por liquidez
   "KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","BTLG11","KNCR11",
   "BCFF11","RBRF11","HGRE11","HSML11","BRCO11","RBRR11","CVBI11","RZTR11",
   "MALL11","HGBS11","VILG11","GTWR11"
@@ -2077,7 +2025,7 @@ async function runRadar() {
     if (ind) indicadoresRadar[t] = ind;
   }));
 
-  // NIVEL 3: Aplica travas matematicas — filtra antes de enviar ao ATLAS
+  // NIVEL 3: Aplica travas matematicas - filtra antes de enviar ao ATLAS
   const resultadosTravas = {};
   const aprovadosTravas = [];
   const emObservacaoTravas = [];
@@ -2148,7 +2096,7 @@ async function runRadar() {
 
   // Avisa se fora do pregao
   const avisoFds = foraDoPregao
-    ? '<div style="background:rgba(255,204,0,.08);border:1px solid rgba(255,204,0,.3);padding:10px 16px;margin-bottom:12px;font-family:monospace;font-size:10px;color:var(--yellow);">⚠ FORA DO PREGAO — Volume do dia pode ser zero. Usando volume historico nas travas. Resultados mais precisos em dias uteis.</div>'
+    ? '<div style="background:rgba(255,204,0,.08);border:1px solid rgba(255,204,0,.3);padding:10px 16px;margin-bottom:12px;font-family:monospace;font-size:10px;color:var(--yellow);">ATENCAO: FORA DO PREGAO - Volume do dia pode ser zero. Usando volume historico nas travas. Resultados mais precisos em dias uteis.</div>'
     : '';
 
   // Se nenhum candidato passou nas travas, mostra mensagem clara
@@ -2185,7 +2133,7 @@ async function runRadar() {
 function renderRadar(data, quotes) {
   const macro = '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;margin-bottom:16px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.8;"><span style="color:var(--cyan);margin-right:8px">MACRO:</span>'+String(data.macro||"")+'</div>';
 
-  const ops = sec("TOP 12 OPORTUNIDADES — SCORE MINIMO 65")
+  const ops = sec("TOP 12 OPORTUNIDADES - SCORE MINIMO 65")
     +(data.ops||[]).map(op=>{
       const q=quotes[op.ticker];
       const confColor = op.confluencia>=75?"var(--green)":op.confluencia>=65?"var(--cyan)":"var(--yellow)";
@@ -2219,7 +2167,7 @@ function renderRadar(data, quotes) {
   // Em Observacao section
   const obs = data.observacao&&data.observacao.length
     ? '<div style="background:rgba(255,204,0,.03);border:1px solid rgba(255,204,0,.2);padding:18px;margin-top:16px;">'
-      +sec("EM OBSERVACAO — Score 55-64, quase classificados")
+      +sec("EM OBSERVACAO - Score 55-64, quase classificados")
       +'<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:8px;">'
       +data.observacao.map(o=>'<div style="background:var(--card);border:1px solid rgba(255,204,0,.2);padding:12px 16px;">'
         +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
@@ -2397,7 +2345,7 @@ async function guruMontar() {
   }
   si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
 
-  // NIVEL 1: Pre-filtro quantitativo — seleciona top 25
+  // NIVEL 1: Pre-filtro quantitativo - seleciona top 25
   si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
   const carteiraTickers = portfolio.map(p => p.ticker);
   const top25Base = selecionarCandidatos(GURU_TICKERS, quotes, 25);
@@ -2412,7 +2360,7 @@ async function guruMontar() {
     if (ind) indicadoresGuru[t] = ind;
   }));
 
-  // NIVEL 3: Aplica travas — separa carteira de novos candidatos
+  // NIVEL 3: Aplica travas - separa carteira de novos candidatos
   const travasGuru = {};
   const novosCandidatos = []; // para novas entradas
   const carteiraSemTravas = []; // posicoes existentes sempre incluidas
@@ -2486,7 +2434,7 @@ async function guruBriefing() {
   let si = 0;
   document.getElementById("stepsG").innerHTML = steps(STEPS_B, 0);
 
-  // Busca cotacoes — prioriza ativos da carteira
+  // Busca cotacoes - prioriza ativos da carteira
   const quotes = {};
   const carteiraTickrs = carteira.map(p => p.ticker);
   const extras = GURU_TICKERS.filter(t => !carteiraTickrs.includes(t)).slice(0, 15);
@@ -2547,11 +2495,11 @@ function abrirPosicaoDaAnalise() {
   const score = data.score || "";
   const sinal = data.sinal || "";
 
-  // Prazo esperado — usa previsao de 15 dias
+  // Prazo esperado - usa previsao de 15 dias
   const prev15 = data.prev?.find(p => p.d === 15);
   const prazo = prev15 ? 15 : (data.prev?.[1]?.d || 15);
 
-  // Setup original — monta a partir dos indicadores
+  // Setup original - monta a partir dos indicadores
   const tend = data.tec?.tend || indicators?.tendencia || "";
   const rsi = data.tec?.rsi || indicators?.indicadores?.rsi?.rsi_ponderado || "";
   const macd = data.tec?.macd || indicators?.indicadores?.macd?.crossover || "";
@@ -3227,7 +3175,7 @@ function renderCharts(indicatorData, period) {
     handleScale: true,
   };
 
-  // ── GRAFICO PRINCIPAL — Candlestick + Volume + MMs ──────────
+  // ── GRAFICO PRINCIPAL - Candlestick + Volume + MMs ──────────
   const mainEl = document.getElementById("chartMain");
   mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
 
@@ -3265,7 +3213,7 @@ function renderCharts(indicatorData, period) {
   }));
   volumeSeries.setData(volumeData);
 
-  // Medias moveis — dados reais historicos
+  // Medias moveis - dados reais historicos
   const ind = indicatorData.indicadores;
   const mmDefs = [
     { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
@@ -3431,7 +3379,7 @@ async function renderMapa() {
 
   let html = "";
 
-  // Header — sentimento geral
+  // Header - sentimento geral
   html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">'+
     [
       ["SENTIMENTO", sentimento, sentCor],
