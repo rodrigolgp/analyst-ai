@@ -2645,32 +2645,27 @@ function renderPortfolio() {
       const q = portfolioQuotes[p.ticker];
       return a + p.quantidade_atual * (q ? q.price : p.preco_medio);
     }, 0);
-    const lucroRealizadoCart = carteira.reduce((a,p)=>a+(parseFloat(p.lucro_total)||0),0);
-    const totalPL = (totalAtual - totalInv) + lucroRealizadoCart;
-    const custoOriginalCart = carteira.reduce((a,p)=>{
-      const qtdTotal = parseFloat(p.quantidade_total)||0;
-      return a + qtdTotal * (parseFloat(p.preco_medio)||0);
-    },0);
-    const totalPLpct = custoOriginalCart > 0 ? ((totalPL/custoOriginalCart)*100).toFixed(2) : "0.00";
     const totalOntem = carteira.reduce((a,p) => {
       const q = portfolioQuotes[p.ticker];
       const prev = q && q.prevClose ? q.prevClose : (q ? q.price : p.preco_medio);
       return a + p.quantidade_atual * prev;
     }, 0);
+    const resultado = totalAtual - totalInv;
+    const resultadoPct = totalInv > 0 ? (resultado / totalInv * 100).toFixed(2) : "0.00";
     const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
     const hasQ = Object.keys(portfolioQuotes).length > 0;
-    const plC = totalPL >= 0 ? "var(--green)" : "var(--red)";
-    const plB = totalPL >= 0 ? "rgba(0,255,136,.3)" : "rgba(255,51,85,.3)";
+    const plC = resultado >= 0 ? "var(--green)" : "var(--red)";
+    const plB = resultado >= 0 ? "rgba(0,255,136,.3)" : "rgba(255,51,85,.3)";
 
     el.innerHTML = '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">'+
       '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">POSICOES</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+carteira.length+'</div></div>'+
-      '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">CUSTO MEDIO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">R$ '+totalInv.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
+      '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">INVESTIDO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">R$ '+totalInv.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
       (hasQ
         ? '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
-          '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO TOTAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+( totalPL>=0?"+":"")+totalPL.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+( parseFloat(totalPLpct)>=0?"+":"")+totalPLpct+'%)</div>'+
-          (lucroRealizadoCart>0?'<div style="font-family:monospace;font-size:9px;color:var(--green)">Realizado: +R$'+lucroRealizadoCart.toFixed(2)+'</div>':"")+
-          '<div style="font-family:monospace;font-size:9px;color:'+( parseFloat(varDia)>=0?"var(--green)":"var(--red)")+'">'+( parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div></div>'
-        : '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;opacity:.5;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:monospace;font-size:10px;color:var(--dim)">Buscando...</div></div>'
+          '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO</div>'+
+          '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+(resultado>=0?"+":"")+resultado.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+(parseFloat(resultadoPct)>=0?"+":"")+resultadoPct+'%)</div>'+
+          '<div style="font-family:monospace;font-size:9px;color:'+(parseFloat(varDia)>=0?"var(--green)":"var(--red)")+';margin-top:3px">'+(parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div></div>'
+        : '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;opacity:.5;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:monospace;font-size:10px;color:var(--dim)">Clique ATUALIZAR</div></div>'
       )+
       '<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'+
       '</div>'+
@@ -2763,12 +2758,21 @@ function calcPerf() {
 
   if (!enc.length && !parciais.length) return null;
 
-  // Lucro total = lucro das encerradas + lucro_total das parciais (ja realizadas)
+  // Lucro das encerradas + parciais realizadas
   const lucroEnc = enc.reduce((a,h) => a + parseFloat(h.lucro_total||0), 0);
   const lucroParciais = parciais.reduce((a,h) => a + parseFloat(h.lucro_total||0), 0);
   const lucroTotal = lucroEnc + lucroParciais;
 
-  // Acertos — apenas operacoes encerradas (tem resultado definitivo)
+  // Capital total investido nas encerradas (para calcular % geral)
+  const capitalInvestidoEnc = enc.reduce((a,h) => {
+    const qtdTotal = parseFloat(h.quantidade_total||h.quantidade_atual||0);
+    return a + qtdTotal * parseFloat(h.preco_medio||0);
+  }, 0);
+  const resultadoPctGeral = capitalInvestidoEnc > 0
+    ? ((lucroTotal / capitalInvestidoEnc) * 100).toFixed(2)
+    : "0.00";
+
+  // Acertos — apenas operacoes encerradas
   const acertos = enc.filter(h => h.atlas_acertou === true).length;
   const total = enc.length;
   const taxa = total > 0 ? ((acertos/total)*100).toFixed(1) : "0.0";
@@ -2777,7 +2781,7 @@ function calcPerf() {
   const melhor = enc.length ? enc.reduce((a,h) => parseFloat(h.resultado_pct||"-999")>parseFloat(a.resultado_pct||"-999")?h:a, enc[0]) : null;
   const pior = enc.length ? enc.reduce((a,h) => parseFloat(h.resultado_pct||"999")<parseFloat(a.resultado_pct||"999")?h:a, enc[0]) : null;
 
-  return { total, acertos, taxa, lucro: lucroTotal, lucroEnc, lucroParciais, melhor, pior, totalParciais: parciais.length };
+  return { total, acertos, taxa, lucro: lucroTotal, resultadoPctGeral, melhor, pior };
 }
 
 function renderHistorico() {
@@ -2790,12 +2794,12 @@ function renderHistorico() {
       const items = [
         ["ENCERRADAS", perf.total, "var(--txt)"],
         ["TAXA ACERTO", perf.taxa+"%", parseFloat(perf.taxa)>=60?"var(--green)":"var(--red)"],
-        ["LUCRO TOTAL", "R$ "+perf.lucro.toFixed(2), perf.lucro>=0?"var(--green)":"var(--red)"],
+        ["RESULTADO", (parseFloat(perf.resultadoPctGeral)>=0?"+":"")+perf.resultadoPctGeral+"%", parseFloat(perf.resultadoPctGeral)>=0?"var(--green)":"var(--red)"],
+        ["LUCRO (R$)", (perf.lucro>=0?"+ R$ ":"- R$ ")+Math.abs(perf.lucro).toFixed(2), perf.lucro>=0?"var(--green)":"var(--red)"],
         ["ACERTOS", perf.acertos+"/"+perf.total, "var(--cyan)"],
       ];
-      if (perf.melhor) items.push(["MELHOR", perf.melhor.ticker+" +"+(perf.melhor.resultado_pct||0)+"%", "var(--green)"]);
-      if (perf.pior) items.push(["PIOR", perf.pior.ticker+" "+(perf.pior.resultado_pct||0)+"%", "var(--red)"]);
-      if (perf.lucroParciais !== 0) items.push(["REALIZADO (PARCIAIS)", "R$ "+perf.lucroParciais.toFixed(2), perf.lucroParciais>=0?"var(--green)":"var(--red)"]);
+      if (perf.melhor) items.push(["MELHOR OP", perf.melhor.ticker+" +"+(perf.melhor.resultado_pct||0)+"%", "var(--green)"]);
+      if (perf.pior) items.push(["PIOR OP", perf.pior.ticker+" "+(perf.pior.resultado_pct||0)+"%", "var(--red)"]);
       perfEl.innerHTML = items.map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px">'+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+c+'">'+v+'</div></div>').join("");
     }
   }
