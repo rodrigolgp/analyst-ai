@@ -2758,13 +2758,26 @@ async function deleteOperacao(id) {
 }
 
 function calcPerf() {
-  const enc = getHistorico();
-  if (!enc.length) return null;
-  const ac = enc.filter(h => h.atlas_acertou === true).length;
-  const lucro = enc.reduce((a,h) => a + parseFloat(h.lucro_total||0), 0);
-  const melhor = enc.reduce((a,h) => parseFloat(h.resultado_pct)>parseFloat(a.resultado_pct||"-999")?h:a, enc[0]);
-  const pior = enc.reduce((a,h) => parseFloat(h.resultado_pct)<parseFloat(a.resultado_pct||"999")?h:a, enc[0]);
-  return { total:enc.length, acertos:ac, taxa:((ac/enc.length)*100).toFixed(1), lucro, melhor, pior };
+  const enc = getHistorico(); // Apenas ENCERRADAS
+  const parciais = getCarteira().filter(o => o.status === "PARCIAL"); // Parcialmente vendidas
+
+  if (!enc.length && !parciais.length) return null;
+
+  // Lucro total = lucro das encerradas + lucro_total das parciais (ja realizadas)
+  const lucroEnc = enc.reduce((a,h) => a + parseFloat(h.lucro_total||0), 0);
+  const lucroParciais = parciais.reduce((a,h) => a + parseFloat(h.lucro_total||0), 0);
+  const lucroTotal = lucroEnc + lucroParciais;
+
+  // Acertos — apenas operacoes encerradas (tem resultado definitivo)
+  const acertos = enc.filter(h => h.atlas_acertou === true).length;
+  const total = enc.length;
+  const taxa = total > 0 ? ((acertos/total)*100).toFixed(1) : "0.0";
+
+  // Melhor e pior entre encerradas
+  const melhor = enc.length ? enc.reduce((a,h) => parseFloat(h.resultado_pct||"-999")>parseFloat(a.resultado_pct||"-999")?h:a, enc[0]) : null;
+  const pior = enc.length ? enc.reduce((a,h) => parseFloat(h.resultado_pct||"999")<parseFloat(a.resultado_pct||"999")?h:a, enc[0]) : null;
+
+  return { total, acertos, taxa, lucro: lucroTotal, lucroEnc, lucroParciais, melhor, pior, totalParciais: parciais.length };
 }
 
 function renderHistorico() {
@@ -2774,14 +2787,16 @@ function renderHistorico() {
     if (!perf) {
       perfEl.innerHTML = '<div style="font-family:monospace;font-size:10px;color:var(--dim);text-align:center;padding:20px;">Sem operacoes encerradas ainda.</div>';
     } else {
-      perfEl.innerHTML = [
-        ["OPERACOES", perf.total, "var(--txt)"],
+      const items = [
+        ["ENCERRADAS", perf.total, "var(--txt)"],
         ["TAXA ACERTO", perf.taxa+"%", parseFloat(perf.taxa)>=60?"var(--green)":"var(--red)"],
         ["LUCRO TOTAL", "R$ "+perf.lucro.toFixed(2), perf.lucro>=0?"var(--green)":"var(--red)"],
         ["ACERTOS", perf.acertos+"/"+perf.total, "var(--cyan)"],
-        ["MELHOR", perf.melhor.ticker+" +"+(perf.melhor.resultado_pct||0)+"%", "var(--green)"],
-        ["PIOR", perf.pior.ticker+" "+(perf.pior.resultado_pct||0)+"%", "var(--red)"],
-      ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px">'+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+c+'">'+v+'</div></div>').join("");
+      ];
+      if (perf.melhor) items.push(["MELHOR", perf.melhor.ticker+" +"+(perf.melhor.resultado_pct||0)+"%", "var(--green)"]);
+      if (perf.pior) items.push(["PIOR", perf.pior.ticker+" "+(perf.pior.resultado_pct||0)+"%", "var(--red)"]);
+      if (perf.lucroParciais !== 0) items.push(["REALIZADO (PARCIAIS)", "R$ "+perf.lucroParciais.toFixed(2), perf.lucroParciais>=0?"var(--green)":"var(--red)"]);
+      perfEl.innerHTML = items.map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:12px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px">'+k+'</div><div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+c+'">'+v+'</div></div>').join("");
     }
   }
 
