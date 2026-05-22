@@ -1229,6 +1229,13 @@ async function fetchIndicators(ticker) {
   }
 }
 
+function steps(arr, current) {
+  return arr.map((s,i) =>
+    '<div style="font-family:monospace;font-size:9px;color:'+(i<current?"var(--green)":i===current?"var(--cyan)":"var(--dim)")+';margin-bottom:3px;">'
+    +(i<current?"OK ":i===current?">> ":"   ")+s+'</div>'
+  ).join("");
+}
+
 function buildIndicatorsContext(ind) {
   if (!ind) return "INDICADORES: nao disponivel";
   const i = ind.indicadores;
