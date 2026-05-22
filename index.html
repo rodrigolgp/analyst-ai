@@ -1066,7 +1066,7 @@ function showTab(name) {
   if (name === "historico") renderHistorico();
   if (name === "portfolio") {
     renderPortfolio();
-    loadPortfolio();
+    loadOperacoes();
     // Busca cotacoes e depois atualiza benchmark
     atualizarCotacoesCarteira().then(() => updateBenchmarkCard());
   }
