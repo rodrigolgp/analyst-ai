@@ -211,12 +211,10 @@ function renderCharts(indicatorData, period) {
   candleSeries.setData(candleData);
 
   // Volume como histograma
-  const volumeSeries = mainChart.addHistogramSeries({
-    color: "rgba(0,170,255,0.3)",
-    priceFormat: { type: "volume" },
-    priceScaleId: "volume",
-    scaleMargins: { top: 0.85, bottom: 0 },
-  });
+  const volOpts = { color:"rgba(0,170,255,0.3)", priceFormat:{type:"volume"}, priceScaleId:"volume", scaleMargins:{top:0.85,bottom:0} };
+  const volumeSeries = mainChart.addHistogramSeries
+    ? mainChart.addHistogramSeries(volOpts)
+    : mainChart.addSeries(LightweightCharts.HistogramSeries, volOpts);
 
   const volumeData = data.map(d => ({
     time: d.date,
@@ -235,7 +233,7 @@ function renderCharts(indicatorData, period) {
   mmDefs.forEach(mm => {
     const hist = (indicatorData[mm.key] || []).slice(-period);
     if (!hist.length) return;
-    const mmSeries = mainChart.addLineSeries({
+    const mmSeries = addLine(mainChart, {
       color: mm.color, lineWidth: mm.width,
       priceLineVisible: false, lastValueVisible: true,
       title: mm.label,
@@ -263,7 +261,7 @@ function renderCharts(indicatorData, period) {
   const rsiEl = document.getElementById("chartRSI");
   rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
 
-  const rsiSeries = rsiChart.addLineSeries({
+  const rsiSeries = addLine(rsiChart, {
     color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
   });
 
@@ -280,11 +278,20 @@ function renderCharts(indicatorData, period) {
 
   // ── MACD REAL ─────────────────────────────────────────────────
   const macdEl = document.getElementById("chartMACD");
+
+  // Helper compatibilidade LightweightCharts v3/v4
+  const addLine = (chart, opts) => chart.addLineSeries
+    ? chart.addLineSeries(opts)
+    : chart.addSeries(LightweightCharts.LineSeries, opts);
+  const addHist = (chart, opts) => chart.addHistogramSeries
+    ? chart.addHistogramSeries(opts)
+    : chart.addSeries(LightweightCharts.HistogramSeries, opts);
+
   macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
 
   const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
-  const signalSeries = macdChart.addLineSeries({ color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
-  const histSeries = macdChart.addHistogramSeries({ priceLineVisible: false, title: "Hist" });
+  const signalSeries = addLine(macdChart, { color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
+  const histSeries = addHist(macdChart, { priceLineVisible: false, title: "Hist" });
 
   const macdHistData = indicatorData.historico_macd || {};
   const macdLineData = (macdHistData.macdLine || []).slice(-period);
@@ -721,6 +728,7 @@ function renderJournalCard(operacao) {
       <div class="form-field"><label>STOP LOSS</label><input type="number" id="pStop" placeholder="36.00" step="0.01"/></div>
       <div class="form-field"><label>ALVO</label><input type="number" id="pTarget" placeholder="42.00" step="0.01"/></div>
       <div class="form-field"><label>PRAZO (dias)</label><select id="pPrazo"><option value="5">5 dias</option><option value="10">10 dias</option><option value="15" selected>15 dias</option><option value="20">20 dias</option></select></div>
+      <div class="form-field"><label>DATA COMPRA</label><input type="date" id="pDataEntrada"/></div>
       <div class="form-field"><label>MERCADO</label><select id="pMarket"><option>B3</option><option>NYSE/NASDAQ</option></select></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
@@ -1073,6 +1081,9 @@ function showTab(name) {
     loadOperacoes().then(() => {
       renderPortfolio();
       updateBenchmarkCard();
+      // Pre-preenche data de hoje no formulario
+      const dateEl = document.getElementById("pDataEntrada");
+      if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split("T")[0];
     });
   }
 }
@@ -1922,6 +1933,14 @@ const RADAR_TICKERS = [
   "KNRI11", "HGLG11", "XPML11", "MXRF11", "VISC11", "IRDM11", "BTLG11", "KNCR11", "RBRF11", "HGRE11",
   "HSML11", "BRCO11", "RBRR11", "RZTR11", "HGBS11", "VILG11", "GTWR11"
 ];
+
+const GURU_TICKERS = [
+  "PETR4","VALE3","ITUB4","BBDC4","WEGE3","BBAS3","ABEV3","SUZB3","RENT3","PRIO3",
+  "VBBR3","EQTL3","BPAC11","ITSA4","SANB11","KLBN11","RADL3","CSAN3","CMIG4","EGIE3",
+  "ENGI11","TAEE11","TIMS3","HAPV3","RDOR3","HYPE3","LREN3","MGLU3","RAIL3","GGBR4",
+  "USIM5","CSNA3","BEEF3","SLCE3","SMTO3","FLRY3","QUAL3","ASAI3","BRSR6","RECV3",
+  "KNRI11","HGLG11","XPML11","MXRF11","IRDM11","BTLG11","VISC11","KNCR11","HGRE11","VILG11"
+];
 const STEPS_R = ["Iniciando scanner...","Buscando cotacoes B3...","Buscando cotacoes NYSE/NASDAQ...","Score de pre-filtro (100+ ativos)...","Indicadores matematicos (top 30)...","Score de confluencia...","ATLAS gerando relatorio..."];
 
 async function runRadar() {
@@ -2334,6 +2353,7 @@ function addPosition() {
   const target = parseFloat(document.getElementById("pTarget").value) || null;
   const market = document.getElementById("pMarket").value;
   const prazo = parseInt(document.getElementById("pPrazo").value) || 15;
+  const dataEntrada = document.getElementById("pDataEntrada").value || new Date().toISOString().split("T")[0];
   const setup = document.getElementById("pSetup").value.trim();
   const catalisador = document.getElementById("pCatalisador").value.trim();
   const score = parseInt(document.getElementById("pScore").value) || null;
@@ -2345,6 +2365,7 @@ function addPosition() {
     ticker, quantidade: qty, preco: price,
     stop, alvo: target, mercado: market,
     prazo_dias: prazo,
+    data_entrada: dataEntrada,
     setup_original: setup || null,
     catalisador: catalisador || null,
     score, sinal
@@ -2477,7 +2498,7 @@ function renderPortfolio() {
       '<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'+
       '</div>'+
       '<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'+
-      ["TICKER","STATUS","QTDE","P.MEDIO","P.ATUAL","TOTAL","RESULT","HOJE","STOP","ALVO","D.STOP","D.ALVO","NOTA","ACOES"].map(h=>'<th>'+h+'</th>').join("")+
+      ["TICKER","STATUS","QTDE","P.MEDIO","P.ATUAL","TOTAL","RESULT","HOJE","STOP","ALVO","D.STOP","D.ALVO","DIAS","NOTA","ACOES"].map(h=>'<th>'+h+'</th>').join("")+
       '</tr></thead><tbody>'+
       carteira.map(p => {
         const pm = parseFloat(p.preco_medio)||0;
@@ -3063,12 +3084,10 @@ function renderCharts(indicatorData, period) {
   candleSeries.setData(candleData);
 
   // Volume como histograma
-  const volumeSeries = mainChart.addHistogramSeries({
-    color: "rgba(0,170,255,0.3)",
-    priceFormat: { type: "volume" },
-    priceScaleId: "volume",
-    scaleMargins: { top: 0.85, bottom: 0 },
-  });
+  const volOpts = { color:"rgba(0,170,255,0.3)", priceFormat:{type:"volume"}, priceScaleId:"volume", scaleMargins:{top:0.85,bottom:0} };
+  const volumeSeries = mainChart.addHistogramSeries
+    ? mainChart.addHistogramSeries(volOpts)
+    : mainChart.addSeries(LightweightCharts.HistogramSeries, volOpts);
 
   const volumeData = data.map(d => ({
     time: d.date,
@@ -3087,7 +3106,7 @@ function renderCharts(indicatorData, period) {
   mmDefs.forEach(mm => {
     const hist = (indicatorData[mm.key] || []).slice(-period);
     if (!hist.length) return;
-    const mmSeries = mainChart.addLineSeries({
+    const mmSeries = addLine(mainChart, {
       color: mm.color, lineWidth: mm.width,
       priceLineVisible: false, lastValueVisible: true,
       title: mm.label,
@@ -3115,7 +3134,7 @@ function renderCharts(indicatorData, period) {
   const rsiEl = document.getElementById("chartRSI");
   rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
 
-  const rsiSeries = rsiChart.addLineSeries({
+  const rsiSeries = addLine(rsiChart, {
     color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
   });
 
@@ -3132,11 +3151,20 @@ function renderCharts(indicatorData, period) {
 
   // ── MACD REAL ─────────────────────────────────────────────────
   const macdEl = document.getElementById("chartMACD");
+
+  // Helper compatibilidade LightweightCharts v3/v4
+  const addLine = (chart, opts) => chart.addLineSeries
+    ? chart.addLineSeries(opts)
+    : chart.addSeries(LightweightCharts.LineSeries, opts);
+  const addHist = (chart, opts) => chart.addHistogramSeries
+    ? chart.addHistogramSeries(opts)
+    : chart.addSeries(LightweightCharts.HistogramSeries, opts);
+
   macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
 
   const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
-  const signalSeries = macdChart.addLineSeries({ color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
-  const histSeries = macdChart.addHistogramSeries({ priceLineVisible: false, title: "Hist" });
+  const signalSeries = addLine(macdChart, { color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
+  const histSeries = addHist(macdChart, { priceLineVisible: false, title: "Hist" });
 
   const macdHistData = indicatorData.historico_macd || {};
   const macdLineData = (macdHistData.macdLine || []).slice(-period);
