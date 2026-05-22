@@ -2262,6 +2262,70 @@ function renderBriefing(d) {
     +(d.mensagem_guru?'<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.15);padding:16px 20px;margin-top:14px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.8;font-style:italic;">"'+d.mensagem_guru+'"</div>':"");
 }
 
+function renderGuruResult(d) {
+  if (!d) return '<div class="error-box">Sem dados do Guru</div>';
+
+  const humorC = d.humor_mercado==="FAVORAVEL"?"var(--green)":d.humor_mercado==="DESFAVORAVEL"?"var(--red)":"var(--yellow)";
+
+  const resumo = d.resumo_mercado
+    ? '<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.2);padding:16px 20px;margin-bottom:14px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.8;">'+d.resumo_mercado+'</div>'
+    : '';
+
+  const capital = '<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:10px 16px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);">MODO</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:var(--cyan);">'+(d.modo||"")+'</div></div>'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:10px 16px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);">INVESTIDO</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:var(--blue);">R$ '+(d.capital_investido||0).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:10px 16px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);">CAIXA</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:var(--green);">R$ '+(d.caixa_disponivel||0).toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'
+    +'<div style="background:var(--card);border:1px solid '+(humorC)+'33;padding:10px 16px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);">MERCADO</div><div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+humorC+'">'+(d.humor_mercado||"NEUTRO")+'</div></div>'
+    +'</div>';
+
+  const posAtual = (d.posicoes_atuais||[]).length
+    ? '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px;">POSICOES ATUAIS</div>'
+      +(d.posicoes_atuais||[]).map(p => {
+        const aC = p.acao==="MANTER"?"var(--dim)":p.acao==="VENDER TOTAL"?"var(--red)":p.acao==="VENDER PARCIAL"?"var(--yellow)":"var(--green)";
+        return '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid '+aC+';padding:12px 16px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">'
+          +'<span style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:var(--blue)">'+p.ticker+'</span>'
+          +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+aC+'">'+p.acao+'</span>'
+          +(p.pl_atual?'<span style="font-family:monospace;font-size:9px;color:var(--dim)">PL: '+p.pl_atual+'</span>':"")
+          +(p.motivo?'<div style="width:100%;font-family:monospace;font-size:9px;color:var(--sub);line-height:1.6;margin-top:4px;">'+p.motivo+'</div>':"")
+          +'</div>';
+      }).join("")
+    : '';
+
+  const acoes = (d.acoes_imediatas||[]).length
+    ? '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);margin:14px 0 10px;">ACOES IMEDIATAS</div>'
+      +(d.acoes_imediatas||[]).map((a,i) => {
+        const aC = a.acao==="COMPRAR"?"var(--green)":a.acao==="VENDER"?"var(--red)":"var(--yellow)";
+        return '<div style="background:var(--card);border:1px solid '+(i===0?"rgba(0,255,136,.3)":"var(--border)")+';padding:16px 20px;margin-bottom:8px;">'
+          +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">'
+          +'<span style="font-family:monospace;font-size:9px;color:var(--dim)">#'+a.prioridade+'</span>'
+          +'<span style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">'+a.ticker+'</span>'
+          +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+aC+';background:'+aC+'22;padding:3px 8px;">'+a.acao+'</span>'
+          +(a.urgencia?'<span style="font-family:monospace;font-size:8px;color:'+aC+'">'+a.urgencia+'</span>':"")
+          +'</div>'
+          +'<div style="font-family:monospace;font-size:9px;color:var(--sub);line-height:1.6;margin-bottom:8px;">'+a.motivo+'</div>'
+          +'<div style="display:flex;gap:16px;font-family:monospace;font-size:9px;flex-wrap:wrap;">'
+          +(a.preco_entrada?'<span>ENTRADA: '+a.preco_entrada+'</span>':"")
+          +(a.stop_loss?'<span style="color:var(--red)">STOP: '+a.stop_loss+'</span>':"")
+          +(a.alvo_30d?'<span style="color:var(--green)">ALVO: '+a.alvo_30d+'</span>':"")
+          +(a.upside?'<span style="color:var(--green)">UPSIDE: '+a.upside+'</span>':"")
+          +(a.risco_retorno?'<span style="color:var(--yellow)">R/R: '+a.risco_retorno+'</span>':"")
+          +(a.valor_recomendado?'<span>VALOR: R$ '+(typeof a.valor_recomendado==="number"?a.valor_recomendado.toLocaleString("pt-BR"):"")+'</span>':"")
+          +'</div>'
+          +'</div>';
+      }).join("")
+    : '';
+
+  const naoFazer = (d.nao_fazer_agora||[]).filter(Boolean).length
+    ? '<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-top:12px;">NAO FAZER AGORA: '+(d.nao_fazer_agora||[]).filter(Boolean).join(" | ")+'</div>'
+    : '';
+
+  const msg = d.mensagem_guru
+    ? '<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.15);padding:16px 20px;margin-top:14px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.8;font-style:italic;">"'+d.mensagem_guru+'"</div>'
+    : '';
+
+  return resumo + capital + posAtual + acoes + naoFazer + msg;
+}
+
 async function guruBriefing() {
   const aporte = parseFloat(document.getElementById("guruAporte").value) || 0;
   const carteira = getCarteira();
