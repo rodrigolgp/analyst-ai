@@ -2034,6 +2034,48 @@ async function runRadar() {
 }
 
 
+// ─── RENDER RADAR ─────────────────────────────────────────────
+function renderRadar(d, quotes, indicators) {
+  if (!d) return '<div class="error-box">Sem dados do radar</div>';
+  const macro = d.macro ? '<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.2);padding:16px 20px;margin-bottom:14px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.8;">'+d.macro+'</div>' : '';
+  const ops = (d.ops||[]).map((op,i) => {
+    const q = quotes[op.ticker];
+    const ind = indicators[op.ticker];
+    const conf = op.confluencia || ind?.confluencia?.score || 0;
+    const sm = op.smart_money || ind?.smart_money?.score || 0;
+    const confC = conf>=75?"var(--green)":conf>=60?"#88ff44":conf>=45?"var(--yellow)":"var(--red)";
+    return '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid '+(i===0?"var(--green)":i<3?"var(--cyan)":"var(--border)")+';padding:16px 20px;margin-bottom:8px;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">'
+      +'<div><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
+      +'<span style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;color:var(--dim)">#'+(op.rank||i+1)+'</span>'
+      +'<span style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--blue)">'+op.ticker+'</span>'
+      +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--green);background:rgba(0,255,136,.1);padding:3px 8px;">'+op.score+' pts</span>'
+      +'</div>'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--sub);margin-bottom:6px;">'+op.nome+'</div>'
+      +'<div style="display:flex;gap:12px;font-family:monospace;font-size:9px;flex-wrap:wrap;">'
+      +'<span style="color:'+confC+'">CONF:'+conf+'</span>'
+      +(sm?'<span style="color:var(--cyan)">SM:'+sm+'</span>':"")
+      +(op.rr?'<span style="color:var(--yellow)">'+op.rr+'</span>':"")+'</div></div>'
+      +'<div style="text-align:right;">'
+      +(q?'<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700">'+(q.currency||"R$")+" "+q.price+'</div>'
+        +'<div style="font-family:monospace;font-size:9px;color:'+(parseFloat(q.change)>=0?"var(--green)":"var(--red)")+'">'+(parseFloat(q.change)>=0?"+":"")+q.change+'%</div>':"")
+      +(op.prazo?'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:4px">'+op.prazo+'</div>':"")+'</div></div>'
+      +(op.razao?'<div style="font-family:monospace;font-size:9px;color:var(--sub);line-height:1.6;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">'+op.razao+'</div>':"")
+      +'<div style="display:flex;gap:16px;margin-top:10px;font-family:monospace;font-size:9px;">'
+      +(op.stop?'<span style="color:var(--red)">STOP: '+op.stop+'</span>':"")
+      +(op.alvo?'<span style="color:var(--green)">ALVO: '+op.alvo+'</span>':"")
+      +(op.up?'<span style="color:var(--green)">UPSIDE: '+op.up+'</span>':"")+'</div>'
+      +'<div style="margin-top:8px;"><button onclick="document.getElementById(\'tickerInput\').value=\''+op.ticker+'\';showTab(\'analise\');analyze();" style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;color:var(--green);background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);padding:6px 12px;cursor:pointer;">VER ANALISE</button></div>'
+      +'</div>';
+  }).join("");
+  const obs = (d.observacao||[]).length ? '<div style="margin-top:20px;"><div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px">EM OBSERVACAO</div>'
+    +(d.observacao||[]).map(o=>'<div style="background:var(--card);border:1px solid rgba(255,204,0,.2);padding:12px 16px;margin-bottom:6px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
+      +'<span style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:var(--yellow)">'+o.ticker+'</span>'
+      +'<span style="font-family:monospace;font-size:9px;color:var(--sub)">'+(o.motivo_pendente||o.quando_entrar||"")+'</span></div>').join("")+'</div>' : '';
+  const evitar = (d.evitar||[]).filter(Boolean).length ? '<div style="margin-top:16px;font-family:monospace;font-size:9px;color:var(--red)">EVITAR: '+(d.evitar||[]).filter(Boolean).join(", ")+'</div>' : '';
+  return macro + (ops||'<div style="text-align:center;font-family:monospace;font-size:10px;color:var(--dim);padding:20px">Nenhuma oportunidade identificada hoje.</div>') + obs + evitar;
+}
+
 async function guruMontar() {
   // Capital total = valor atual da carteira + novo aporte
   const aporte = parseFloat(document.getElementById("guruAporte").value) || 0;
