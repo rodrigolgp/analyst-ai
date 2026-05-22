@@ -2423,6 +2423,100 @@ async function reforcarPosicao(id) {
   }
 }
 
+// ─── NOTA BALAO ───────────────────────────────────────────────
+function mostrarNota(btn, nota) {
+  // Remove balao existente
+  document.querySelectorAll(".nota-balao").forEach(el => el.remove());
+  const balao = document.createElement("div");
+  balao.className = "nota-balao";
+  balao.style.cssText = "position:fixed;z-index:9999;background:var(--card);border:1px solid rgba(255,204,0,.4);padding:14px 16px;max-width:300px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.7;box-shadow:0 4px 20px rgba(0,0,0,.5);border-radius:2px;";
+  balao.innerHTML = '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;color:var(--yellow);letter-spacing:1px;margin-bottom:8px;">NOTA</div>'
+    + nota
+    + '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;"><input type="text" value="'+nota.replace(/"/g,'&quot;')+'" style="width:100%;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--txt);font-family:monospace;font-size:10px;outline:none;" id="notaEditInput"/>'
+    + '<div style="display:flex;gap:6px;margin-top:8px;">'
+    + '<button onclick="document.querySelectorAll(\'.nota-balao\').forEach(e=>e.remove())" style="flex:1;font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:4px;cursor:pointer;">FECHAR</button>'
+    + '</div></div>';
+  document.body.appendChild(balao);
+  const rect = btn.getBoundingClientRect();
+  balao.style.top = (rect.bottom + 8) + "px";
+  balao.style.left = Math.min(rect.left, window.innerWidth - 320) + "px";
+  document.addEventListener("click", function close(e) {
+    if (!balao.contains(e.target) && e.target !== btn) {
+      balao.remove();
+      document.removeEventListener("click", close);
+    }
+  }, { once: false });
+  setTimeout(() => balao.querySelector("#notaEditInput")?.focus(), 100);
+}
+
+// ─── EDITAR POSICAO ───────────────────────────────────────────
+function editarPosicao(id) {
+  const p = operacoes.find(o => o.id === id);
+  if (!p) return;
+
+  // Remove modal existente
+  document.querySelectorAll(".edit-modal").forEach(el => el.remove());
+
+  const modal = document.createElement("div");
+  modal.className = "edit-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;";
+
+  const dataAtual = p.data_entrada ? p.data_entrada.split("T")[0] : new Date().toISOString().split("T")[0];
+
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);padding:24px;width:380px;max-width:95vw;">
+    <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:16px;">EDITAR ${p.ticker}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div class="form-field"><label>QUANTIDADE</label><input type="number" id="edit_qty" value="${p.quantidade_atual}" step="1"/></div>
+      <div class="form-field"><label>PRECO MEDIO</label><input type="number" id="edit_price" value="${p.preco_medio}" step="0.01"/></div>
+      <div class="form-field"><label>STOP LOSS</label><input type="number" id="edit_stop" value="${p.stop_loss||''}" step="0.01"/></div>
+      <div class="form-field"><label>ALVO</label><input type="number" id="edit_alvo" value="${p.alvo||''}" step="0.01"/></div>
+      <div class="form-field"><label>DATA COMPRA</label><input type="date" id="edit_data" value="${dataAtual}"/></div>
+      <div class="form-field"><label>PRAZO (dias)</label><input type="number" id="edit_prazo" value="${p.prazo_dias||15}" min="1" max="60"/></div>
+    </div>
+    <div class="form-field" style="margin-bottom:12px;"><label>NOTA</label><input type="text" id="edit_nota" value="${p.nota||''}" placeholder="Anotacao sobre a operacao..."/></div>
+    <div class="form-field" style="margin-bottom:16px;"><label>SETUP</label><input type="text" id="edit_setup" value="${p.setup_original||''}" placeholder="Setup da entrada..."/></div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="salvarEdicaoPosicao(${id})" class="btn" style="flex:1;">SALVAR</button>
+      <button onclick="document.querySelectorAll('.edit-modal').forEach(e=>e.remove())" style="flex:1;font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px;cursor:pointer;">CANCELAR</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(modal);
+  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+}
+
+async function salvarEdicaoPosicao(id) {
+  const qty = parseFloat(document.getElementById("edit_qty").value);
+  const price = parseFloat(document.getElementById("edit_price").value);
+  const stop = parseFloat(document.getElementById("edit_stop").value) || null;
+  const alvo = parseFloat(document.getElementById("edit_alvo").value) || null;
+  const data = document.getElementById("edit_data").value;
+  const prazo = parseInt(document.getElementById("edit_prazo").value) || 15;
+  const nota = document.getElementById("edit_nota").value.trim();
+  const setup = document.getElementById("edit_setup").value.trim();
+
+  if (!qty || !price) { alert("Quantidade e preco sao obrigatorios"); return; }
+
+  try {
+    await apiOperacoes("POST", {
+      acao: "EDITAR", id,
+      quantidade_atual: qty,
+      preco_medio: price,
+      stop_loss: stop,
+      alvo,
+      data_entrada: data ? new Date(data).toISOString() : undefined,
+      prazo_dias: prazo,
+      nota,
+      setup_original: setup,
+    });
+    document.querySelectorAll(".edit-modal").forEach(e => e.remove());
+    await loadOperacoes();
+    renderPortfolio();
+  } catch(e) {
+    alert("Erro ao salvar: " + e.message);
+  }
+}
+
 async function salvarNota(id, nota) {
   const idx = operacoes.findIndex(o => o.id === id);
   if (idx < 0) return;
@@ -2498,7 +2592,7 @@ function renderPortfolio() {
       '<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'+
       '</div>'+
       '<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'+
-      ["TICKER","STATUS","QTDE","P.MEDIO","P.ATUAL","TOTAL","RESULT","HOJE","STOP","ALVO","D.STOP","D.ALVO","DIAS","NOTA","ACOES"].map(h=>'<th>'+h+'</th>').join("")+
+      ["TICKER","STATUS","QTDE","P.MEDIO","P.ATUAL","TOTAL","RESULT","HOJE","STOP","ALVO","D.STOP","D.ALVO","DIAS","ACOES"].map(h=>'<th>'+h+'</th>').join("")+
       '</tr></thead><tbody>'+
       carteira.map(p => {
         const pm = parseFloat(p.preco_medio)||0;
@@ -2533,16 +2627,13 @@ function renderPortfolio() {
           '<td style="color:var(--green);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarAlvo('+p.id+')">'+( alvoN?"R$"+(typeof alvoN==="number"?alvoN.toFixed(2):parseFloat(alvoN).toFixed(2)):"--")+'</td>'+
           '<td style="color:'+( dStop&&parseFloat(dStop)<3?"var(--red)":"var(--dim)")+';font-family:monospace;font-size:10px;">'+( dStop?(parseFloat(dStop)>=0?"+":"")+dStop+"%":"--")+'</td>'+
           '<td style="color:var(--dim);font-family:monospace;font-size:10px;">'+( dAlvo?(parseFloat(dAlvo)>=0?"+":"")+dAlvo+"%":"--")+'</td>'+
-          '<td>'+
-            '<input type="text" value="'+( p.nota||"")+'" placeholder="anotacao..." '+
-            'onblur="salvarNota('+p.id+',this.value)" '+
-            'style="background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--sub);font-family:monospace;font-size:9px;width:120px;outline:none;padding:2px;" />'+
-          '</td>'+
-          '<td style="display:flex;gap:4px;">'+
+          '<td><div style="display:flex;gap:4px;flex-wrap:wrap;">'+
+          '<button class="btn-sm" style="background:rgba(0,200,255,.12);border:1px solid rgba(0,200,255,.3);color:var(--cyan);font-size:9px;" onclick="editarPosicao('+p.id+')">EDITAR</button>'+
           '<button class="btn-sm" style="background:rgba(0,170,255,.12);border:1px solid rgba(0,170,255,.3);color:var(--blue);" onclick="reforcarPosicao('+p.id+')">+</button>'+
           '<button class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.3);color:var(--yellow);" onclick="venderParcial('+p.id+')">PARCIAL</button>'+
           '<button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.3);color:var(--red);" onclick="removePosition('+p.id+')">TOTAL</button>'+
-          '</td></tr>';
+          (p.nota?'<button class="btn-sm" style="background:rgba(255,204,0,.08);border:1px solid rgba(255,204,0,.25);color:var(--yellow);" onclick="mostrarNota(this,\'' + (p.nota||'').replace(/'/g,"\\\'")+'\')" >NOTA</button>':'')+
+          '</div></td></tr>';
       }).join("")+
       '</tbody></table></div>';
 
