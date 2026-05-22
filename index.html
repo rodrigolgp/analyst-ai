@@ -1065,10 +1065,10 @@ function showTab(name) {
   if (name === "mapa") renderMapa();
   if (name === "historico") renderHistorico();
   if (name === "portfolio") {
-    renderPortfolio();
-    loadOperacoes();
-    // Busca cotacoes e depois atualiza benchmark
-    atualizarCotacoesCarteira().then(() => updateBenchmarkCard());
+    loadOperacoes().then(() => {
+      renderPortfolio();
+      updateBenchmarkCard();
+    });
   }
 }
 
@@ -1885,6 +1885,16 @@ function renderResult(d, quote, indicators) {
   })() : "";
 
   return btnAbrirPos + funRealCard + qBadge + hero + sis + trav + temp + indCard + tecFun + catRis + cen + prof + macro;
+}
+
+async function atualizarCotacoesCarteira() {
+  const carteira = getCarteira();
+  await Promise.all(carteira.map(async p => {
+    const q = await fetchQuote(p.ticker);
+    if (q) portfolioQuotes[p.ticker] = q;
+  }));
+  renderPortfolio();
+  updateBenchmarkCard();
 }
 
 // ─── RADAR ────────────────────────────────────────────────────
