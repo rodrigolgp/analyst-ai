@@ -147,7 +147,7 @@ export default async function handler(req, res) {
       } catch(e) { return res.status(500).json({ error: e.message }); }
     }
 
-    // EDITAR — atualiza stop/alvo/score
+    // EDITAR — atualiza campos da operacao
     if (acao === "EDITAR") {
       try {
         const { id, stop, alvo, score, nota, journal } = req.body;
@@ -162,6 +162,9 @@ export default async function handler(req, res) {
         if (req.body.prazo_dias !== undefined) ops[idx].prazo_dias = parseInt(req.body.prazo_dias);
         if (req.body.setup_original !== undefined) ops[idx].setup_original = String(req.body.setup_original).slice(0, 500);
         if (req.body.catalisador !== undefined) ops[idx].catalisador = String(req.body.catalisador).slice(0, 200);
+        if (req.body.quantidade_atual !== undefined) ops[idx].quantidade_atual = parseFloat(req.body.quantidade_atual);
+        if (req.body.preco_medio !== undefined) ops[idx].preco_medio = Math.round(parseFloat(req.body.preco_medio) * 10000) / 10000;
+        if (req.body.data_entrada !== undefined) ops[idx].data_entrada = req.body.data_entrada;
         await redisSet(ops);
         return res.status(200).json({ ok: true, operacao: ops[idx] });
       } catch(e) { return res.status(500).json({ error: e.message }); }
