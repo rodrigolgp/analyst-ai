@@ -1266,6 +1266,12 @@ function sec(t) {
   return '<div style="font-family:\'Rajdhani\',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);margin:16px 0 8px;">'+t+'</div>';
 }
 
+// ─── HELPERS ──────────────────────────────────────────────────
+const sigCol = s => s&&s.includes("COMPRA") ? "var(--green)" : s==="VENDA" ? "var(--red)" : "var(--yellow)";
+const numCol = n => n>=75?"var(--green)":n>=60?"#88ff44":n>=40?"var(--yellow)":"var(--red)";
+const bar = (v,c) => '<div style="width:100%;height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:4px"><div style="height:100%;border-radius:2px;width:'+Math.min(100,Math.max(0,v))+'%;background:'+c+'"></div></div>';
+const kv = (l,v,c) => '<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:7px;margin-bottom:7px;border-bottom:1px solid var(--border)"><span style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:1px">'+l+'</span><span style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:600;color:'+(c||"var(--txt)")+'">'+String(v||"--")+'</span></div>';
+
 function buildAtlasContext() {
   return `Voce e ATLAS, gestor quantitativo de elite do ATLAS WEALTH.
 
