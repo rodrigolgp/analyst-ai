@@ -2084,7 +2084,7 @@ function renderRadar(d, quotes, indicators) {
       +(op.stop?'<span style="color:var(--red)">STOP: '+op.stop+'</span>':"")
       +(op.alvo?'<span style="color:var(--green)">ALVO: '+op.alvo+'</span>':"")
       +(op.up?'<span style="color:var(--green)">UPSIDE: '+op.up+'</span>':"")+'</div>'
-      +'<div style="margin-top:8px;"><button onclick="document.getElementById(\'tickerInput\').value=\''+op.ticker+'\';showTab(\'analise\');analyze();" style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;color:var(--green);background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);padding:6px 12px;cursor:pointer;">VER ANALISE</button></div>'
+      +'<div style="margin-top:8px;"><button onclick="document.getElementById(\'tickerInput\').value=\''+op.ticker+'\';showTab(\'analisar\');setTimeout(()=>analyze(),100);" style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;color:var(--green);background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);padding:6px 12px;cursor:pointer;">VER ANALISE</button></div>'
       +'</div>';
   }).join("");
   const obs = (d.observacao||[]).length ? '<div style="margin-top:20px;"><div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px">EM OBSERVACAO</div>'
