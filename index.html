@@ -2654,6 +2654,11 @@ function renderPortfolio() {
         const alvoN = p.alvo || null;
         const dStop = stopN && atual ? ((atual - stopN) / atual * 100).toFixed(2) : null;
         const dAlvo = alvoN && atual ? ((alvoN - atual) / atual * 100).toFixed(2) : null;
+        const dataEntrada = p.data_entrada ? new Date(p.data_entrada) : null;
+        const diasAberto = dataEntrada ? Math.round((new Date() - dataEntrada) / (1000*60*60*24)) : null;
+        const prazoOrig = p.prazo_dias || 15;
+        const diasRestantes = diasAberto !== null ? Math.max(0, prazoOrig - diasAberto) : null;
+        const prazoC = diasRestantes === 0 ? "var(--red)" : diasRestantes !== null && diasRestantes <= 3 ? "var(--yellow)" : "var(--green)";
         const plColor = plP !== null ? (parseFloat(plP)>=0?"var(--green)":"var(--red)") : "var(--dim)";
         const hColor = plH !== null ? (parseFloat(plH)>=0?"var(--green)":"var(--red)") : "var(--dim)";
         const statusBadge = p.status === "PARCIAL"
@@ -2672,7 +2677,7 @@ function renderPortfolio() {
           '<td style="color:var(--green);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarAlvo('+p.id+')">'+( alvoN?"R$"+(typeof alvoN==="number"?alvoN.toFixed(2):parseFloat(alvoN).toFixed(2)):"--")+'</td>'+
           '<td style="color:'+( dStop&&parseFloat(dStop)<3?"var(--red)":"var(--dim)")+';font-family:monospace;font-size:10px;">'+( dStop?(parseFloat(dStop)>=0?"+":"")+dStop+"%":"--")+'</td>'+
           '<td style="color:var(--dim);font-family:monospace;font-size:10px;">'+( dAlvo?(parseFloat(dAlvo)>=0?"+":"")+dAlvo+"%":"--")+'</td>'+
-          '<td style="font-family:monospace;font-size:9px;text-align:center;">'+(dataEnt?'<div style="color:var(--dim)">'+dataEnt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"2-digit"})+'</div><div style="font-size:8px;color:'+prazoC+'">'+(diasRestantes!==null?(diasRestantes>0?diasRestantes+"d rest":"VENCIDO"):"")+'</div>':"--")+'</td>'+
+          '<td style="font-family:monospace;font-size:9px;text-align:center;">'+(dataEntrada?'<div style="color:var(--dim)">'+dataEntrada.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"2-digit"})+'</div><div style="font-size:8px;color:'+prazoC+'">'+(diasRestantes!==null?(diasRestantes>0?diasRestantes+"d rest":"VENCIDO"):"")+'</div>':"--")+'</td>'+
           '<td><div style="display:flex;gap:4px;flex-wrap:wrap;">'+
           '<button class="btn-sm" style="background:rgba(0,170,255,.12);border:1px solid rgba(0,170,255,.3);color:var(--blue);" onclick="reforcarPosicao('+p.id+')">+</button>'+
           '<button class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.3);color:var(--yellow);" onclick="venderParcial('+p.id+')">PARCIAL</button>'+
