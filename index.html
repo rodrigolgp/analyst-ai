@@ -1098,9 +1098,42 @@ async function callClaude(prompt) {
   if (d.error) throw new Error(d.error);
   const text = d.text || "";
   const i = text.indexOf("{");
-  const j = text.lastIndexOf("}");
   if (i === -1) throw new Error("JSON nao encontrado: "+text.slice(0,200));
-  return JSON.parse(text.slice(i, j+1));
+
+  // Tenta parse direto primeiro
+  let jsonStr = text.slice(i);
+  const j = jsonStr.lastIndexOf("}");
+  if (j !== -1) jsonStr = jsonStr.slice(0, j+1);
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch(e) {
+    // Tenta reparar JSON truncado — fecha chaves/colchetes abertos
+    let repaired = jsonStr;
+    // Remove trailing comma antes de fechar
+    repaired = repaired.replace(/,\s*$/, "");
+    // Conta chaves e colchetes abertos
+    let opens = 0, openBrackets = 0;
+    let inStr = false, escaped = false;
+    for (const ch of repaired) {
+      if (escaped) { escaped = false; continue; }
+      if (ch === "\\") { escaped = true; continue; }
+      if (ch === '"') { inStr = !inStr; continue; }
+      if (inStr) continue;
+      if (ch === "{") opens++;
+      if (ch === "}") opens--;
+      if (ch === "[") openBrackets++;
+      if (ch === "]") openBrackets--;
+    }
+    // Fecha o que ficou aberto
+    while (openBrackets > 0) { repaired += "]"; openBrackets--; }
+    while (opens > 0) { repaired += "}"; opens--; }
+    try {
+      return JSON.parse(repaired);
+    } catch(e2) {
+      throw new Error("JSON invalido: "+e.message+" | "+jsonStr.slice(0,100));
+    }
+  }
 }
 
 // ─── CLOUD DB ─────────────────────────────────────────────────
