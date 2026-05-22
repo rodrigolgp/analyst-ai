@@ -1113,7 +1113,7 @@ async function callClaude(prompt) {
   try {
     return JSON.parse(jsonStr);
   } catch(e) {
-    // Tenta reparar JSON truncado — fecha chaves/colchetes abertos
+    // Tenta reparar JSON truncado  fecha chaves/colchetes abertos
     let repaired = jsonStr;
     // Remove trailing comma antes de fechar
     repaired = repaired.replace(/,\s*$/, "");
@@ -1372,7 +1372,7 @@ function buildAnalyzePrompt(ticker, quote, manualPrice, indicators, fundamentals
   const avisoH = foraDoPregao ? "\nFORA DO PREGAO: use dados historicos. NAO reprove volume zerado." : "";
   const indCtx = indicators ? buildIndicatorsContext(indicators) : "";
   const funCtx = fundamentals ? buildFundamentalsContext(fundamentals) : "";
-  return buildAtlasContext()+"\n\nMODO: ANALISE\nATIVO: "+ticker+"\n"+pi+avisoH+"\n\n"+indCtx+funCtx+"\n\nRetorne APENAS JSON:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo30\":\"\",\"alvo60\":\"\",\"stop\":\"\",\"up30\":\"\",\"up60\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"dy\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"ok\":true,\"just\":\"\",\"res\":\"\"}";
+  return buildAtlasContext()+"\n\nMODO: ANALISE\nATIVO: "+ticker+"\n"+pi+avisoH+"\n\n"+indCtx+funCtx+"\n\nCAMPOS DO JSON  DEFINICOES CLARAS:\n- alvo_preco_15d: preco alvo para daqui a 15 dias\n- alvo_preco_30d: preco alvo para daqui a 30 dias\n- upside_15d: percentual de upside em 15 dias\n- upside_30d: percentual de upside em 30 dias\n- prev[].d: numero de dias | prev[].a: preco alvo naquele dia | prev[].u: upside% naquele dia\n\nRetorne APENAS JSON:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo_preco_15d\":\"\",\"alvo_preco_30d\":\"\",\"stop\":\"\",\"upside_15d\":\"\",\"upside_30d\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"dy\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"ok\":true,\"just\":\"\",\"res\":\"\"}";
 }
 
 function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, resultadosTravas) {
@@ -1783,10 +1783,10 @@ function renderResult(d, quote, indicators) {
     +'</div>'
     +'<div style="background:var(--card);border:1px solid var(--hi);padding:18px;">'
     +kv("PRECO REAL",d.preco,"var(--blue)")
-    +kv("ALVO 30D",d.alvo30,"var(--green)")
-    +kv("ALVO 60D",d.alvo60,"var(--green)")
+    +kv("ALVO 30D",d.alvo_preco_15d||d.alvo30,"var(--green)")
+    +kv("ALVO 60D",d.alvo_preco_30d||d.alvo60,"var(--green)")
     +kv("STOP LOSS",d.stop,"var(--red)")
-    +kv("UPSIDE 30D",d.up30,"var(--green)")
+    +kv("UPSIDE 30D",d.upside_15d||d.up30,"var(--green)")
     +kv("DOWNSIDE",d.downside,"var(--red)")
     +kv("RISCO/RETORNO",d.rr,"var(--yellow)")
     +'</div></div>';
@@ -2274,7 +2274,7 @@ function abrirPosicaoDaAnalise() {
   // Extrai dados da analise
   const preco = quote?.price || data.preco || "";
   const stop = data.stop || indicators?.gestao_risco?.stop_sugerido || "";
-  const alvo = data.alvo60 || data.alvo30 || indicators?.gestao_risco?.alvo_sugerido || "";
+  const alvo = data.alvo_preco_15d || data.alvo30 || indicators?.gestao_risco?.alvo_sugerido || "";
   const score = data.score || "";
   const sinal = data.sinal || "";
 
@@ -2579,7 +2579,7 @@ function calcPerf() {
     ? ((lucroTotal / capitalInvestidoEnc) * 100).toFixed(2)
     : "0.00";
 
-  // Acertos — apenas operacoes encerradas
+  // Acertos  apenas operacoes encerradas
   const acertos = enc.filter(h => h.atlas_acertou === true).length;
   const total = enc.length;
   const taxa = total > 0 ? ((acertos/total)*100).toFixed(1) : "0.0";
