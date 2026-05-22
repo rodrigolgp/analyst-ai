@@ -1318,15 +1318,17 @@ function buildIndicatorsContext(ind) {
 
 
 function buildAnalyzePrompt(ticker, quote, manualPrice, indicators, fundamentals) {
+  const agora = new Date();
+  const foraDoPregao = agora.getDay()===0||agora.getDay()===6||agora.getHours()<10||agora.getHours()>17;
   const pi = manualPrice
-    ? "PRECO ATUAL (manual): "+(quote&&quote.currency||"R$")+" "+manualPrice
+    ? "PRECO (manual): "+(quote&&quote.currency||"R$")+" "+manualPrice
     : quote
-      ? "PRECO REAL: "+quote.currency+" "+quote.price+" | Hoje: "+quote.change+"% | Vol: "+(quote.volume||0).toLocaleString()+" | Fech.ant.: "+quote.prevClose
+      ? "PRECO: "+quote.currency+" "+quote.price+" | Var: "+quote.change+"% | Vol: "+(quote.volume||0).toLocaleString()+" | Ant: "+quote.prevClose
       : "PRECO: nao disponivel";
-
-  const indCtx = indicators ? buildIndicatorsContext(indicators) : "Indicadores: nao disponivel";
-
-  return buildAtlasContext()+"\n\nMODO: ANALISE INDIVIDUAL PROFUNDA\nATIVO: "+ticker+"\n"+pi+"\n\n"+indCtx+"\n\nAnalise este ativo com maxima profundidade. Fundamentos, macro, catalisadores, tecnico.\nSe algum dos 7 criterios inegociaveis falhar, sinalize claramente qual e por que.\n\nRetorne APENAS JSON:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo30\":\"\",\"alvo60\":\"\",\"stop\":\"\",\"up30\":\"\",\"up60\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54},{\"d\":60,\"a\":\"\",\"u\":\"\",\"c\":44}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"val\":\"\",\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"div\":\"\",\"cr\":\"\",\"dy\":\"\",\"moat\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30,\"preco\":\"\",\"upside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"},\"bas\":{\"d\":\"\",\"p\":50,\"preco\":\"\",\"upside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"},\"pes\":{\"d\":\"\",\"p\":20,\"preco\":\"\",\"downside\":\"\",\"catalisador\":\"\",\"prazo\":\"\"}},\"retorno_esperado_ponderado\":\"\",\"vale_o_risco\":true,\"justificativa_risco\":\"\",\"retorno_minimo_aceitavel\":\"+8% em 15 dias\",\"cat\":[],\"ris\":[],\"said\":{\"p50\":\"\",\"tot\":\"\",\"stop\":\"\",\"eme\":\"\"},\"aloc\":\"\",\"ok\":true,\"just\":\"\",\"res\":\"\"}";
+  const avisoH = foraDoPregao ? "\nFORA DO PREGAO: use dados historicos. NAO reprove volume zerado." : "";
+  const indCtx = indicators ? buildIndicatorsContext(indicators) : "";
+  const funCtx = fundamentals ? buildFundamentalsContext(fundamentals) : "";
+  return buildAtlasContext()+"\n\nMODO: ANALISE\nATIVO: "+ticker+"\n"+pi+avisoH+"\n\n"+indCtx+funCtx+"\n\nRetorne APENAS JSON:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo30\":\"\",\"alvo60\":\"\",\"stop\":\"\",\"up30\":\"\",\"up60\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"dy\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"ok\":true,\"just\":\"\",\"res\":\"\"}";
 }
 
 function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, resultadosTravas) {
@@ -1688,6 +1690,168 @@ function selecionarCandidatos(tickers, quotes, maxCandidatos = 30) {
   });
 
   return [...new Set(result)].slice(0, maxCandidatos);
+}
+
+// ─── RENDER ANALISE ───────────────────────────────────────────
+function renderResult(d, quote, indicators) {
+  if (!d) return '<div class="error-box">Sem dados para exibir</div>';
+  const sig = d.sinal || "AGUARDA";
+  const sigC = sig.includes("COMPRA") ? "var(--green)" : sig==="VENDA" ? "var(--red)" : "var(--yellow)";
+  const hiColor = sigC;
+  const cons = d.sis ? Object.values(d.sis).filter(s=>s.v===sig).length : 0;
+  const travOk = d.trav ? Object.values(d.trav).filter(Boolean).length : 0;
+  const SIS = {tec:"TECNICO",pa:"PRICE ACTION",fun:"FUNDAMENTOS",mac:"MACRO",not:"NOTICIAS"};
+  const TRAV = {rr:"R/R",vol:"VOLUME",rsi:"RSI",idx:"INDICE",evt:"EVENTO",conc:"CONCENTR",atr:"VOLATIL"};
+
+  let qBadge = "";
+  if (quote) {
+    const up = parseFloat(quote.change) >= 0;
+    const isMan = quote.source === "Manual";
+    qBadge = '<div style="display:inline-flex;align-items:center;gap:16px;padding:10px 18px;background:var(--card);margin-bottom:14px;border:1px solid '+(isMan?"rgba(255,204,0,.3)":"rgba(0,255,136,.3)")+'">'
+      +'<div><div style="font-family:monospace;font-size:8px;color:'+(isMan?"var(--yellow)":"var(--green)") +'">'+(isMan?"PRECO MANUAL":"COTACAO REAL")+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:var(--blue)">'+(quote.currency||"R$")+" "+(quote.price||0).toFixed(2)+'</div></div>'
+      +'<div><div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+(up?"var(--green)":"var(--red)")+'\">'+(up?"+":"")+quote.change+'%</div>'
+      +'<div style="font-family:monospace;font-size:8px;color:var(--dim)">HOJE</div></div>'
+      +'<div>'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--dim)">MAX '+(quote.currency||"R$")+(quote.high||0).toFixed(2)+'</div>'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--dim)">MIN '+(quote.currency||"R$")+(quote.low||0).toFixed(2)+'</div>'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--dim)">ANT '+(quote.currency||"R$")+(quote.prevClose||0).toFixed(2)+'</div>'
+      +'</div></div>';
+  }
+
+  const macro = d.res ? '<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:20px;margin-bottom:14px;font-size:13px;color:var(--sub);line-height:1.8;font-style:italic;">'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;font-style:normal">RESUMO EXECUTIVO</div>'
+    +'"'+String(d.res||"")+'"\n</div>' : "";
+
+  const hero = '<div style="display:grid;grid-template-columns:1fr 160px 1fr;gap:10px;margin-bottom:10px;animation:fadeUp .4s ease">'
+    +'<div style="background:var(--card);border:1px solid var(--hi);border-top:2px solid '+sigC+';padding:22px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:30px;font-weight:700;letter-spacing:2px">'+d.ticker+'</div>'
+    +'<div style="font-size:12px;color:var(--sub);margin-bottom:14px">'+(d.nome||"")+" - "+(d.setor||"")+" - "+(d.mercado||"")+'</div>'
+    +'<div style="display:inline-flex;align-items:center;gap:10px;padding:10px 18px;font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;letter-spacing:3px;color:'+sigC+';background:'+sigC+'22;border:1px solid '+sigC+'55">'+sig+'</div>'
+    +'<div style="margin-top:10px;font-family:monospace;font-size:9px;color:var(--dim)">CONSENSO '+cons+'/5 | '+travOk+'/7 TRAVAS OK</div>'
+    +(d.variacao_hoje?'<div style="margin-top:6px;font-family:monospace;font-size:9px;color:'+(String(d.variacao_hoje).startsWith("-")?"var(--red)":"var(--green)")+'">HOJE: '+d.variacao_hoje+'</div>':"")
+    +'</div>'
+    +'<div style="background:var(--card);border:1px solid var(--hi);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:18px;">'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:2px">SCORE</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:52px;font-weight:700;color:'+(d.score>=75?"var(--green)":d.score>=60?"#88ff44":d.score>=40?"var(--yellow)":"var(--red)")+';line-height:1">'+(d.score||0)+'</div>'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--sub)">/100</div>'
+    +'<div style="font-family:monospace;font-size:8px;color:var(--dim);text-align:center;margin-top:4px">FORCA '+(d.forca||0)+'/10 | '+(d.confianca||0)+'% CONF.</div>'
+    +'</div>'
+    +'<div style="background:var(--card);border:1px solid var(--hi);padding:18px;">'
+    +kv("PRECO REAL",d.preco,"var(--blue)")
+    +kv("ALVO 30D",d.alvo30,"var(--green)")
+    +kv("ALVO 60D",d.alvo60,"var(--green)")
+    +kv("STOP LOSS",d.stop,"var(--red)")
+    +kv("UPSIDE 30D",d.up30,"var(--green)")
+    +kv("DOWNSIDE",d.downside,"var(--red)")
+    +kv("RISCO/RETORNO",d.rr,"var(--yellow)")
+    +'</div></div>';
+
+  const sis = sec("5 SISTEMAS DE CONFIRMACAO")
+    +'<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-bottom:10px;">'
+    +(d.sis?Object.entries(d.sis).map(([k,s])=>{const vc=s.v==="COMPRA"||s.v==="COMPRA FORTE"?"var(--green)":s.v==="VENDA"?"var(--red)":"var(--yellow)";return '<div style="background:var(--card);border:1px solid var(--border);border-bottom:2px solid '+vc+';padding:12px 8px;text-align:center;">'
+      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:5px">'+(SIS[k]||k)+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;color:'+vc+';margin-bottom:3px">'+s.v+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+(s.s>=75?"var(--green)":s.s>=60?"#88ff44":s.s>=40?"var(--yellow)":"var(--red)")+'">'+s.s+'</div>'
+      +'<div style="font-size:9px;color:var(--sub);margin-top:5px;line-height:1.4">'+String(s.r||"")+'</div></div>';}).join(""):"")
+    +'</div>';
+
+  const trav = sec("7 TRAVAS DE SEGURANCA")
+    +'<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-bottom:10px;">'
+    +(d.trav?Object.entries(d.trav).map(([k,ok])=>'<div style="background:var(--card);border:1px solid '+(ok?"rgba(0,255,136,.25)":"rgba(255,51,85,.25)")+';padding:10px 6px;text-align:center;">'
+      +'<div style="font-size:14px;margin-bottom:4px">'+(ok?"OK":"X")+'</div>'
+      +'<div style="font-family:monospace;font-size:7px;color:var(--dim)">'+(TRAV[k]||k)+'</div></div>').join(""):"")
+    +'</div>';
+
+  const temp = sec("PREVISAO TEMPORAL")
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">'
+    +(d.prev||[]).map(p=>'<div style="background:var(--card);border:1px solid var(--border);padding:16px;">'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:5px">'+p.d+' DIAS</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:'+(String(p.u).startsWith("-")?"var(--red)":"var(--green)")+'">'+p.u+'</div>'
+      +'<div style="font-family:monospace;font-size:10px;color:var(--sub)">Alvo: '+p.a+'</div>'
+      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:6px">Conf: '+p.c+'%</div></div>').join("")
+    +'</div>';
+
+  // Card de indicadores matematicos
+  const indCard = indicators ? sec("INDICADORES MATEMATICOS REAIS")
+    +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">'
+    +[
+      ["RSI POND.", indicators.indicadores?.rsi?.rsi_ponderado, indicators.indicadores?.rsi?.zona==="SOBRECOMPRADO"?"var(--red)":indicators.indicadores?.rsi?.zona==="SOBREVENDIDO"?"var(--green)":"var(--yellow)"],
+      ["TENDENCIA", indicators.tendencia, indicators.tendencia?.includes("ALTA")?"var(--green)":indicators.tendencia?.includes("BAIXA")?"var(--red)":"var(--yellow)"],
+      ["MACD", indicators.indicadores?.macd?.trend, indicators.indicadores?.macd?.trend==="ALTA"?"var(--green)":"var(--red)"],
+      ["VOLUME", indicators.indicadores?.volume?.status, "var(--sub)"],
+      ["MM9", indicators.indicadores?.medias?.mm9, "var(--sub)"],
+      ["MM50", indicators.indicadores?.medias?.mm50, "var(--sub)"],
+      ["SUP.", indicators.suporte_resistencia?.suporte, "var(--green)"],
+      ["RES.", indicators.suporte_resistencia?.resistencia, "var(--red)"],
+    ].map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'
+      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px">'+k+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+c+'">'+String(v||"--")+'</div></div>'
+    ).join("")
+    +'</div>' : "";
+
+  const tecFun = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:12px">ANALISE TECNICA</div>'
+    +(d.tec?[["TENDENCIA",d.tec.tend],["RSI",d.tec.rsi],["MACD",d.tec.macd],["MEDIAS",d.tec.mm],["BOLLINGER",d.tec.bol],["VOLUME",d.tec.volume],["SUPORTE",d.tec.sup],["RESISTENCIA",d.tec.res],["CANDLE",d.tec.candle]].map(([k,v])=>'<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:5px;font-size:11px;"><span style="font-family:monospace;font-size:8px;color:var(--dim)">'+k+'</span><span style="color:var(--sub)">'+String(v||"--")+'</span></div>').join(""):"")
+    +'</div>'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:12px">FUNDAMENTALISTA</div>'
+    +(d.fun?[["P/L",d.fun.pl],["ROE",d.fun.roe],["DY",d.fun.dy],["MARGEM",d.fun.mg],["DIV/EBITDA",d.fun.div],["CRESCIMENTO",d.fun.cr]].map(([k,v])=>'<div style="display:flex;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:5px;font-size:11px;"><span style="font-family:monospace;font-size:8px;color:var(--dim)">'+k+'</span><span style="color:var(--sub)">'+String(v||"--")+'</span></div>').join(""):"")
+    +'</div></div>';
+
+  const catRis = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px">CATALISADORES</div>'
+    +(d.cat||[]).map(c=>'<div style="display:flex;gap:8px;font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:7px"><span style="color:var(--green)">></span>'+c+'</div>').join("")
+    +'</div>'
+    +'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px">RISCOS</div>'
+    +(d.ris||[]).map(r=>'<div style="display:flex;gap:8px;font-size:11px;color:var(--sub);line-height:1.5;margin-bottom:7px"><span style="color:var(--red)">!</span>'+r+'</div>').join("")
+    +'</div></div>';
+
+  const cen = sec("CENARIOS DE PROBABILIDADE")
+    +'<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:10px;">'
+    +(d.cen?[["oti","OTIMISTA","var(--green)"],["bas","BASE","var(--blue)"],["pes","PESSIMISTA","var(--red)"]].map(([k,lbl,col])=>'<div style="background:var(--card);border:1px solid var(--border);padding:18px;">'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:'+col+';margin-bottom:6px">'+lbl+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:26px;font-weight:700;color:'+col+';margin-bottom:8px">'+String(d.cen[k]&&d.cen[k].p||0)+'%</div>'
+      +'<div style="font-size:11px;color:var(--sub);line-height:1.5">'+String(d.cen[k]&&d.cen[k].d||"")+'</div></div>').join(""):"")
+    +'</div>';
+
+  const prof = '<div style="padding:14px 18px;margin-bottom:10px;background:'+(d.ok?"rgba(0,255,136,.06)":"rgba(255,51,85,.06)")+';border:1px solid '+(d.ok?"rgba(0,255,136,.3)":"rgba(255,51,85,.3)")+'">'
+    +'<div style="font-family:monospace;font-size:9px;color:'+(d.ok?"var(--green)":"var(--red)")+';letter-spacing:1px;margin-bottom:6px">'+(d.ok?"OK - ADEQUADO AO SEU PERFIL":"ATENCAO - FORA DO PERFIL")+'</div>'
+    +'<div style="font-size:12px;color:var(--sub);line-height:1.6">'+String(d.just||"")+'</div></div>';
+
+  // Botao abrir posicao
+  const btnAbrirPos = (d.ok && d.sinal && String(d.sinal).includes("COMPRA"))
+    ? '<button onclick="abrirPosicaoDaAnalise()" style="width:100%;background:linear-gradient(135deg,rgba(0,255,136,.15),rgba(0,170,255,.1));border:2px solid var(--green);color:var(--green);padding:16px;font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;margin-bottom:12px;">+ ABRIR POSICAO COM ESTES DADOS</button>'
+    : '';
+
+  // Card fundamentalista real
+  const funData = window._ultimaAnalise?.fundamentals;
+  const funRealCard = (funData && funData.fonte) ? (function(){
+    const f = funData;
+    const items = [
+      ["P/L", f.pl, f.pl!=null?(f.pl<10?"var(--green)":f.pl<20?"var(--cyan)":f.pl<30?"var(--yellow)":"var(--red)"):"var(--dim)"],
+      ["P/VP", f.pvp, f.pvp!=null?(f.pvp<1.5?"var(--green)":f.pvp<3?"var(--cyan)":"var(--yellow)"):"var(--dim)"],
+      ["ROE", f.roe!=null?f.roe+"%":null, f.roe!=null?(f.roe>15?"var(--green)":f.roe>8?"var(--cyan)":"var(--red)"):"var(--dim)"],
+      ["MRG.LIQ", f.margem_liquida!=null?f.margem_liquida+"%":null, "var(--sub)"],
+      ["DY", f.dy!=null?f.dy+"%":null, "var(--yellow)"],
+      ["DIV/PL", f.divida_pl, f.divida_pl!=null?(f.divida_pl<1?"var(--green)":f.divida_pl<2?"var(--yellow)":"var(--red)"):"var(--dim)"],
+    ].filter(([k,v])=>v!=null);
+    if (!items.length) return "";
+    return '<div style="background:var(--card);border:1px solid var(--border);padding:16px 20px;margin-bottom:10px;">'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">FUNDAMENTALISTA REAL <span style="font-family:monospace;font-size:8px;color:var(--dim);font-weight:400">'+f.fonte+'</span></div>'
+      +'<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;">'
+      +items.map(([k,v,c])=>'<div style="background:var(--bg);border:1px solid var(--border);padding:10px;">'
+        +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px">'+k+'</div>'
+        +'<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+c+'">'+v+'</div></div>'
+      ).join("")+'</div>'
+      +(f.setor?'<div style="font-family:monospace;font-size:9px;color:var(--dim);margin-top:8px">'+f.setor+(f.industria?' | '+f.industria:'')+'</div>':'')+
+      '</div>';
+  })() : "";
+
+  return btnAbrirPos + funRealCard + qBadge + hero + sis + trav + temp + indCard + tecFun + catRis + cen + prof + macro;
 }
 
 // ─── RADAR ────────────────────────────────────────────────────
