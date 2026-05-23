@@ -1304,6 +1304,80 @@ function buildIbovContext(ibov) {
   return "\nIBOVESPA: "+ibov.price+" | "+(v>=0?"+":"")+ibov.change+"% | "+nivel+" | "+sinal+"\n";
 }
 
+// ─── INDICE MEDO/GANANCIA B3 ─────────────────────────────────
+function calcMedoGanancia(ibov, indicadoresObj, aprovados, total) {
+  let score = 50; // neutro por padrao
+  const componentes = {};
+
+  // 1. Momentum do Ibovespa (peso 30%)
+  if (ibov) {
+    const var_ = parseFloat(ibov.change || 0);
+    const momScore = var_ > 2 ? 80 : var_ > 1 ? 65 : var_ > 0.3 ? 55 :
+                     var_ < -2 ? 20 : var_ < -1 ? 35 : var_ < -0.3 ? 45 : 50;
+    componentes.momentum = momScore;
+  }
+
+  // 2. RSI medio dos ativos analisados (peso 25%)
+  if (indicadoresObj && Object.keys(indicadoresObj).length > 0) {
+    const rsiVals = Object.values(indicadoresObj)
+      .map(ind => ind?.indicadores?.rsi?.rsi_ponderado)
+      .filter(v => v != null);
+    if (rsiVals.length > 0) {
+      const rsiMedio = rsiVals.reduce((a,b)=>a+b,0) / rsiVals.length;
+      const rsiScore = rsiMedio > 70 ? 85 : rsiMedio > 60 ? 65 : rsiMedio > 50 ? 52 :
+                       rsiMedio < 30 ? 15 : rsiMedio < 40 ? 35 : rsiMedio < 50 ? 48 : 50;
+      componentes.rsi_medio = rsiScore;
+    }
+  }
+
+  // 3. Breadth — % de ativos aprovados nas travas (peso 25%)
+  if (total > 0) {
+    const pct = (aprovados / total) * 100;
+    const breadthScore = pct > 30 ? 75 : pct > 20 ? 62 : pct > 10 ? 52 :
+                         pct > 5 ? 45 : pct > 2 ? 35 : 25;
+    componentes.breadth = breadthScore;
+  }
+
+  // 4. Volume vs media (peso 20%)
+  if (indicadoresObj && Object.keys(indicadoresObj).length > 0) {
+    const volRatios = Object.values(indicadoresObj)
+      .map(ind => ind?.indicadores?.volume?.ratio)
+      .filter(v => v != null);
+    if (volRatios.length > 0) {
+      const volMedio = volRatios.reduce((a,b)=>a+b,0) / volRatios.length;
+      const volScore = volMedio > 1.5 ? 70 : volMedio > 1.1 ? 58 : volMedio > 0.8 ? 50 :
+                       volMedio > 0.5 ? 42 : 30;
+      componentes.volume = volScore;
+    }
+  }
+
+  // Calcula score ponderado
+  const pesos = { momentum: 0.30, rsi_medio: 0.25, breadth: 0.25, volume: 0.20 };
+  let totalPeso = 0, somaPonderada = 0;
+  Object.entries(componentes).forEach(([k, v]) => {
+    if (pesos[k]) { somaPonderada += v * pesos[k]; totalPeso += pesos[k]; }
+  });
+  if (totalPeso > 0) score = Math.round(somaPonderada / totalPeso);
+
+  // Classificacao
+  const label = score <= 25 ? "MEDO EXTREMO" : score <= 45 ? "MEDO" :
+                score <= 55 ? "NEUTRO" : score <= 75 ? "GANANCIA" : "GANANCIA EXTREMA";
+  const cor = score <= 25 ? "var(--green)" : score <= 45 ? "#88ff44" :
+              score <= 55 ? "var(--yellow)" : score <= 75 ? "var(--orange,#ff8c00)" : "var(--red)";
+  const sinalATLAS = score <= 25 ? "MEDO EXTREMO: oportunidade historica de compra - criterios podem ser relaxados" :
+                     score <= 45 ? "MEDO: mercado pessimista - boas entradas em ativos solidos" :
+                     score <= 55 ? "NEUTRO: sem vies claro - seguir criterios normais" :
+                     score <= 75 ? "GANANCIA: mercado otimista - elevar exigencias de R/R e upside" :
+                                   "GANANCIA EXTREMA: euforia - reduzir exposicao, aguardar correcao";
+
+  return { score, label, cor, sinalATLAS, componentes };
+}
+
+function buildMedoGananciaContext(mg) {
+  if (!mg) return "";
+  return "\nINDICE MEDO/GANANCIA B3: "+mg.score+"/100 | "+mg.label+" | "+mg.sinalATLAS+"\n";
+}
+
 // ─── HELPERS ──────────────────────────────────────────────────
 const sigCol = s => s&&s.includes("COMPRA") ? "var(--green)" : s==="VENDA" ? "var(--red)" : "var(--yellow)";
 const numCol = n => n>=75?"var(--green)":n>=60?"#88ff44":n>=40?"var(--yellow)":"var(--red)";
@@ -1455,6 +1529,7 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
   }).join("\n");
 
   const ibovCtxRadar = ibovCache ? buildIbovContext(ibovCache) : "";
+  const mgCtxRadar = window._medoGanancia ? buildMedoGananciaContext(window._medoGanancia) : "";
   const atlasScores = calcAtlasScore();
   const scoresCtx = Object.keys(atlasScores).length
     ? "\nHISTORICO POR ATIVO: "+Object.entries(atlasScores)
@@ -1464,7 +1539,7 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
 
     : "";
 
-  return buildAtlasContext()+ibovCtxRadar+scoresCtx+`
+  return buildAtlasContext()+ibovCtxRadar+mgCtxRadar+scoresCtx+`
 
 MODO: RADAR DE OPORTUNIDADES - B3
 
@@ -2092,6 +2167,11 @@ async function runRadar() {
 
   console.log(`Travas: ${aprovadosTravas.length} aprovados de ${Object.keys(indicadoresRadar).length}`);
 
+  // Calcula Indice Medo/Ganancia
+  const mg = calcMedoGanancia(ibovCache, indicadoresRadar, aprovadosTravas.length, Object.keys(indicadoresRadar).length);
+  window._medoGanancia = mg;
+  console.log(`Medo/Ganancia: ${mg.score}/100 | ${mg.label}`);
+
   // PASSO 4: Monta candidatos finais
   document.getElementById("stepsR").innerHTML = steps(STEPS_R, 4);
   const candidatosFinais = aprovadosTravas.length > 0
@@ -2125,7 +2205,20 @@ async function runRadar() {
   try {
     const data = await callClaude(buildRadarPrompt(candidatosFinais, quotes, indicadoresRadar, emObservacaoTravas.slice(0,5), resultadosTravas));
     document.getElementById("loadR").style.display = "none";
-    document.getElementById("resR").innerHTML = avisoFds + renderRadar(data, quotes, indicadoresRadar);
+    // Widget Medo/Ganancia
+    const mgWidget = window._medoGanancia ? (() => {
+      const mg = window._medoGanancia;
+      return '<div style="background:var(--card);border:1px solid var(--border);padding:14px 20px;margin-bottom:12px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">'
+        +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:3px">MEDO/GANANCIA B3</div>'
+        +'<div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:'+mg.cor+'">'+mg.score+'</div></div>'
+        +'<div style="flex:1;">'
+        +'<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+mg.cor+';margin-bottom:4px;">'+mg.label+'</div>'
+        +'<div style="width:100%;height:6px;background:linear-gradient(to right,var(--green),#88ff44,var(--yellow),orange,var(--red));border-radius:3px;position:relative;margin-bottom:4px;">'
+        +'<div style="position:absolute;top:-2px;left:'+mg.score+'%;transform:translateX(-50%);width:10px;height:10px;background:white;border-radius:50%;border:2px solid var(--bg);"></div></div>'
+        +'<div style="font-family:monospace;font-size:8px;color:var(--sub)">'+mg.sinalATLAS+'</div>'
+        +'</div></div>';
+    })() : '';
+    document.getElementById("resR").innerHTML = avisoFds + mgWidget + renderRadar(data, quotes, indicadoresRadar);
     document.getElementById("resR").style.display = "block";
   } catch(e) {
     document.getElementById("loadR").style.display = "none";
