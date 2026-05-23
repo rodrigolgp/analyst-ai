@@ -1187,8 +1187,8 @@ async function abrirOperacao(dados) {
   return d;
 }
 
-async function venderOperacao(id, quantidade, preco, motivo) {
-  const d = await apiOperacoes("POST", { acao: "VENDER", id, quantidade, preco, motivo });
+async function venderOperacao(id, quantidade, preco, motivo, acerto) {
+  const d = await apiOperacoes("POST", { acao: "VENDER", id, quantidade, preco, motivo, atlas_acertou: acerto !== undefined ? acerto : null });
   if (d && d.ok) {
     const idx = operacoes.findIndex(o=>o.id===id);
     if(idx>=0) operacoes[idx]=d.operacao;
@@ -1455,8 +1455,17 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
   }).join("\n");
 
   const ibovCtxRadar = ibovCache ? buildIbovContext(ibovCache) : "";
+  const atlasScores = calcAtlasScore();
+  const scoresCtx = Object.keys(atlasScores).length
+    ? "
+HISTORICO POR ATIVO: "+Object.entries(atlasScores)
+        .filter(([t,s])=>s.ops>=2)
+        .map(([t,s])=>t+"("+s.ops+"ops,"+s.taxa+"%acerto,"+s.reputacao+")")
+        .join(", ")+"
+"
+    : "";
 
-  return buildAtlasContext()+ibovCtxRadar+`
+  return buildAtlasContext()+ibovCtxRadar+scoresCtx+`
 
 MODO: RADAR DE OPORTUNIDADES - B3
 
@@ -1772,6 +1781,42 @@ function selecionarCandidatos(tickers, quotes, maxCandidatos = 30) {
   return [...new Set(result)].slice(0, maxCandidatos);
 }
 
+// ─── ATLAS SCORE ──────────────────────────────────────────────
+function calcAtlasScore() {
+  const enc = getHistorico();
+  if (!enc.length) return {};
+  const scores = {};
+  enc.forEach(op => {
+    const t = op.ticker;
+    if (!scores[t]) scores[t] = { ops: 0, acertos: 0, lucroTotal: 0, retornos: [] };
+    scores[t].ops++;
+    if (op.atlas_acertou === true) scores[t].acertos++;
+    scores[t].lucroTotal += parseFloat(op.lucro_total||0);
+    if (op.resultado_pct) scores[t].retornos.push(parseFloat(op.resultado_pct));
+  });
+  // Calcula taxa e retorno medio por ativo
+  Object.keys(scores).forEach(t => {
+    const s = scores[t];
+    s.taxa = s.ops > 0 ? ((s.acertos/s.ops)*100).toFixed(0) : 0;
+    s.retornoMedio = s.retornos.length ? (s.retornos.reduce((a,b)=>a+b,0)/s.retornos.length).toFixed(2) : 0;
+    s.reputacao = s.ops >= 3 ? (s.taxa >= 60 ? "BOM" : s.taxa >= 40 ? "NEUTRO" : "RUIM") : "POUCOS_DADOS";
+  });
+  return scores;
+}
+
+function buildAtlasScoreContext(ticker) {
+  const scores = calcAtlasScore();
+  const s = scores[ticker];
+  if (!s || s.ops < 2) return "";
+  return "
+ATLAS SCORE "+ticker+": "+s.ops+" ops | taxa acerto "+s.taxa+"% | retorno medio "+s.retornoMedio+"% | reputacao "+s.reputacao+"
+"
+    +(s.reputacao==="RUIM"?"ATENCAO: historico ruim neste ativo - elevar criterios de entrada
+":"")
+    +(s.reputacao==="BOM"?"HISTORICO POSITIVO neste ativo - "+s.acertos+"/"+s.ops+" acertos
+":"");
+}
+
 // ─── RENDER ANALISE ───────────────────────────────────────────
 function renderResult(d, quote, indicators) {
   if (!d) return '<div class="error-box">Sem dados para exibir</div>';
@@ -1989,13 +2034,13 @@ async function runRadar() {
   }
   console.log(`Cotacoes: ${Object.keys(quotes).length}/${RADAR_TICKERS.length}`);
 
-  // FILTRO DE LIQUIDEZ — minimo R$5 milhoes/dia
+  // FILTRO DE LIQUIDEZ - minimo R$5 milhoes/dia
   const LIQUIDEZ_MINIMA = 5000000;
   const tickersComCotacao = RADAR_TICKERS.filter(t => {
     const q = quotes[t];
     if (!q) return false;
     const volFinanceiro = (q.volume||0) * (q.price||0);
-    // Fora do pregao: sem volume do dia — nao filtra por liquidez
+    // Fora do pregao: sem volume do dia - nao filtra por liquidez
     if (volFinanceiro === 0) return true;
     return volFinanceiro >= LIQUIDEZ_MINIMA;
   });
@@ -2551,15 +2596,60 @@ async function venderParcial(id) {
 async function removePosition(id) {
   const op = operacoes.find(o => o.id === id);
   if (!op) return;
-  const preco = parseFloat(prompt("Preco de saida total de "+op.ticker+" (R$):"));
-  if (!preco || isNaN(preco)) return;
-  const motivos = ["ALVO ATINGIDO","STOP ATINGIDO","SAIDA MANUAL","REBALANCEAMENTO"];
-  const idx = prompt("Motivo:\n0 - ALVO ATINGIDO\n1 - STOP ATINGIDO\n2 - SAIDA MANUAL\n3 - REBALANCEAMENTO");
-  const motivo = motivos[parseInt(idx)] || "SAIDA MANUAL";
-  const d = await venderOperacao(id, op.quantidade_atual, preco, motivo);
+
+  // Modal de encerramento
+  document.querySelectorAll(".close-modal").forEach(e => e.remove());
+  const modal = document.createElement("div");
+  modal.className = "close-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;";
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);padding:24px;width:360px;max-width:95vw;">
+    <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--red);margin-bottom:16px;">ENCERRAR ${op.ticker}</div>
+    <div class="form-field" style="margin-bottom:12px;">
+      <label>PRECO DE SAIDA (R$)</label>
+      <input type="number" id="close_preco" value="${portfolioQuotes[op.ticker]?.price||''}" step="0.01" placeholder="0.00"/>
+    </div>
+    <div class="form-field" style="margin-bottom:12px;">
+      <label>MOTIVO</label>
+      <select id="close_motivo">
+        <option>ALVO ATINGIDO</option>
+        <option>STOP ATINGIDO</option>
+        <option>SAIDA MANUAL</option>
+        <option>REBALANCEAMENTO</option>
+      </select>
+    </div>
+    <div style="margin-bottom:16px;">
+      <div style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:1px;margin-bottom:8px;">O ATLAS ACERTOU NESSA OPERACAO?</div>
+      <div style="display:flex;gap:8px;">
+        <button id="close_acerto_sim" onclick="document.getElementById('close_acerto_sim').style.background='rgba(0,255,136,.3)';document.getElementById('close_acerto_nao').style.background='transparent';window._closeAcerto=true" style="flex:1;font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--green);background:transparent;border:1px solid rgba(0,255,136,.3);padding:10px;cursor:pointer;">SIM</button>
+        <button id="close_acerto_nao" onclick="document.getElementById('close_acerto_nao').style.background='rgba(255,51,85,.3)';document.getElementById('close_acerto_sim').style.background='transparent';window._closeAcerto=false" style="flex:1;font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--red);background:transparent;border:1px solid rgba(255,51,85,.3);padding:10px;cursor:pointer;">NAO</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmarEncerramento(${id})" class="btn" style="flex:1;background:rgba(255,51,85,.15);border-color:var(--red);color:var(--red);">ENCERRAR</button>
+      <button onclick="document.querySelectorAll('.close-modal').forEach(e=>e.remove())" style="flex:1;font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px;cursor:pointer;">CANCELAR</button>
+    </div>
+  </div>`;
+  window._closeAcerto = null;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+}
+
+async function confirmarEncerramento(id) {
+  const preco = parseFloat(document.getElementById("close_preco").value);
+  const motivo = document.getElementById("close_motivo").value;
+  const acerto = window._closeAcerto;
+
+  if (!preco || isNaN(preco)) { alert("Informe o preco de saida"); return; }
+  if (acerto === null) { alert("Informe se o ATLAS acertou (SIM ou NAO)"); return; }
+
+  const op = operacoes.find(o => o.id === id);
+  document.querySelectorAll(".close-modal").forEach(e => e.remove());
+
+  const d = await venderOperacao(id, op.quantidade_atual, preco, motivo, acerto);
   if (d && d.ok) {
     const res = d.operacao;
-    alert("Operacao encerrada!\n"+op.ticker+"\nResultado: "+(res.resultado_pct>=0?"+":"")+res.resultado_pct+"% | R$ "+res.lucro_total+"\nATLAS acertou: "+(res.atlas_acertou?"SIM":"NAO"));
+    const resultado = res.resultado_pct >= 0 ? "+"+res.resultado_pct+"%" : res.resultado_pct+"%";
+    alert("Operacao encerrada!\n"+op.ticker+" - "+resultado+"\nATLAS SCORE atualizado: "+(acerto?"acerto registrado":"erro registrado"));
   }
 }
 
