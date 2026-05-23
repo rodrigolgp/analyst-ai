@@ -1461,7 +1461,7 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
         .filter(([t,s])=>s.ops>=2)
         .map(([t,s])=>t+"("+s.ops+"ops,"+s.taxa+"%acerto,"+s.reputacao+")")
         .join(", ")+"\n"
-    : "";"
+
     : "";
 
   return buildAtlasContext()+ibovCtxRadar+scoresCtx+`
@@ -1807,13 +1807,10 @@ function buildAtlasScoreContext(ticker) {
   const scores = calcAtlasScore();
   const s = scores[ticker];
   if (!s || s.ops < 2) return "";
-  return "
-ATLAS SCORE "+ticker+": "+s.ops+" ops | taxa acerto "+s.taxa+"% | retorno medio "+s.retornoMedio+"% | reputacao "+s.reputacao+"
-"
-    +(s.reputacao==="RUIM"?"ATENCAO: historico ruim neste ativo - elevar criterios de entrada
-":"")
-    +(s.reputacao==="BOM"?"HISTORICO POSITIVO neste ativo - "+s.acertos+"/"+s.ops+" acertos
-":"");
+  const linha1 = "ATLAS SCORE "+ticker+": "+s.ops+" ops | taxa acerto "+s.taxa+"% | retorno medio "+s.retornoMedio+"% | reputacao "+s.reputacao;
+  const linha2 = s.reputacao==="RUIM" ? "ATENCAO: historico ruim neste ativo - elevar criterios de entrada" : "";
+  const linha3 = s.reputacao==="BOM" ? "HISTORICO POSITIVO neste ativo - "+s.acertos+"/"+s.ops+" acertos" : "";
+  return "\n"+linha1+"\n"+(linha2?linha2+"\n":"")+(linha3?linha3+"\n":"");
 }
 
 // ─── RENDER ANALISE ───────────────────────────────────────────
