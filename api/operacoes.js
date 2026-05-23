@@ -109,6 +109,9 @@ export default async function handler(req, res) {
         // Atualiza status
         op.status = op.quantidade_atual <= 0 ? "ENCERRADA" : "PARCIAL";
         if (op.status === "ENCERRADA") op.quantidade_atual = 0;
+        if (req.body.atlas_acertou !== undefined && req.body.atlas_acertou !== null) {
+          op.atlas_acertou = req.body.atlas_acertou === true || req.body.atlas_acertou === "true";
+        }
 
         // Recalcula P&L
         const res2 = calcLucro(op);
