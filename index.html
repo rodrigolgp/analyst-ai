@@ -1301,9 +1301,7 @@ function buildIbovContext(ibov) {
                 v<-1?"mercado em panico - buscar ativos resistentes":
                 v<-0.3?"mercado pressionado - elevar criterios de entrada":
                 "mercado lateral - selecionar apenas os melhores setups";
-  return "
-IBOVESPA: "+ibov.price+" | "+(v>=0?"+":"")+ibov.change+"% | "+nivel+" | "+sinal+"
-";
+  return "\nIBOVESPA: "+ibov.price+" | "+(v>=0?"+":"")+ibov.change+"% | "+nivel+" | "+sinal+"\n";
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────
