@@ -1989,10 +1989,21 @@ async function runRadar() {
   }
   console.log(`Cotacoes: ${Object.keys(quotes).length}/${RADAR_TICKERS.length}`);
 
+  // FILTRO DE LIQUIDEZ — minimo R$5 milhoes/dia
+  const LIQUIDEZ_MINIMA = 5000000;
+  const tickersComCotacao = RADAR_TICKERS.filter(t => {
+    const q = quotes[t];
+    if (!q) return false;
+    const volFinanceiro = (q.volume||0) * (q.price||0);
+    // Fora do pregao: sem volume do dia — nao filtra por liquidez
+    if (volFinanceiro === 0) return true;
+    return volFinanceiro >= LIQUIDEZ_MINIMA;
+  });
+  console.log(`Liquidez: ${tickersComCotacao.length}/${Object.keys(quotes).length} ativos passaram (>= R$5M/dia)`);
+
   // PASSO 2: Indicadores do Redis (instantaneo para ativos com cache)
   document.getElementById("stepsR").innerHTML = steps(STEPS_R, 2);
   const indicadoresRadar = {};
-  const tickersComCotacao = RADAR_TICKERS.filter(t => quotes[t]);
 
   for (let i = 0; i < tickersComCotacao.length; i += 10) {
     await Promise.all(tickersComCotacao.slice(i, i+10).map(async t => {
@@ -2160,7 +2171,16 @@ async function guruMontar() {
   // NIVEL 1: Pre-filtro quantitativo - seleciona top 25
   si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
   const carteiraTickers = portfolio.map(p => p.ticker);
-  const top25Base = selecionarCandidatos(GURU_TICKERS, quotes, 25);
+  // Filtro de liquidez minima R$5M/dia
+  const guruTickersLiquidos = GURU_TICKERS.filter(t => {
+    const q = quotes[t];
+    if (!q) return false;
+    const vf = (q.volume||0) * (q.price||0);
+    return vf === 0 || vf >= 5000000;
+  });
+  console.log(`Guru liquidez: ${guruTickersLiquidos.length}/${GURU_TICKERS.length} ativos`);
+
+  const top25Base = selecionarCandidatos(guruTickersLiquidos, quotes, 25);
   // Garante que ativos da carteira sempre entram
   const top25Guru = [...new Set([...carteiraTickers, ...top25Base])].slice(0, 28);
 
