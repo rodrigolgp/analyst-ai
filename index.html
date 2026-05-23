@@ -1279,6 +1279,33 @@ function sec(t) {
   return '<div style="font-family:\'Rajdhani\',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);margin:16px 0 8px;">'+t+'</div>';
 }
 
+// ─── IBOVESPA CONTEXTO ───────────────────────────────────────
+let ibovCache = null;
+let ibovCacheTime = 0;
+
+async function fetchIbov() {
+  if (ibovCache && (Date.now() - ibovCacheTime) < 300000) return ibovCache;
+  try {
+    const q = await fetchQuote("BVSP");
+    if (!q) throw new Error("sem dados");
+    ibovCache = q; ibovCacheTime = Date.now(); return q;
+  } catch(e) { return null; }
+}
+
+function buildIbovContext(ibov) {
+  if (!ibov) return "";
+  const v = parseFloat(ibov.change||0);
+  const nivel = v>1.5?"FORTE_ALTA":v>0.5?"ALTA":v<-1.5?"FORTE_BAIXA":v<-0.5?"BAIXA":"LATERAL";
+  const sinal = v>1?"mercado em euforia - cuidado com sobrecompra":
+                v>0.3?"mercado favoravel para compras":
+                v<-1?"mercado em panico - buscar ativos resistentes":
+                v<-0.3?"mercado pressionado - elevar criterios de entrada":
+                "mercado lateral - selecionar apenas os melhores setups";
+  return "
+IBOVESPA: "+ibov.price+" | "+(v>=0?"+":"")+ibov.change+"% | "+nivel+" | "+sinal+"
+";
+}
+
 // ─── HELPERS ──────────────────────────────────────────────────
 const sigCol = s => s&&s.includes("COMPRA") ? "var(--green)" : s==="VENDA" ? "var(--red)" : "var(--yellow)";
 const numCol = n => n>=75?"var(--green)":n>=60?"#88ff44":n>=40?"var(--yellow)":"var(--red)";
@@ -1429,7 +1456,9 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
     return t+": score="+(ind?.confluencia?.score||"?")+" travas="+(tr?tr.aprovadas+"/"+tr.total:"?")+" falta: "+falhas;
   }).join("\n");
 
-  return buildAtlasContext()+`
+  const ibovCtxRadar = ibovCache ? buildIbovContext(ibovCache) : "";
+
+  return buildAtlasContext()+ibovCtxRadar+`
 
 MODO: RADAR DE OPORTUNIDADES - B3
 
@@ -1513,7 +1542,8 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru, travasGuru) {
         +")";
     }).join("\n");
 
-  return buildAtlasContext()+`
+  const ibovCtxGuru = ibovCache ? buildIbovContext(ibovCache) : "";
+  return buildAtlasContext()+ibovCtxGuru+`
 
 MODO: `+modo+`
 CAPITAL TOTAL: R$`+cap.toFixed(2)+`
@@ -1945,6 +1975,9 @@ async function runRadar() {
   document.getElementById("loadR").style.display = "flex";
   document.getElementById("btnRadar").disabled = true;
   document.getElementById("stepsR").innerHTML = steps(STEPS_R, 0);
+
+  // Busca IBOV em paralelo
+  fetchIbov();
 
   // PASSO 1: Cotacoes em tempo real de todos os ativos
   const quotes = {};
