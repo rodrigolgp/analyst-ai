@@ -1457,12 +1457,11 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
   const ibovCtxRadar = ibovCache ? buildIbovContext(ibovCache) : "";
   const atlasScores = calcAtlasScore();
   const scoresCtx = Object.keys(atlasScores).length
-    ? "
-HISTORICO POR ATIVO: "+Object.entries(atlasScores)
+    ? "\nHISTORICO POR ATIVO: "+Object.entries(atlasScores)
         .filter(([t,s])=>s.ops>=2)
         .map(([t,s])=>t+"("+s.ops+"ops,"+s.taxa+"%acerto,"+s.reputacao+")")
-        .join(", ")+"
-"
+        .join(", ")+"\n"
+    : "";"
     : "";
 
   return buildAtlasContext()+ibovCtxRadar+scoresCtx+`
