@@ -279,12 +279,12 @@ function renderCharts(indicatorData, period) {
   const macdEl = document.getElementById("chartMACD");
 
   // Helper compatibilidade LightweightCharts v3/v4
-  const addLine = (chart, opts) => chart.addLineSeries
-    ? chart.addLineSeries(opts)
-    : chart.addSeries(LightweightCharts.LineSeries, opts);
-  const addHist = (chart, opts) => chart.addHistogramSeries
-    ? chart.addHistogramSeries(opts)
-    : chart.addSeries(LightweightCharts.HistogramSeries, opts);
+  function addLine(chart, opts) {
+    return chart.addLineSeries ? chart.addLineSeries(opts) : chart.addSeries(LightweightCharts.LineSeries, opts);
+  }
+  function addHist(chart, opts) {
+    return chart.addHistogramSeries ? chart.addHistogramSeries(opts) : chart.addSeries(LightweightCharts.HistogramSeries, opts);
+  }
 
   macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
 
@@ -3460,159 +3460,6 @@ function destroyCharts() {
   if (macdChart) { try { macdChart.remove(); } catch(e) {} macdChart = null; }
 }
 
-function renderCharts(indicatorData, period) {
-  if (!indicatorData || !indicatorData.historico_recente) return;
-  currentChartData = indicatorData;
-  period = period || 60;
-
-  destroyCharts();
-
-  const hist = indicatorData.historico_recente || [];
-  if (!hist.length) return;
-
-  // Slice para o periodo selecionado
-  const data = hist.slice(-period);
-
-  const chartOpts = {
-    layout: {
-      background: { color: "#090f18" },
-      textColor: "#7a9bb5",
-    },
-    grid: {
-      vertLines: { color: "#0f2035" },
-      horzLines: { color: "#0f2035" },
-    },
-    crosshair: { mode: 1 },
-    rightPriceScale: { borderColor: "#0f2035" },
-    timeScale: { borderColor: "#0f2035", timeVisible: true },
-    handleScroll: true,
-    handleScale: true,
-  };
-
-  // ── GRAFICO PRINCIPAL - Candlestick + Volume + MMs ──────────
-  const mainEl = document.getElementById("chartMain");
-  mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
-
-  const candleSeries = mainChart.addCandlestickSeries
-    ? mainChart.addCandlestickSeries({ upColor:"#00ff88",downColor:"#ff3355",borderUpColor:"#00ff88",borderDownColor:"#ff3355",wickUpColor:"#00ff88",wickDownColor:"#ff3355" })
-    : mainChart.addSeries(LightweightCharts.CandlestickSeries, { upColor:"#00ff88",downColor:"#ff3355",borderUpColor:"#00ff88",borderDownColor:"#ff3355",wickUpColor:"#00ff88",wickDownColor:"#ff3355" });
-
-  const candleData = data.map(d => ({
-    time: d.date,
-    open: parseFloat(d.open||d.close),
-    high: parseFloat(d.high),
-    low: parseFloat(d.low),
-    close: parseFloat(d.close),
-  })).filter(d => d.open && d.high && d.low && d.close);
-
-  candleSeries.setData(candleData);
-
-  // Volume como histograma
-  const volOpts = { color:"rgba(0,170,255,0.3)", priceFormat:{type:"volume"}, priceScaleId:"volume", scaleMargins:{top:0.85,bottom:0} };
-  const volumeSeries = mainChart.addHistogramSeries
-    ? mainChart.addHistogramSeries(volOpts)
-    : mainChart.addSeries(LightweightCharts.HistogramSeries, volOpts);
-
-  const volumeData = data.map(d => ({
-    time: d.date,
-    value: d.volume || 0,
-    color: parseFloat(d.close) >= parseFloat(d.open||d.close) ? "rgba(0,255,136,0.3)" : "rgba(255,51,85,0.3)",
-  }));
-  volumeSeries.setData(volumeData);
-
-  // Medias moveis - dados reais historicos
-  const ind = indicatorData.indicadores;
-  const mmDefs = [
-    { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
-    { key: "historico_mm21", color: "#00aaff", label: "MM21", width: 1 },
-    { key: "historico_mm50", color: "#ff8800", label: "MM50", width: 1.5 }];
-  mmDefs.forEach(mm => {
-    const hist = (indicatorData[mm.key] || []).slice(-period);
-    if (!hist.length) return;
-    const mmSeries = addLine(mainChart, {
-      color: mm.color, lineWidth: mm.width,
-      priceLineVisible: false, lastValueVisible: true,
-      title: mm.label,
-    });
-    mmSeries.setData(hist.map(d => ({ time: d.date, value: d.value })));
-  });
-
-  // Suporte e Resistencia como linhas horizontais
-  if (indicatorData.suporte_resistencia) {
-    const sup = indicatorData.suporte_resistencia.suporte;
-    const res = indicatorData.suporte_resistencia.resistencia;
-    if (sup) candleSeries.createPriceLine({ price: sup, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Suporte" });
-    if (res) candleSeries.createPriceLine({ price: res, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Resistencia" });
-    if (indicatorData.gestao_risco?.stop_sugerido) {
-      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.stop_sugerido, color: "#ff3355", lineWidth: 1, lineStyle: 3, title: "Stop ATR" });
-    }
-    if (indicatorData.gestao_risco?.alvo_sugerido) {
-      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.alvo_sugerido, color: "#00ff88", lineWidth: 1, lineStyle: 3, title: "Alvo ATR" });
-    }
-  }
-
-  mainChart.timeScale().fitContent();
-
-  // ── RSI REAL ──────────────────────────────────────────────────
-  const rsiEl = document.getElementById("chartRSI");
-  rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
-
-  const rsiSeries = addLine(rsiChart, {
-    color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
-  });
-
-  // Usa dados historicos reais do indicators.js
-  const rsiHistData = (indicatorData.historico_rsi || []).slice(-period);
-  if (rsiHistData.length) {
-    rsiSeries.setData(rsiHistData.map(d => ({ time: d.date, value: d.value })));
-  }
-
-  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomp." });
-  rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
-  rsiSeries.createPriceLine({ price: 50, color: "#3a5570", lineWidth: 1, lineStyle: 2 });
-  rsiChart.timeScale().fitContent();
-
-  // ── MACD REAL ─────────────────────────────────────────────────
-  const macdEl = document.getElementById("chartMACD");
-
-  // Helper compatibilidade LightweightCharts v3/v4
-  const addLine = (chart, opts) => chart.addLineSeries
-    ? chart.addLineSeries(opts)
-    : chart.addSeries(LightweightCharts.LineSeries, opts);
-  const addHist = (chart, opts) => chart.addHistogramSeries
-    ? chart.addHistogramSeries(opts)
-    : chart.addSeries(LightweightCharts.HistogramSeries, opts);
-
-  macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
-
-  const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
-  const signalSeries = addLine(macdChart, { color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
-  const histSeries = addHist(macdChart, { priceLineVisible: false, title: "Hist" });
-
-  const macdHistData = indicatorData.historico_macd || {};
-  const macdLineData = (macdHistData.macdLine || []).slice(-period);
-  const signalLineData = (macdHistData.signalLine || []).slice(-period);
-  const histData = (macdHistData.histogram || []).slice(-period);
-
-  if (macdLineData.length) macdSeries.setData(macdLineData.map(d => ({ time: d.date, value: d.value })));
-  if (signalLineData.length) signalSeries.setData(signalLineData.map(d => ({ time: d.date, value: d.value })));
-  if (histData.length) histSeries.setData(histData.map(d => ({
-    time: d.date, value: d.value,
-    color: d.value >= 0 ? "rgba(0,255,136,0.6)" : "rgba(255,51,85,0.6)"
-  })));
-
-  macdChart.timeScale().fitContent();
-
-  // Sincroniza zoom entre os 3 graficos
-  mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-    if (range) {
-      rsiChart.timeScale().setVisibleLogicalRange(range);
-      macdChart.timeScale().setVisibleLogicalRange(range);
-    }
-  });
-
-  document.getElementById("chartContainer").style.display = "block";
-}
 
 function setChartPeriod(period) {
   ["btn30","btn60","btn90","btn200"].forEach(id => {
