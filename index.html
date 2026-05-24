@@ -1938,7 +1938,8 @@ function renderResult(d, quote, indicators) {
     +kv("ALVO 30D",d.alvo_preco_15d||d.alvo30,"var(--green)")
     +kv("ALVO 60D",d.alvo_preco_30d||d.alvo60,"var(--green)")
     +kv("STOP LOSS",d.stop,"var(--red)")
-    +kv("UPSIDE 30D",d.upside_15d||d.up30,"var(--green)")
+    +kv("UPSIDE 15D",(d.prev&&d.prev[1])?d.prev[1].u:(d.upside_15d||d.up30),"var(--green)")
+    +kv("UPSIDE 30D",(d.prev&&d.prev[2])?d.prev[2].u:(d.upside_30d||d.up60),"var(--green)")
     +kv("DOWNSIDE",d.downside,"var(--red)")
     +kv("RISCO/RETORNO",d.rr,"var(--yellow)")
     +'</div></div>';
