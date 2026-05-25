@@ -1530,16 +1530,8 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
 
   const ibovCtxRadar = ibovCache ? buildIbovContext(ibovCache) : "";
   const mgCtxRadar = window._medoGanancia ? buildMedoGananciaContext(window._medoGanancia) : "";
-  const atlasScores = calcAtlasScore();
-  const scoresCtx = Object.keys(atlasScores).length
-    ? "\nHISTORICO POR ATIVO: "+Object.entries(atlasScores)
-        .filter(([t,s])=>s.ops>=2)
-        .map(([t,s])=>t+"("+s.ops+"ops,"+s.taxa+"%acerto,"+s.reputacao+")")
-        .join(", ")+"\n"
 
-    : "";
-
-  return buildAtlasContext()+ibovCtxRadar+mgCtxRadar+scoresCtx+`
+  return buildAtlasContext()+ibovCtxRadar+mgCtxRadar+`
 
 MODO: RADAR DE OPORTUNIDADES - B3
 
@@ -1883,8 +1875,10 @@ function buildAtlasScoreContext(ticker) {
   const s = scores[ticker];
   if (!s || s.ops < 2) return "";
   const linha1 = "ATLAS SCORE "+ticker+": "+s.ops+" ops | taxa acerto "+s.taxa+"% | retorno medio "+s.retornoMedio+"% | reputacao "+s.reputacao;
-  const linha2 = s.reputacao==="RUIM" ? "ATENCAO: historico ruim neste ativo - elevar criterios de entrada" : "";
-  const linha3 = s.reputacao==="BOM" ? "HISTORICO POSITIVO neste ativo - "+s.acertos+"/"+s.ops+" acertos" : "";
+  const linha2 = s.reputacao==="RUIM" ? "ATENCAO: historico ruim neste ativo ("+s.ops+" ops, "+s.taxa+"% acerto) - elevar criterios de entrada" :
+               (s.reputacao==="NEUTRO_AMOSTRA_PEQUENA"||s.reputacao==="BOM_AMOSTRA_PEQUENA") ? "OBSERVACAO: amostra pequena ("+s.ops+" ops) - nao conclusivo" : "";
+  const linha3 = s.reputacao==="BOM" ? "HISTORICO POSITIVO neste ativo - "+s.acertos+"/"+s.ops+" acertos" :
+               s.reputacao==="BOM_AMOSTRA_PEQUENA" ? "HISTORICO POSITIVO (amostra pequena: "+s.ops+" ops)" : "";
   return "\n"+linha1+"\n"+(linha2?linha2+"\n":"")+(linha3?linha3+"\n":"");
 }
 
