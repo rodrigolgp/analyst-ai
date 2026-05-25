@@ -1935,13 +1935,20 @@ function renderResult(d, quote, indicators) {
     +'</div>'
     +'<div style="background:var(--card);border:1px solid var(--hi);padding:18px;">'
     +kv("PRECO REAL",d.preco,"var(--blue)")
-    +kv("ALVO 15D",(d.prev&&d.prev[1])?d.prev[1].a:(d.alvo_preco_15d||d.alvo30),"var(--green)")
-    +kv("ALVO 30D",(d.prev&&d.prev[2])?d.prev[2].a:(d.alvo_preco_30d||d.alvo60),"var(--green)")
     +kv("STOP LOSS",d.stop,"var(--red)")
-    +kv("UPSIDE 15D",(d.prev&&d.prev[1])?d.prev[1].u:(d.upside_15d||d.up30),"var(--green)")
-    +kv("UPSIDE 30D",(d.prev&&d.prev[2])?d.prev[2].u:(d.upside_30d||d.up60),"var(--green)")
     +kv("DOWNSIDE",d.downside,"var(--red)")
     +kv("RISCO/RETORNO",d.rr,"var(--yellow)")
+    +(()=>{
+      const preco = parseFloat(d.preco)||0;
+      const a15 = (d.prev&&d.prev[1])?d.prev[1].a:(d.alvo_preco_15d||d.alvo30);
+      const a30 = (d.prev&&d.prev[2])?d.prev[2].a:(d.alvo_preco_30d||d.alvo60);
+      const up15 = (preco&&a15) ? ((parseFloat(a15)-preco)/preco*100).toFixed(2)+"%" : (d.prev&&d.prev[1])?d.prev[1].u:"";
+      const up30 = (preco&&a30) ? ((parseFloat(a30)-preco)/preco*100).toFixed(2)+"%" : (d.prev&&d.prev[2])?d.prev[2].u:"";
+      return kv("ALVO 15D",a15,"var(--green)")
+        +kv("UPSIDE 15D",up15,"var(--green)")
+        +kv("ALVO 30D",a30,"var(--green)")
+        +kv("UPSIDE 30D",up30,"var(--green)");
+    })()
     +'</div></div>';
 
   const sis = sec("5 SISTEMAS DE CONFIRMACAO")
