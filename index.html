@@ -597,7 +597,7 @@ function renderJournalCard(operacao) {
     <div><div class="pf-key">MERCADOS</div><div class="pf-val">B3 + NYSE/NASDAQ</div></div>
     <div><div class="pf-key">HORIZONTE</div><div class="pf-val">Curto prazo</div></div>
     <div><div class="pf-key">CAPITAL</div><div class="pf-val">R$5k-R$20k + aportes</div></div>
-    <div><div class="pf-key">META</div><div class="pf-val green">+8% ao mes</div></div>
+    <div><div class="pf-key">META</div><div class="pf-val green">+6% ao mes</div></div>
     <div><div class="pf-key">COTACOES</div><div class="pf-val green">Yahoo Finance OK</div></div>
     <div id="benchCarteiraBar"><div class="pf-key">MINHA CARTEIRA</div><div class="pf-val" style="color:var(--dim)">---</div></div>
     <div id="benchIBOV"><div class="pf-key">IBOV HOJE</div><div class="pf-val" style="color:var(--dim)">Carregando...</div></div>
@@ -1389,7 +1389,7 @@ function buildAtlasContext() {
 
 PERFIL DO INVESTIDOR:
 - Capital: R$5.000 a R$20.000
-- Objetivo: +8% ao mes via swing trade (meta pessoal, nao filtro rigido)
+- Objetivo: +6% ao mes via swing trade (meta pessoal, nao filtro rigido)
 - Horizonte: 5 a 20 dias por operacao
 - Mercado: B3 (acoes e FIIs)
 - Perfil: aceita risco calculado, NAO e holder
@@ -1397,14 +1397,14 @@ PERFIL DO INVESTIDOR:
 CRITERIOS INEGOCIAVEIS (valem para QUALQUER recomendacao):
 1. Score confluencia matematica >= 65
 2. R/R minimo 1:2, preferir 1:3
-3. Upside minimo 4% em 15 dias (operacoes acima de 8% sao PRIORIDADE ALTA)
+3. Upside minimo 4% em 15 dias (operacoes acima de 6% sao PRIORIDADE ALTA)
 4. Stop maximo 5% abaixo da entrada
 5. Volume nao zerado no dia (exceto fora do pregao: use volume historico dos indicadores)
 6. RSI ponderado entre 25 e 75
 7. MACD sem cruzamento baixista recente
 
 ESCALA DE PRIORIDADE POR UPSIDE:
->= 8% em 15 dias = PRIORIDADE MAXIMA
+>= 6% em 15 dias = PRIORIDADE MAXIMA
 >= 6% em 15 dias = PRIORIDADE ALTA
 >= 4% em 15 dias = APROVADO
 < 4% em 15 dias = REPROVADO
@@ -2529,7 +2529,7 @@ async function guruBriefing() {
   // Busca cotacoes - prioriza ativos da carteira
   const quotes = {};
   const carteiraTickrs = carteira.map(p => p.ticker);
-  const extras = GURU_TICKERS.filter(t => !carteiraTickrs.includes(t)).slice(0, 15);
+  const extras = GURU_TICKERS.filter(t => !carteiraTickrs.includes(t)).slice(0, 50);
   const tickers = [...carteiraTickrs, ...extras];
 
   si = 1; document.getElementById("stepsG").innerHTML = steps(STEPS_B, si);
@@ -3209,7 +3209,7 @@ function buildRelatorioPrompt(mes, ops, capitalInicial) {
     "OPERACOES ENCERRADAS: "+enc.length,
     "ACERTOS: "+acertos+" | ERROS: "+erros+" | TAXA: "+taxaAcerto+"%",
     "LUCRO/PREJUIZO: R$ "+lucroTotal.toFixed(2),
-    "RETORNO: "+retornoPct+"% | META: +8% | META BATIDA: "+(parseFloat(retornoPct)>=8?"SIM":"NAO"),
+    "RETORNO: "+retornoPct+"% | META: +6% | META BATIDA: "+(parseFloat(retornoPct)>=6?"SIM":"NAO"),
     melhor?"MELHOR: "+melhor.ticker+" +"+melhor.resultado+"%":"",
     pior?"PIOR: "+pior.ticker+" "+pior.resultado+"%":"",
     abertasInfo,
@@ -3218,7 +3218,7 @@ function buildRelatorioPrompt(mes, ops, capitalInicial) {
     "ATLAS BATEU CDI: "+(parseFloat(retornoPct) > (benchmark?.cdi?.var_mes||0.87) ? "SIM" : "NAO"),
     "ATLAS BATEU IBOV: "+(parseFloat(retornoPct) > (benchmark?.ibovespa?.var_mes||0) ? "SIM" : "NAO"),
     "Gere relatorio completo, honesto e em linguagem simples. Considere os benchmarks na nota. Calcule nota com rigor.",
-    'Retorne APENAS JSON: {"mes":"","resumo_executivo":"","meta_batida":false,"retorno_real":"","taxa_acerto":"","lucro_total":"","operacoes_total":0,"acertos":0,"erros":0,"melhor_operacao":{"ticker":"","resultado":"","motivo_sucesso":""},"pior_operacao":{"ticker":"","resultado":"","motivo_falha":""},"o_que_funcionou":"","o_que_nao_funcionou":"","erros_cometidos":"","licoes_aprendidas":"","analise_atlas":"","estrategia_proximo_mes":"","meta_proximo_mes":"+8%","nota_atlas":"A","justificativa_nota":"","mensagem_motivacional":""}'].filter(Boolean).join("\n");
+    'Retorne APENAS JSON: {"mes":"","resumo_executivo":"","meta_batida":false,"retorno_real":"","taxa_acerto":"","lucro_total":"","operacoes_total":0,"acertos":0,"erros":0,"melhor_operacao":{"ticker":"","resultado":"","motivo_sucesso":""},"pior_operacao":{"ticker":"","resultado":"","motivo_falha":""},"o_que_funcionou":"","o_que_nao_funcionou":"","erros_cometidos":"","licoes_aprendidas":"","analise_atlas":"","estrategia_proximo_mes":"","meta_proximo_mes":"+6%","nota_atlas":"A","justificativa_nota":"","mensagem_motivacional":""}'].filter(Boolean).join("\n");
   return p;
 }
 
@@ -3236,7 +3236,7 @@ function renderRelatorioResult(d, stats) {
     +[
       ["MES", d.mes, "var(--txt)"],
       ["RETORNO REAL", d.retorno_real, lucroCor],
-      ["META +8%", metaEmoji, metaCor],
+      ["META +6%", metaEmoji, metaCor],
       ["TAXA ACERTO", d.taxa_acerto, parseFloat(d.taxa_acerto)>=60?"var(--green)":"var(--red)"],
       ["NOTA DO ATLAS", d.nota_atlas, notaCor]].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:16px;text-align:center;">'
       +'<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:6px;">'+k+'</div>'
@@ -3311,7 +3311,7 @@ function renderRelatorioResult(d, stats) {
     +'<div style="background:rgba(0,170,255,.05);border:1px solid rgba(0,170,255,.25);padding:20px;margin-bottom:16px;">'
     +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--blue);margin-bottom:10px;">ESTRATEGIA PARA O PROXIMO MES</div>'
     +'<div style="font-size:12px;color:var(--sub);line-height:1.7;margin-bottom:10px;">'+String(d.estrategia_proximo_mes||"")+'</div>'
-    +'<div style="font-family:monospace;font-size:10px;color:var(--blue);">META: '+String(d.meta_proximo_mes||"+8%")+'</div>'
+    +'<div style="font-family:monospace;font-size:10px;color:var(--blue);">META: '+String(d.meta_proximo_mes||"+6%")+'</div>'
     +'</div>'
 
     // Nota e mensagem
