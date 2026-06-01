@@ -2927,7 +2927,7 @@ function renderPortfolio() {
       '<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'+
       '</div>'+
       '<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'+
-      ["TICKER","STATUS","QTDE","P.MEDIO","P.ATUAL","TOTAL","RESULT","HOJE","STOP","ALVO","D.STOP","D.ALVO","DATA COMPRA","ACOES"].map(h=>'<th>'+h+'</th>').join("")+
+      ["TICKER","STATUS","QTDE","P.MEDIO","P.ATUAL","TOTAL","RESULT %","RESULT R$","HOJE","STOP","ALVO","D.STOP","D.ALVO","DATA COMPRA","ACOES"].map(h=>'<th>'+h+'</th>').join("")+
       '</tr></thead><tbody>'+
       carteira.map(p => {
         const pm = parseFloat(p.preco_medio)||0;
@@ -2962,6 +2962,7 @@ function renderPortfolio() {
           '<td style="color:var(--blue);font-weight:600">'+( atual?cur+' '+atual.toFixed(2):"--")+'</td>'+
           '<td style="color:var(--cyan)">'+( totalA?"R$ "+totalA.toLocaleString("pt-BR",{minimumFractionDigits:2}):"--")+'</td>'+
           '<td style="font-weight:700;color:'+plColor+'">'+( plP?(parseFloat(plP)>=0?"+":"")+plP+"%":"--")+'</td>'+
+          '<td style="font-weight:700;color:'+plColor+';font-family:monospace;font-size:11px;">'+(atual&&pm?(()=>{const ganho=(atual-pm)*qty;return (ganho>=0?"+":"")+ganho.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});})():"--")+'</td>'+
           '<td style="color:'+hColor+'">'+( plH?(parseFloat(plH)>=0?"+":"")+plH+"%":"--")+'</td>'+
           '<td style="color:var(--red);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarStop('+p.id+')">'+( stopN?"R$"+(typeof stopN==="number"?stopN.toFixed(2):parseFloat(stopN).toFixed(2)):"--")+'</td>'+
           '<td style="color:var(--green);font-family:monospace;font-size:11px;cursor:pointer;" onclick="editarAlvo('+p.id+')">'+( alvoN?"R$"+(typeof alvoN==="number"?alvoN.toFixed(2):parseFloat(alvoN).toFixed(2)):"--")+'</td>'+
