@@ -168,6 +168,13 @@ export default async function handler(req, res) {
         if (req.body.quantidade_atual !== undefined) ops[idx].quantidade_atual = parseFloat(req.body.quantidade_atual);
         if (req.body.preco_medio !== undefined) ops[idx].preco_medio = Math.round(parseFloat(req.body.preco_medio) * 10000) / 10000;
         if (req.body.data_entrada !== undefined) ops[idx].data_entrada = req.body.data_entrada;
+        if (req.body.saidas !== undefined) {
+          ops[idx].saidas = req.body.saidas;
+          // Recalcula lucro total das saidas
+          const entrada = parseFloat(ops[idx].preco_medio)||0;
+          ops[idx].lucro_total = ops[idx].saidas.reduce((a,s) => a + (parseFloat(s.preco)-entrada)*s.qtd, 0);
+          ops[idx].lucro_total = Math.round(ops[idx].lucro_total * 100) / 100;
+        }
         await redisSet(ops);
         return res.status(200).json({ ok: true, operacao: ops[idx] });
       } catch(e) { return res.status(500).json({ error: e.message }); }
