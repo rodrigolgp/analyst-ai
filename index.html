@@ -1279,6 +1279,18 @@ function sec(t) {
   return '<div style="font-family:\'Rajdhani\',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);margin:16px 0 8px;">'+t+'</div>';
 }
 
+// ─── PARSE PRECO (aceita virgula ou ponto) ───────────────────
+function parsePreco(val) {
+  if (!val && val !== 0) return NaN;
+  const s = String(val).trim().replace(/\s/g,'');
+  // Se tem virgula E ponto: formato brasileiro 1.234,56
+  if (s.includes(',') && s.includes('.')) return parseFloat(s.replace(/\./g,'').replace(',','.'));
+  // Se tem so virgula: formato brasileiro 33,63
+  if (s.includes(',')) return parseFloat(s.replace(',','.'));
+  // Se tem so ponto: formato americano 33.63
+  return parseFloat(s);
+}
+
 // ─── IBOVESPA CONTEXTO ───────────────────────────────────────
 let ibovCache = null;
 let ibovCacheTime = 0;
@@ -1330,7 +1342,7 @@ function calcMedoGanancia(ibov, indicadoresObj, aprovados, total) {
     }
   }
 
-  // 3. Breadth — % de ativos aprovados nas travas (peso 25%)
+  // 3. Breadth  % de ativos aprovados nas travas (peso 25%)
   if (total > 0) {
     const pct = (aprovados / total) * 100;
     const breadthScore = pct > 30 ? 75 : pct > 20 ? 62 : pct > 10 ? 52 :
@@ -2637,9 +2649,9 @@ function abrirPosicaoDaAnalise() {
 function addPosition() {
   const ticker = document.getElementById("pTicker").value.trim().toUpperCase();
   const qty = parseFloat(document.getElementById("pQty").value);
-  const price = parseFloat(document.getElementById("pPrice").value);
-  const stop = parseFloat(document.getElementById("pStop").value) || null;
-  const target = parseFloat(document.getElementById("pTarget").value) || null;
+  const price = parsePreco(document.getElementById("pPrice").value);
+  const stop = parsePreco(document.getElementById("pStop").value) || null;
+  const target = parsePreco(document.getElementById("pTarget").value) || null;
   const market = document.getElementById("pMarket").value;
   const prazo = parseInt(document.getElementById("pPrazo").value) || 15;
   const dataEntrada = document.getElementById("pDataEntrada").value || new Date().toISOString().split("T")[0];
@@ -2669,18 +2681,56 @@ function addPosition() {
 async function venderParcial(id) {
   const op = operacoes.find(o => o.id === id);
   if (!op) return;
-  const qtd = parseFloat(prompt("Quantas acoes de "+op.ticker+" deseja vender?\nVoce tem: "+op.quantidade_atual+" acoes"));
-  if (!qtd || isNaN(qtd) || qtd <= 0) return;
+  const q = portfolioQuotes[op.ticker];
+
+  document.querySelectorAll(".parcial-modal").forEach(e => e.remove());
+  const modal = document.createElement("div");
+  modal.className = "parcial-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;";
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);padding:24px;width:360px;max-width:95vw;">
+    <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:16px;">VENDA PARCIAL  ${op.ticker}</div>
+    <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:14px;">
+      Posicao: ${op.quantidade_atual} acoes | Entrada: R$${parseFloat(op.preco_medio).toFixed(2)}${q ? ' | Atual: R$'+q.price.toFixed(2) : ''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div class="form-field"><label>QUANTIDADE</label><input type="number" id="vp_qty" placeholder="Ex: 50" min="1" max="${op.quantidade_atual}" step="1"/></div>
+      <div class="form-field"><label>PRECO DE SAIDA (R$)</label><input type="number" id="vp_preco" value="${q ? q.price.toFixed(2) : ''}" step="0.01" placeholder="0.00"/></div>
+    </div>
+    <div class="form-field" style="margin-bottom:16px;">
+      <label>MOTIVO</label>
+      <select id="vp_motivo">
+        <option>REALIZACAO PARCIAL</option>
+        <option>ALVO ATINGIDO</option>
+        <option>SAIDA PARCIAL PROGRAMADA</option>
+        <option>REBALANCEAMENTO</option>
+        <option>STOP ATINGIDO</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmarVendaParcial(${id})" class="btn" style="flex:1;background:rgba(255,204,0,.15);border-color:var(--yellow);color:var(--yellow);">CONFIRMAR VENDA</button>
+      <button onclick="document.querySelectorAll('.parcial-modal').forEach(e=>e.remove())" style="flex:1;font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px;cursor:pointer;">CANCELAR</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener("click", e => { if (e.target === modal) modal.remove(); });
+  setTimeout(() => document.getElementById("vp_qty")?.focus(), 100);
+}
+
+async function confirmarVendaParcial(id) {
+  const op = operacoes.find(o => o.id === id);
+  const qtd = parseFloat(document.getElementById("vp_qty").value);
+  const preco = parsePreco(document.getElementById("vp_preco").value);
+  const motivo = document.getElementById("vp_motivo").value;
+
+  if (!qtd || isNaN(qtd) || qtd <= 0) { alert("Informe a quantidade"); return; }
   if (qtd > op.quantidade_atual) { alert("Quantidade maior que a posicao atual ("+op.quantidade_atual+")"); return; }
-  const preco = parseFloat(prompt("Preco de saida (R$):"));
-  if (!preco || isNaN(preco)) return;
-  const motivos = ["ALVO ATINGIDO","SAIDA PARCIAL PROGRAMADA","REALIZACAO PARCIAL","REBALANCEAMENTO","STOP ATINGIDO"];
-  const idx = prompt("Motivo:\n0 - ALVO ATINGIDO\n1 - SAIDA PARCIAL PROGRAMADA\n2 - REALIZACAO PARCIAL\n3 - REBALANCEAMENTO\n4 - STOP ATINGIDO");
-  const motivo = motivos[parseInt(idx)] || "REALIZACAO PARCIAL";
+  if (!preco || isNaN(preco)) { alert("Informe o preco de saida"); return; }
+
+  document.querySelectorAll(".parcial-modal").forEach(e => e.remove());
   const d = await venderOperacao(id, qtd, preco, motivo);
   if (d && d.ok) {
     const res = d.operacao;
-    alert("Venda registrada!\n"+qtd+" acoes de "+op.ticker+"\nEntrada: R$"+op.preco_medio.toFixed(2)+" | Saida: R$"+preco.toFixed(2)+"\nResultado: "+(res.resultado_pct>=0?"+":"")+res.resultado_pct+"% | R$ "+res.lucro_total+"\n"+(res.quantidade_atual>0?"Restam: "+res.quantidade_atual+" acoes":"Posicao encerrada!"));
+    alert("Venda registrada!\n"+qtd+" acoes de "+op.ticker+"\nEntrada: R$"+parseFloat(op.preco_medio).toFixed(2)+" | Saida: R$"+preco.toFixed(2)+"\nResultado: "+(res.resultado_pct>=0?"+":"")+res.resultado_pct+"% | R$ "+res.lucro_total+"\n"+(res.quantidade_atual>0?"Restam: "+res.quantidade_atual+" acoes":"Posicao encerrada!"));
   }
 }
 
@@ -2726,7 +2776,7 @@ async function removePosition(id) {
 }
 
 async function confirmarEncerramento(id) {
-  const preco = parseFloat(document.getElementById("close_preco").value);
+  const preco = parsePreco(document.getElementById("close_preco").value);
   const motivo = document.getElementById("close_motivo").value;
   const acerto = window._closeAcerto;
 
@@ -2821,9 +2871,9 @@ function editarPosicao(id) {
 
 async function salvarEdicaoPosicao(id) {
   const qty = parseFloat(document.getElementById("edit_qty").value);
-  const price = parseFloat(document.getElementById("edit_price").value);
-  const stop = parseFloat(document.getElementById("edit_stop").value) || null;
-  const alvo = parseFloat(document.getElementById("edit_alvo").value) || null;
+  const price = parsePreco(document.getElementById("edit_price").value);
+  const stop = parsePreco(document.getElementById("edit_stop").value) || null;
+  const alvo = parsePreco(document.getElementById("edit_alvo").value) || null;
   const data = document.getElementById("edit_data").value;
   const prazo = parseInt(document.getElementById("edit_prazo").value) || 15;
   const nota = document.getElementById("edit_nota").value.trim();
