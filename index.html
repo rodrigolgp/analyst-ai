@@ -2902,6 +2902,40 @@ async function salvarEdicaoPosicao(id) {
   }
 }
 
+async function editarSaida(opId, saidaIdx) {
+  const op = operacoes.find(o => o.id === opId);
+  if (!op || !op.saidas || !op.saidas[saidaIdx]) return;
+  const saida = op.saidas[saidaIdx];
+
+  const novoPreco = prompt(
+    "Editar preco de saida de "+op.ticker+"\nAtual: R$"+saida.preco+"\n\nNovo preco (use ponto ou virgula):"
+  );
+  if (!novoPreco) return;
+  const preco = parsePreco(novoPreco);
+  if (isNaN(preco) || preco <= 0) { alert("Preco invalido"); return; }
+
+  // Atualiza localmente
+  op.saidas[saidaIdx].preco = preco;
+
+  // Recalcula lucro total
+  const entrada = parseFloat(op.preco_medio)||0;
+  op.saidas[saidaIdx].lucro = (preco - entrada) * saida.qtd;
+
+  // Salva via API EDITAR
+  try {
+    await apiOperacoes("POST", {
+      acao: "EDITAR", id: opId,
+      saidas: op.saidas
+    });
+    await loadOperacoes();
+    renderHistorico();
+    renderPortfolio();
+    alert("Preco corrigido para R$"+preco.toFixed(2));
+  } catch(e) {
+    alert("Erro ao salvar: "+e.message);
+  }
+}
+
 async function salvarNota(id, nota) {
   const idx = operacoes.findIndex(o => o.id === id);
   if (idx < 0) return;
@@ -3144,7 +3178,7 @@ function renderHistorico() {
       '<div style="overflow-x:auto;"><table class="portfolio-table" style="min-width:900px;">'+
       '<thead><tr>'+["DATA","TICKER","ENTROU","SAIU","QTDE","RESULT%","RESULT R$","MOTIVO","STATUS",""].map(h=>'<th>'+h+'</th>').join("")+'</tr></thead>'+
       '<tbody>'+parciaisComSaidas.flatMap(op =>
-        op.saidas.map(saida => {
+        op.saidas.map((saida, saidaIdx) => {
           const entrada = parseFloat(op.preco_medio)||0;
           const ps = parseFloat(saida.preco)||0;
           const res = entrada > 0 ? ((ps - entrada) / entrada * 100) : 0;
@@ -3160,7 +3194,7 @@ function renderHistorico() {
             '<td style="font-weight:600;color:'+rc+'">'+(lucro>=0?"+ R$ ":"- R$ ")+Math.abs(lucro).toFixed(2)+'</td>'+
             '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+saida.motivo+'</td>'+
             '<td><span style="font-size:9px;color:var(--yellow);background:rgba(255,204,0,.1);padding:2px 6px;border-radius:3px;">ABERTA</span></td>'+
-            '<td></td></tr>';
+            '<td><button onclick="editarSaida('+op.id+','+saidaIdx+')" style="font-family:monospace;font-size:9px;background:rgba(0,170,255,.1);border:1px solid rgba(0,170,255,.3);color:var(--blue);padding:3px 8px;cursor:pointer;">EDITAR</button></td></tr>';
         })
       ).join("")+'</tbody></table></div>';
   }
