@@ -2417,6 +2417,108 @@ async function guruMontar() {
   document.getElementById("btnGuruBriefing").disabled = false;
 }
 
+// ─── ATLAS CHAT ───────────────────────────────────────────────
+const chatHistory = [];
+
+function toggleChat() {
+  const panel = document.getElementById("chatPanel");
+  const isOpen = panel.style.display === "flex";
+  panel.style.display = isOpen ? "none" : "flex";
+  if (!isOpen) document.getElementById("chatInput")?.focus();
+}
+
+function chatSugestao(texto) {
+  document.getElementById("chatInput").value = texto;
+  enviarChat();
+}
+
+function chatAddMsg(texto, tipo) {
+  const msgs = document.getElementById("chatMsgs");
+  const div = document.createElement("div");
+  div.style.cssText = tipo === "user"
+    ? "background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.2);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:10px;color:var(--txt);line-height:1.7;align-self:flex-end;max-width:90%;"
+    : "background:rgba(0,170,255,.06);border:1px solid rgba(0,170,255,.2);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.7;max-width:95%;";
+  div.textContent = texto;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function buildChatContext() {
+  const carteira = getCarteira();
+  const hist = getHistorico();
+  let carteiraCtx = "SEM POSICOES ABERTAS";
+  if (carteira.length > 0) {
+    carteiraCtx = carteira.map(p => {
+      const q = portfolioQuotes[p.ticker];
+      const atual = q ? q.price : parseFloat(p.preco_medio);
+      const pl = ((atual - p.preco_medio) / p.preco_medio * 100).toFixed(2);
+      const dStop = p.stop_loss ? (((atual - p.stop_loss)/atual)*100).toFixed(1) : "?";
+      const dAlvo = p.alvo ? (((p.alvo - atual)/atual)*100).toFixed(1) : "?";
+      return p.ticker+": "+p.quantidade_atual+" acoes | entrada R$"+parseFloat(p.preco_medio).toFixed(2)
+        +" | atual R$"+(atual||0).toFixed(2)+" | PL "+pl+"%"
+        +" | stop R$"+(p.stop_loss||"?")+" (dist "+dStop+"%)"
+        +" | alvo R$"+(p.alvo||"?")+" (dist "+dAlvo+"%)"
+        +(p.prazo_dias?" | prazo "+p.prazo_dias+"d":"")
+        +(p.setup_original?" | setup: "+p.setup_original:"");
+    }).join("\n");
+  }
+  const perfCtx = hist.length > 0
+    ? "Operacoes encerradas: "+hist.length+" | Acertos: "+hist.filter(h=>h.atlas_acertou===true).length
+      +" | Lucro total: R$"+hist.reduce((a,h)=>a+parseFloat(h.lucro_total||0),0).toFixed(2)
+    : "Sem historico ainda";
+  const mgCtx = window._medoGanancia
+    ? "Medo/Ganancia: "+window._medoGanancia.score+"/100 ("+window._medoGanancia.label+")"
+    : "Indice nao calculado ainda - rode o Radar primeiro";
+  const ibovCtx = ibovCache
+    ? "Ibovespa: "+ibovCache.price+" | "+(parseFloat(ibovCache.change)>=0?"+":"")+ibovCache.change+"%"
+    : "Ibovespa nao carregado";
+
+  return "Voce e ATLAS, assistente especializado do ATLAS WEALTH.\n"
+    +"Responda de forma direta, clara e util em portugues.\n"
+    +"Para tendencias futuras, use indicadores tecnicos para estimar probabilidades - sempre deixando claro que e analise tecnica, nao garantia.\n\n"
+    +"IBOVESPA: "+ibovCtx+"\n"
+    +"SENTIMENTO: "+mgCtx+"\n\n"
+    +"CARTEIRA ATUAL:\n"+carteiraCtx+"\n\n"
+    +"HISTORICO: "+perfCtx+"\n\n"
+    +"SETORES MONITORADOS: Energia (PETR4,PRIO3,RECV3), Financeiro (ITUB4,BBDC4,BBAS3), "
+    +"Mineracao (VALE3,GGBR4), Utilities (CMIG4,EGIE3,TAEE11,ENGI11), "
+    +"Consumo (LREN3,MGLU3,ABEV3), Saude (HAPV3,RDOR3,HYPE3), Agro (SLCE3,SMTO3,BEEF3), "
+    +"FIIs (KNRI11,HGLG11,XPML11,MXRF11)\n\n"
+    +"INSTRUCOES: Respostas concisas (max 200 palavras). Use dados reais da carteira. "
+    +"Para tendencias setoriais, analise com base em indicadores tecnicos do momento. "
+    +"Linguagem direta e objetiva.";
+}
+
+async function enviarChat() {
+  const input = document.getElementById("chatInput");
+  const btn = document.getElementById("chatSendBtn");
+  const pergunta = input.value.trim();
+  if (!pergunta) return;
+  input.value = "";
+  btn.disabled = true;
+  chatAddMsg(pergunta, "user");
+  chatHistory.push({ role: "user", content: pergunta });
+  const typing = chatAddMsg("...", "atlas");
+  try {
+    const prompt = buildChatContext()+"\n\nPERGUNTA: "+pergunta;
+    const r = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, raw: true })
+    });
+    if (!r.ok) throw new Error("API "+r.status);
+    const d = await r.json();
+    const resposta = d.text || "Nao consegui processar. Tente novamente.";
+    typing.textContent = resposta;
+    chatHistory.push({ role: "assistant", content: resposta });
+  } catch(e) {
+    typing.textContent = "Erro ao conectar com o ATLAS: "+e.message;
+  }
+  btn.disabled = false;
+  document.getElementById("chatInput")?.focus();
+}
+
 function renderBriefing(d) {
   if (!d) return '<div class="error-box">Sem dados do briefing</div>';
   const sitC = d.situacao_carteira==="VERDE"?"var(--green)":d.situacao_carteira==="AMARELO"?"var(--yellow)":"var(--red)";
@@ -3801,5 +3903,35 @@ function renderJournalCard(operacao) {
 }
 
 </script>
+
+<!-- ATLAS CHAT -->
+<div id="chatBtn" onclick="toggleChat()" style="position:fixed;bottom:24px;right:24px;z-index:9990;width:52px;height:52px;background:linear-gradient(135deg,#1B3A6B,#2E5FA3);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.4);font-size:22px;" title="Chat ATLAS">💬</div>
+
+<div id="chatPanel" style="position:fixed;bottom:88px;right:24px;z-index:9989;width:380px;max-width:95vw;height:520px;background:var(--card);border:1px solid rgba(0,170,255,.3);border-radius:8px;display:none;flex-direction:column;box-shadow:0 8px 40px rgba(0,0,0,.5);">
+  <div style="background:linear-gradient(135deg,#1B3A6B,#2E5FA3);padding:14px 18px;border-radius:8px 8px 0 0;display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:#fff;letter-spacing:2px;">ATLAS CHAT</div>
+      <div style="font-family:monospace;font-size:9px;color:#aac4ff;">Pergunte sobre mercado, carteira ou estrategia</div>
+    </div>
+    <button onclick="toggleChat()" style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;opacity:.7;">✕</button>
+  </div>
+  <div id="chatMsgs" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;">
+    <div class="chat-msg atlas" style="background:rgba(0,170,255,.08);border:1px solid rgba(0,170,255,.2);border-radius:8px;padding:10px 14px;font-family:monospace;font-size:10px;color:var(--sub);line-height:1.7;">
+      Ola! Sou o ATLAS. Posso responder sobre sua carteira, indicadores, setores, tendencias e estrategia. O que deseja saber?
+    </div>
+  </div>
+  <div style="padding:10px;border-top:1px solid var(--border);">
+    <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap;">
+      <button onclick="chatSugestao('Qual posicao tem maior risco agora?')" style="font-family:monospace;font-size:8px;background:rgba(0,170,255,.08);border:1px solid rgba(0,170,255,.2);color:var(--blue);padding:3px 8px;cursor:pointer;border-radius:3px;">Maior risco?</button>
+      <button onclick="chatSugestao('Como esta o mercado hoje?')" style="font-family:monospace;font-size:8px;background:rgba(0,170,255,.08);border:1px solid rgba(0,170,255,.2);color:var(--blue);padding:3px 8px;cursor:pointer;border-radius:3px;">Mercado hoje?</button>
+      <button onclick="chatSugestao('Qual setor esta melhor agora?')" style="font-family:monospace;font-size:8px;background:rgba(0,170,255,.08);border:1px solid rgba(0,170,255,.2);color:var(--blue);padding:3px 8px;cursor:pointer;border-radius:3px;">Melhor setor?</button>
+    </div>
+    <div style="display:flex;gap:6px;">
+      <input id="chatInput" type="text" placeholder="Pergunte ao ATLAS..." onkeydown="if(event.key==='Enter')enviarChat()" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--txt);font-family:monospace;font-size:10px;padding:8px 12px;outline:none;border-radius:4px;"/>
+      <button onclick="enviarChat()" id="chatSendBtn" style="background:linear-gradient(135deg,#1B3A6B,#2E5FA3);border:none;color:#fff;font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer;border-radius:4px;">ENVIAR</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
