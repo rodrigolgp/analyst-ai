@@ -1105,7 +1105,8 @@ async function callClaude(prompt) {
   });
   if (!r.ok) {
     const err = await r.text();
-    throw new Error("API "+r.status+": "+err);
+    console.error("API Error status:", r.status, "body:", err.slice(0,300));
+    throw new Error("API "+r.status+": "+err.slice(0,200));
   }
   const d = await r.json();
   if (d.error) throw new Error(d.error);
