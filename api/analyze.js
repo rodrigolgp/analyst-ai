@@ -1,4 +1,4 @@
-export const config = { maxDuration: 120 };
+export const config = { maxDuration: 60 };
 
 export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -15,8 +15,8 @@ export default async function handler(req, res) {
     if (!prompt) return res.status(400).json({ error: "prompt required" });
 
     // Chat usa Haiku — rapido e barato
-    // Analise/Guru/Radar usa Fable 5 — qualidade maxima
-    const model = raw ? "claude-haiku-4-5-20251001" : "claude-fable-5";
+    // Analise/Guru/Radar usa Sonnet 4.5 — equilibrio qualidade/velocidade
+    const model = raw ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-5";
     const max_tokens = raw ? 800 : 2000;
 
     const response = await fetch("https://api.anthropic.com/v1/messages", {
