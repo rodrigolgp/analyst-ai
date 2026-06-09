@@ -14,11 +14,6 @@ export default async function handler(req, res) {
     const { prompt, raw } = req.body;
     if (!prompt) return res.status(400).json({ error: "prompt required" });
 
-    // Chat usa Haiku — rapido e barato
-    // Analise/Guru/Radar usa Sonnet 4.6 — melhor modelo disponivel dentro do timeout
-    const model = raw ? "claude-haiku-4-5-20251001" : "claude-sonnet-4-6";
-    const max_tokens = raw ? 800 : 2000;
-
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -27,8 +22,8 @@ export default async function handler(req, res) {
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model,
-        max_tokens,
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: raw ? 800 : 2000,
         messages: [{ role: "user", content: prompt }],
       }),
     });
