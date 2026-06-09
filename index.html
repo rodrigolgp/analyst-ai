@@ -1109,7 +1109,11 @@ async function callClaude(prompt) {
   }
   const d = await r.json();
   if (d.error) throw new Error(d.error);
-  const text = d.text || "";
+  let text = d.text || "";
+
+  // Remove markdown code blocks se presentes (Fable 5 pode adicionar ```json)
+  text = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+
   const i = text.indexOf("{");
   if (i === -1) throw new Error("JSON nao encontrado: "+text.slice(0,200));
 
@@ -1121,11 +1125,8 @@ async function callClaude(prompt) {
   try {
     return JSON.parse(jsonStr);
   } catch(e) {
-    // Tenta reparar JSON truncado  fecha chaves/colchetes abertos
-    let repaired = jsonStr;
-    // Remove trailing comma antes de fechar
-    repaired = repaired.replace(/,\s*$/, "");
-    // Conta chaves e colchetes abertos
+    // Tenta reparar JSON truncado
+    let repaired = jsonStr.replace(/,\s*$/, "");
     let opens = 0, openBrackets = 0;
     let inStr = false, escaped = false;
     for (const ch of repaired) {
@@ -1138,7 +1139,6 @@ async function callClaude(prompt) {
       if (ch === "[") openBrackets++;
       if (ch === "]") openBrackets--;
     }
-    // Fecha o que ficou aberto
     while (openBrackets > 0) { repaired += "]"; openBrackets--; }
     while (opens > 0) { repaired += "}"; opens--; }
     try {
