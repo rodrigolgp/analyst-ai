@@ -2033,10 +2033,10 @@ function renderResult(d, quote, indicators) {
     +'<div style="font-family:monospace;font-size:9px;color:'+(d.ok?"var(--green)":"var(--red)")+';letter-spacing:1px;margin-bottom:6px">'+(d.ok?"OK - ADEQUADO AO SEU PERFIL":"ATENCAO - FORA DO PERFIL")+'</div>'
     +'<div style="font-size:12px;color:var(--sub);line-height:1.6">'+String(d.just||"")+'</div></div>';
 
-  // Botao abrir posicao
-  const btnAbrirPos = (d.ok && d.sinal && String(d.sinal).includes("COMPRA"))
+  // Botao abrir posicao — aparece sempre que sinal for COMPRA
+  const btnAbrirPos = (d.sinal && String(d.sinal).includes("COMPRA"))
     ? '<button onclick="abrirPosicaoDaAnalise()" style="width:100%;background:linear-gradient(135deg,rgba(0,255,136,.15),rgba(0,170,255,.1));border:2px solid var(--green);color:var(--green);padding:16px;font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;margin-bottom:12px;">+ ABRIR POSICAO COM ESTES DADOS</button>'
-    : '';
+    : '<button onclick="abrirPosicaoDaAnalise()" style="width:100%;background:rgba(0,170,255,.08);border:1px solid rgba(0,170,255,.3);color:var(--blue);padding:12px;font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer;margin-bottom:12px;">+ ABRIR POSICAO MANUALMENTE</button>';
 
   // Card fundamentalista real
   const funData = window._ultimaAnalise?.fundamentals;
