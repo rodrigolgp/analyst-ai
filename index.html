@@ -2086,7 +2086,10 @@ const RADAR_TICKERS = [
   "SIMH3", "CYRE3", "MRVE3", "EZTC3", "TEND3", "DIRR3", "EVEN3", "TRIS3", "JHSF3", "LAVV3",
   "LWSA3", "FIQE3", "MLAS3", "CASH3", "RANI3", "MULT3", "ALUP11", "GMAT3", "MOVI3", "BLAU3",
   "KNRI11", "HGLG11", "XPML11", "MXRF11", "VISC11", "IRDM11", "BTLG11", "KNCR11", "RBRF11", "HGRE11",
-  "HSML11", "BRCO11", "RBRR11", "RZTR11", "HGBS11", "VILG11", "GTWR11"
+  "HSML11", "BRCO11", "RBRR11", "RZTR11", "HGBS11", "VILG11", "GTWR11", "HBOR3", "MTRE3", "PLPL3",
+  "AZZA3", "GRND3", "CEAB3", "VAMO3", "TGMA3", "AMBP3", "CBAV3", "FRAS3", "RAPT4", "AESB3",
+  "MEGA3", "GEPA4", "PINE4", "PARD3", "MATD3", "TRXF11", "RBRY11", "DEVA11", "RECT11", "CSHG11",
+  "VGIP11", "HCTR11", "VCJR11", "URPR11", "TPFT11"
 ];
 
 const GURU_TICKERS = [
@@ -2094,7 +2097,8 @@ const GURU_TICKERS = [
   "VBBR3", "EQTL3", "BPAC11", "ITSA4", "SANB11", "KLBN11", "RADL3", "CSAN3", "CMIG4", "EGIE3",
   "ENGI11", "TAEE11", "TIMS3", "HAPV3", "RDOR3", "HYPE3", "LREN3", "MGLU3", "RAIL3", "GGBR4",
   "USIM5", "CSNA3", "BEEF3", "SLCE3", "SMTO3", "FLRY3", "QUAL3", "ASAI3", "BRSR6", "RECV3",
-  "KNRI11", "HGLG11", "XPML11", "MXRF11", "IRDM11", "BTLG11", "VISC11", "KNCR11", "HGRE11", "VILG11"
+  "KNRI11", "HGLG11", "XPML11", "MXRF11", "IRDM11", "BTLG11", "VISC11", "KNCR11", "HGRE11", "VILG11",
+  "CYRE3", "EVEN3", "VAMO3", "JHSF3", "AZZA3", "TGMA3", "IRBR3", "ODPV3", "CAML3", "AURE3"
 ];
 const STEPS_R = ["Iniciando scanner...","Buscando cotacoes B3...","Buscando cotacoes NYSE/NASDAQ...","Score de pre-filtro (100+ ativos)...","Indicadores matematicos (top 30)...","Score de confluencia...","ATLAS gerando relatorio..."];
 
@@ -2318,10 +2322,10 @@ async function guruMontar() {
   }
   console.log(`Guru cotacoes: ${Object.keys(quotes).length} de ${GURU_TICKERS.length}`);
 
-  // NIVEL 1: Pre-filtro quantitativo - seleciona top 25
+  // Filtro de liquidez + travas matematicas (igual ao Radar — sem pre-filtro por variacao)
   si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
   const carteiraTickers = portfolio.map(p => p.ticker);
-  // Filtro de liquidez minima R$5M/dia
+
   const guruTickersLiquidos = GURU_TICKERS.filter(t => {
     const q = quotes[t];
     if (!q) return false;
@@ -2330,48 +2334,46 @@ async function guruMontar() {
   });
   console.log(`Guru liquidez: ${guruTickersLiquidos.length}/${GURU_TICKERS.length} ativos`);
 
-  const top25Base = selecionarCandidatos(guruTickersLiquidos, quotes, 25);
-  // Garante que ativos da carteira sempre entram
-  const top25Guru = [...new Set([...carteiraTickers, ...top25Base])].slice(0, 28);
-
-  // NIVEL 2: Indicadores matematicos em paralelo
+  // Busca indicadores de todos os ativos liquidos em paralelo (do cache Redis)
   si = 4; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
   const indicadoresGuru = {};
-  // Indicadores em lotes de 3 para evitar timeout
-  for (let i = 0; i < top25Guru.length; i += 3) {
-    await Promise.all(top25Guru.slice(i, i+3).map(async t => {
+  for (let i = 0; i < guruTickersLiquidos.length; i += 10) {
+    await Promise.all(guruTickersLiquidos.slice(i, i+10).map(async t => {
       const ind = await fetchIndicators(t);
       if (ind) indicadoresGuru[t] = ind;
     }));
-    if (i + 3 < top25Guru.length) await new Promise(r => setTimeout(r, 500));
+    if (i + 10 < guruTickersLiquidos.length) await new Promise(r => setTimeout(r, 100));
   }
+  console.log(`Guru indicadores: ${Object.keys(indicadoresGuru).length}/${guruTickersLiquidos.length}`);
 
-  // NIVEL 3: Aplica travas - separa carteira de novos candidatos
+  // Aplica travas matematicas em todos — sem pre-filtro por variacao
+  const agora = new Date();
+  const foraDoPregaoG = agora.getDay()===0||agora.getDay()===6||agora.getHours()<10||agora.getHours()>17;
   const travasGuru = {};
-  const novosCandidatos = []; // para novas entradas
-  const carteiraSemTravas = []; // posicoes existentes sempre incluidas
+  const novosCandidatos = [];
+  const carteiraSemTravas = [];
 
-  top25Guru.forEach(t => {
+  guruTickersLiquidos.forEach(t => {
     const isCarteira = carteiraTickers.includes(t);
     const ind = indicadoresGuru[t];
-    const trava = calcTravas(ind, quotes[t]);
+    const trava = ind ? calcTravas(ind, foraDoPregaoG ? null : quotes[t]) : { passou: false, aprovadas: 0 };
     travasGuru[t] = trava;
-
-    if (ind && quotes[t]) {
-      quotes[t].confluencia = ind.confluencia?.score;
-      quotes[t].sinal_tecnico = ind.confluencia?.direcao;
-    }
-
+    const score = ind?.confluencia?.score || 0;
     if (isCarteira) {
       carteiraSemTravas.push(t);
-    } else if (trava.passou && (ind?.confluencia?.score || 0) >= 60) {
+    } else if (trava.passou && score >= 55) {
       novosCandidatos.push(t);
     }
   });
 
+  // Ordena novos candidatos por score
   novosCandidatos.sort((a,b) =>
     (indicadoresGuru[b]?.confluencia?.score||0) - (indicadoresGuru[a]?.confluencia?.score||0)
   );
+
+  console.log(`Guru aprovados nas travas: ${novosCandidatos.length} novos candidatos`);
+
+  const top25Guru = [...new Set([...carteiraSemTravas, ...novosCandidatos.slice(0, 20)])];
 
   // Fallback progressivo se poucos candidatos
   let candidatosGuruFinal = novosCandidatos;
