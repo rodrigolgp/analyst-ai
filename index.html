@@ -1300,7 +1300,7 @@ let ibovCacheTime = 0;
 async function fetchIbov() {
   if (ibovCache && (Date.now() - ibovCacheTime) < 300000) return ibovCache;
   try {
-    const q = await fetchQuote("BVSP");
+    const q = await fetchQuote("%5EBVSP");
     if (!q) throw new Error("sem dados");
     ibovCache = q; ibovCacheTime = Date.now(); return q;
   } catch(e) { return null; }
