@@ -612,6 +612,7 @@ function renderJournalCard(operacao) {
     <button class="tab" onclick="showTab('historico')">HISTORICO</button>
     <button class="tab" onclick="showTab('relatorio')">RELATORIO</button>
     <button class="tab" onclick="showTab('mapa')">MAPA</button>
+    <button class="tab" onclick="showTab('renda')" style="color:var(--yellow);">RENDA</button>
   </div>
 
   <!-- ANALISAR -->
@@ -1071,7 +1072,9 @@ function showTab(name) {
   document.querySelectorAll(".tab").forEach((el,i) => {
     el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","relatorio","mapa","config"][i]===name);
   });
-  if (name === "relatorio") renderRelatorioTab();
+  if (name === "renda") {
+    loadRenda().then(() => renderRenda());
+  }
   if (name === "mapa") renderMapa();
   if (name === "historico") renderHistorico();
   if (name === "portfolio") {
@@ -2033,7 +2036,7 @@ function renderResult(d, quote, indicators) {
     +'<div style="font-family:monospace;font-size:9px;color:'+(d.ok?"var(--green)":"var(--red)")+';letter-spacing:1px;margin-bottom:6px">'+(d.ok?"OK - ADEQUADO AO SEU PERFIL":"ATENCAO - FORA DO PERFIL")+'</div>'
     +'<div style="font-size:12px;color:var(--sub);line-height:1.6">'+String(d.just||"")+'</div></div>';
 
-  // Botao abrir posicao — aparece sempre que sinal for COMPRA
+  // Botao abrir posicao - aparece sempre que sinal for COMPRA
   const btnAbrirPos = (d.sinal && String(d.sinal).includes("COMPRA"))
     ? '<button onclick="abrirPosicaoDaAnalise()" style="width:100%;background:linear-gradient(135deg,rgba(0,255,136,.15),rgba(0,170,255,.1));border:2px solid var(--green);color:var(--green);padding:16px;font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;letter-spacing:2px;cursor:pointer;margin-bottom:12px;">+ ABRIR POSICAO COM ESTES DADOS</button>'
     : '<button onclick="abrirPosicaoDaAnalise()" style="width:100%;background:rgba(0,170,255,.08);border:1px solid rgba(0,170,255,.3);color:var(--blue);padding:12px;font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;cursor:pointer;margin-bottom:12px;">+ ABRIR POSICAO MANUALMENTE</button>';
@@ -2322,7 +2325,7 @@ async function guruMontar() {
   }
   console.log(`Guru cotacoes: ${Object.keys(quotes).length} de ${GURU_TICKERS.length}`);
 
-  // Filtro de liquidez + travas matematicas (igual ao Radar — sem pre-filtro por variacao)
+  // Filtro de liquidez + travas matematicas (igual ao Radar - sem pre-filtro por variacao)
   si = 3; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
   const carteiraTickers = portfolio.map(p => p.ticker);
 
@@ -2346,7 +2349,7 @@ async function guruMontar() {
   }
   console.log(`Guru indicadores: ${Object.keys(indicadoresGuru).length}/${guruTickersLiquidos.length}`);
 
-  // Aplica travas matematicas em todos — sem pre-filtro por variacao
+  // Aplica travas matematicas em todos - sem pre-filtro por variacao
   const agora = new Date();
   const foraDoPregaoG = agora.getDay()===0||agora.getDay()===6||agora.getHours()<10||agora.getHours()>17;
   const travasGuru = {};
@@ -2419,6 +2422,290 @@ async function guruMontar() {
   }
   document.getElementById("btnGuruMontar").disabled = false;
   document.getElementById("btnGuruBriefing").disabled = false;
+}
+
+// ─── CARTEIRA DE DIVIDENDOS ───────────────────────────────────
+const RENDA_KEY = "renda_v1";
+const RENDA_HIST_KEY = "renda_historico_v1";
+
+const RENDA_TICKERS = [
+  // FIIs de papel
+  "MXRF11","KNCR11","IRDM11","RBRY11","DEVA11","HCTR11","VCJR11","URPR11",
+  // FIIs de tijolo
+  "KNRI11","HGLG11","XPML11","VISC11","HSML11","BRCO11","RECT11",
+  // FIIs logistica
+  "BTLG11","VILG11","TRXF11",
+  // FIIs hibridos
+  "RBRF11","CSHG11","RZTR11","TPFT11",
+  // Energia eletrica
+  "TAEE11","EGIE3","CMIG4","ENGI11","AURE3","CPFE3","TRPL4",
+  // Telecom
+  "VIVT3","TIMS3",
+  // Bancos
+  "BBAS3","ITUB4","BBDC4","SANB11","BRSR6",
+  // Saneamento
+  "SBSP3","CSMG3",
+  // Mineracao
+  "VALE3","CMIN3",
+  // Combustiveis
+  "VBBR3","CSAN3",
+  // Outros
+  "ABEV3","SULA11","PSSA3","VIVT3","KLBN11","SUZB3"
+];
+
+const RENDA_DICAS = [
+  "FIIs pagam dividendos mensalmente - ideal para quem busca renda passiva regular.",
+  "A DATA COM e o ultimo dia para ter direito ao dividendo. Comprar depois nao da direito ao pagamento.",
+  "O DY sozinho pode enganar. Verifique se o pagamento foi consistente nos ultimos 3 anos.",
+  "Juros sobre capital proprio (JCP) tem imposto de 15% retido na fonte automaticamente.",
+  "Diversifique entre FIIs de papel, tijolo e acoes pagadoras - cada um tem riscos diferentes.",
+  "FIIs de papel sofrem mais com alta de juros. FIIs de tijolo sofrem mais com vacancia.",
+  "O ideal e reinvestir os dividendos recebidos para potencializar o efeito dos juros compostos.",
+  "Uma carteira de renda bem montada pode pagar seus proprios custos mensais em 5-10 anos.",
+  "Yield on Cost (YoC): quanto voce recebe sobre o preco que pagou - cresce com o tempo.",
+  "FIIs nao pagam IR sobre dividendos para pessoa fisica - vantagem tributaria importante.",
+  "Acoes pagadoras de dividendos tendem a ser menos volateis que o mercado em geral.",
+  "O melhor momento para comprar um bom pagador de dividendos e quando ele cai sem motivo fundamental.",
+];
+
+let rendaPosicoes = [];
+let rendaHistorico = [];
+let rendaQuotes = {};
+
+async function loadRenda() {
+  try {
+    const d = await apiOperacoes("GET", { key: RENDA_KEY });
+    rendaPosicoes = d?.data || [];
+  } catch(e) { rendaPosicoes = []; }
+  try {
+    const d2 = await apiOperacoes("GET", { key: RENDA_HIST_KEY });
+    rendaHistorico = d2?.data || [];
+  } catch(e) { rendaHistorico = []; }
+}
+
+async function saveRenda() {
+  await apiOperacoes("POST", { acao: "SET_RAW", key: RENDA_KEY, data: rendaPosicoes });
+}
+
+async function saveRendaHistorico() {
+  await apiOperacoes("POST", { acao: "SET_RAW", key: RENDA_HIST_KEY, data: rendaHistorico });
+}
+
+function addRendaPos() {
+  const f = document.getElementById("rendaFormDiv");
+  f.style.display = f.style.display === "none" ? "block" : "none";
+  document.getElementById("rData").value = new Date().toISOString().split("T")[0];
+}
+
+async function salvarRendaPos() {
+  const ticker = document.getElementById("rTicker").value.trim().toUpperCase();
+  const qty = parseFloat(document.getElementById("rQty").value);
+  const preco = parsePreco(document.getElementById("rPreco").value);
+  const data = document.getElementById("rData").value;
+  if (!ticker || !qty || !preco) { alert("Preencha todos os campos"); return; }
+  rendaPosicoes.push({
+    id: Date.now(),
+    ticker, qty, preco_medio: preco,
+    data_compra: data,
+    dividendos_recebidos: 0,
+    historico_div: []
+  });
+  await saveRenda();
+  document.getElementById("rendaFormDiv").style.display = "none";
+  renderRenda();
+}
+
+async function registrarDividendo(id) {
+  const pos = rendaPosicoes.find(p => p.id === id);
+  if (!pos) return;
+  const valor = parsePreco(prompt("Valor do dividendo por acao (R$):"));
+  if (!valor || isNaN(valor)) return;
+  const data = prompt("Data de pagamento (AAAA-MM-DD):", new Date().toISOString().split("T")[0]);
+  const total = valor * pos.qty;
+  pos.dividendos_recebidos = (pos.dividendos_recebidos||0) + total;
+  pos.historico_div = pos.historico_div || [];
+  pos.historico_div.push({ data, valor_por_acao: valor, total, qty: pos.qty });
+  rendaHistorico.push({ data, ticker: pos.ticker, valor_por_acao: valor, qty: pos.qty, total });
+  await saveRenda();
+  await saveRendaHistorico();
+  renderRenda();
+  alert(`Dividendo registrado!\n${pos.ticker}: R$${total.toFixed(2)} (${pos.qty} x R$${valor.toFixed(4)})`);
+}
+
+async function removerRendaPos(id) {
+  if (!confirm("Remover esta posicao de renda?")) return;
+  rendaPosicoes = rendaPosicoes.filter(p => p.id !== id);
+  await saveRenda();
+  renderRenda();
+}
+
+async function indicarCompraRenda() {
+  const el = document.getElementById("renda-indicacao");
+  el.innerHTML = '<div style="font-family:monospace;font-size:10px;color:var(--dim);padding:16px;">Analisando melhores opcoes de renda...</div>';
+
+  // Busca cotacoes e dados fundamentalistas dos candidatos
+  const candidatos = RENDA_TICKERS.filter(t => {
+    const jaTemMuito = rendaPosicoes.filter(p=>p.ticker===t).reduce((a,p)=>a+p.qty*p.preco_medio,0);
+    return jaTemMuito < 5000; // nao concentrar mais de R$5k em um unico ativo
+  });
+
+  const quotes = {};
+  for (let i = 0; i < candidatos.length; i += 8) {
+    await Promise.all(candidatos.slice(i, i+8).map(async t => {
+      const q = await fetchQuote(t);
+      if (q) quotes[t] = q;
+    }));
+    await new Promise(r => setTimeout(r, 150));
+  }
+
+  // Monta contexto da carteira atual de renda
+  const carteiraCtx = rendaPosicoes.length
+    ? rendaPosicoes.map(p => `${p.ticker}: ${p.qty} cotas/acoes, preco medio R$${p.preco_medio}, dividendos recebidos R$${(p.dividendos_recebidos||0).toFixed(2)}`).join("\n")
+    : "Carteira de renda vazia - primeira compra";
+
+  const prompt = `Voce e ATLAS, especialista em investimentos de renda passiva na B3.
+
+CARTEIRA DE RENDA ATUAL:
+${carteiraCtx}
+
+OBJETIVO: Indicar os 3 melhores ativos para comprar este mes para maximizar renda passiva com diversificacao e seguranca.
+
+CRITERIOS DE SELECAO:
+1. DY historico consistente (>= 8% a.a. para FIIs, >= 5% para acoes)
+2. Qualidade do ativo (solidez, historico de pagamentos)
+3. Diversificacao em relacao ao que ja tem
+4. Preco atual vs preco justo (nao pagar caro demais)
+5. Se ja tem o ativo: sugerir REFORCAR apenas se peso < 15% da carteira
+
+CANDIDATOS DISPONIVEIS: ${Object.keys(quotes).join(", ")}
+
+Para cada indicacao retorne JSON:
+{"indicacoes":[
+  {"rank":1,"ticker":"","acao":"INICIAR ou REFORCAR","dy_estimado":"","motivo":"","alerta":""},
+  {"rank":2,"ticker":"","acao":"INICIAR ou REFORCAR","dy_estimado":"","motivo":"","alerta":""},
+  {"rank":3,"ticker":"","acao":"INICIAR ou REFORCAR","dy_estimado":"","motivo":"","alerta":""}
+],"resumo_mercado":"","melhor_momento":""}`;
+
+  try {
+    const data = await callClaude(prompt);
+    const ind = data.indicacoes || [];
+    el.innerHTML = '<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:12px;">* INDICACAO DO MES</div>'
+      + ind.map((i,idx) => {
+        const q = quotes[i.ticker];
+        return '<div style="background:var(--card);border:1px solid '+(idx===0?"rgba(255,204,0,.4)":"var(--border)")+';border-left:3px solid '+(idx===0?"var(--yellow)":"var(--dim)")+';padding:16px 20px;margin-bottom:8px;">'
+          +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">'
+          +'<span style="font-family:monospace;font-size:9px;color:var(--dim)">#'+i.rank+'</span>'
+          +'<span style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">'+i.ticker+'</span>'
+          +'<span style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;color:var(--yellow);background:rgba(255,204,0,.1);padding:3px 8px;">'+i.acao+'</span>'
+          +'<span style="font-family:monospace;font-size:10px;color:var(--green)">DY ~'+i.dy_estimado+'</span>'
+          +(q?'<span style="font-family:monospace;font-size:10px;color:var(--sub)">R$ '+q.price.toFixed(2)+' ('+(parseFloat(q.change)>=0?"+":"")+q.change+'%)</span>':"")
+          +'</div>'
+          +'<div style="font-family:monospace;font-size:9px;color:var(--sub);line-height:1.6;margin-bottom:6px;">'+i.motivo+'</div>'
+          +(i.alerta?'<div style="font-family:monospace;font-size:9px;color:var(--yellow)">! '+i.alerta+'</div>':"")
+          +'</div>';
+      }).join("")
+      +(data.resumo_mercado?'<div style="font-family:monospace;font-size:9px;color:var(--dim);line-height:1.6;padding:12px;background:var(--bg);border:1px solid var(--border);">'+data.resumo_mercado+'</div>':"");
+  } catch(e) {
+    el.innerHTML = '<div style="color:var(--red);font-family:monospace;font-size:10px;">Erro: '+e.message+'</div>';
+  }
+}
+
+async function renderRenda() {
+  // Atualiza cotacoes
+  for (const p of rendaPosicoes) {
+    const q = await fetchQuote(p.ticker);
+    if (q) rendaQuotes[p.ticker] = q;
+  }
+
+  // Resumo
+  const totalInv = rendaPosicoes.reduce((a,p) => a + p.qty * p.preco_medio, 0);
+  const totalAtual = rendaPosicoes.reduce((a,p) => {
+    const q = rendaQuotes[p.ticker];
+    return a + p.qty * (q ? q.price : p.preco_medio);
+  }, 0);
+  const totalDiv = rendaPosicoes.reduce((a,p) => a + (p.dividendos_recebidos||0), 0);
+  const resultado = totalAtual - totalInv;
+  const resPct = totalInv > 0 ? (resultado/totalInv*100).toFixed(2) : "0.00";
+
+  const prox = rendaPosicoes
+    .filter(p => p.proxima_data_pagamento)
+    .sort((a,b) => new Date(a.proxima_data_pagamento) - new Date(b.proxima_data_pagamento))[0];
+
+  document.getElementById("renda-resumo").innerHTML =
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px;">'
+    + [
+      ["PATRIMONIO", "R$ "+totalInv.toLocaleString("pt-BR",{minimumFractionDigits:2}), "var(--cyan)"],
+      ["VALOR ATUAL", "R$ "+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2}), "var(--blue)"],
+      ["RESULTADO", (resultado>=0?"+":"")+resultado.toLocaleString("pt-BR",{minimumFractionDigits:2,style:"currency",currency:"BRL"})+" ("+resPct+"%)", resultado>=0?"var(--green)":"var(--red)"],
+      ["DIVIDENDOS RECEBIDOS", "R$ "+totalDiv.toLocaleString("pt-BR",{minimumFractionDigits:2}), "var(--yellow)"],
+      ["POSICOES", rendaPosicoes.length.toString(), "var(--txt)"],
+    ].map(([k,v,c]) => '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;">'
+      +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">'+k+'</div>'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+c+'">'+v+'</div></div>'
+    ).join("")
+    + '</div>';
+
+  // Tabela
+  if (!rendaPosicoes.length) {
+    document.getElementById("renda-tabela").innerHTML =
+      '<div style="font-family:monospace;font-size:10px;color:var(--dim);padding:20px;text-align:center;">Nenhuma posicao de renda cadastrada.<br>Clique em + ADICIONAR POSICAO ou use a indicacao mensal.</div>';
+  } else {
+    const headers = ["TICKER","QTD","P.MEDIO","P.ATUAL","RESULT%","RESULT R$","DIVIDENDOS","DY ATUAL","ACOES"];
+    document.getElementById("renda-tabela").innerHTML =
+      '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px">POSICOES DE RENDA</div>'
+      +'<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'
+      +headers.map(h=>'<th>'+h+'</th>').join("")+'</tr></thead><tbody>'
+      +rendaPosicoes.map(p => {
+        const q = rendaQuotes[p.ticker];
+        const atual = q ? q.price : p.preco_medio;
+        const res = ((atual - p.preco_medio) / p.preco_medio * 100).toFixed(2);
+        const resR = (atual - p.preco_medio) * p.qty;
+        const rc = parseFloat(res) >= 0 ? "var(--green)" : "var(--red)";
+        const dyAtual = p.dividendos_recebidos > 0
+          ? ((p.dividendos_recebidos / (p.qty * p.preco_medio)) * 100).toFixed(1)+"%"
+          : "--";
+        return '<tr>'
+          +'<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--blue)">'+p.ticker+'</td>'
+          +'<td style="font-family:monospace">'+p.qty+'</td>'
+          +'<td>R$ '+parseFloat(p.preco_medio).toFixed(2)+'</td>'
+          +'<td style="color:var(--blue)">'+(q?'R$ '+atual.toFixed(2):'--')+'</td>'
+          +'<td style="font-weight:700;color:'+rc+'">'+(parseFloat(res)>=0?"+":"")+res+'%</td>'
+          +'<td style="font-weight:700;color:'+rc+'">'+(resR>=0?"+":"")+resR.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+'</td>'
+          +'<td style="color:var(--yellow)">R$ '+(p.dividendos_recebidos||0).toFixed(2)+'</td>'
+          +'<td style="color:var(--yellow)">'+dyAtual+'</td>'
+          +'<td><div style="display:flex;gap:4px;">'
+          +'<button class="btn-sm" style="background:rgba(255,204,0,.1);border:1px solid rgba(255,204,0,.3);color:var(--yellow);" onclick="registrarDividendo('+p.id+')">+DIV</button>'
+          +'<button class="btn-sm" style="background:rgba(255,51,85,.1);border:1px solid rgba(255,51,85,.3);color:var(--red);" onclick="removerRendaPos('+p.id+')">X</button>'
+          +'</div></td></tr>';
+      }).join("")+'</tbody></table></div>';
+  }
+
+  // Historico de dividendos
+  if (rendaHistorico.length > 0) {
+    const hist = [...rendaHistorico].sort((a,b) => new Date(b.data) - new Date(a.data));
+    document.getElementById("renda-historico-div").innerHTML =
+      '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px;margin-top:20px;">HISTORICO DE DIVIDENDOS</div>'
+      +'<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'
+      +["DATA","TICKER","R$/COTA","QUANTIDADE","TOTAL"].map(h=>'<th>'+h+'</th>').join("")
+      +'</tr></thead><tbody>'
+      +hist.slice(0,20).map(h =>
+        '<tr>'
+        +'<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+h.data+'</td>'
+        +'<td style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:var(--blue)">'+h.ticker+'</td>'
+        +'<td style="color:var(--yellow)">R$ '+parseFloat(h.valor_por_acao).toFixed(4)+'</td>'
+        +'<td style="font-family:monospace">'+h.qty+'</td>'
+        +'<td style="font-weight:700;color:var(--green)">+R$ '+parseFloat(h.total).toFixed(2)+'</td>'
+        +'</tr>'
+      ).join("")+'</tbody></table></div>';
+  }
+
+  // Dica do dia
+  const dica = RENDA_DICAS[new Date().getDate() % RENDA_DICAS.length];
+  document.getElementById("renda-dica").innerHTML =
+    '<div style="background:linear-gradient(135deg,rgba(255,204,0,.06),rgba(0,170,255,.04));border:1px solid rgba(255,204,0,.2);padding:16px 20px;margin-top:10px;">'
+    +'<div style="font-family:monospace;font-size:8px;color:var(--yellow);letter-spacing:2px;margin-bottom:8px;">DICA DO DIA</div>'
+    +'<div style="font-family:monospace;font-size:10px;color:var(--sub);line-height:1.7;">'+dica+'</div>'
+    +'</div>';
 }
 
 // ─── ATLAS CHAT ───────────────────────────────────────────────
@@ -3907,6 +4194,33 @@ function renderJournalCard(operacao) {
 }
 
 </script>
+
+  <!-- RENDA -->
+  <div id="tab-renda" style="display:none;">
+    <div id="renda-resumo" style="margin-bottom:16px;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+      <button class="btn" onclick="indicarCompraRenda()" style="background:rgba(255,204,0,.15);border-color:var(--yellow);color:var(--yellow);">* QUAL COMPRAR ESTE MES?</button>
+      <button class="btn" onclick="addRendaPos()" style="background:rgba(0,170,255,.12);border-color:var(--blue);color:var(--blue);">+ ADICIONAR POSICAO</button>
+    </div>
+    <div id="renda-indicacao" style="margin-bottom:16px;"></div>
+    <div id="renda-tabela" style="margin-bottom:20px;"></div>
+    <div id="renda-historico-div" style="margin-bottom:20px;"></div>
+    <div id="renda-dica" style="margin-bottom:20px;"></div>
+    <!-- Modal adicionar -->
+    <div id="rendaFormDiv" style="display:none;background:var(--card);border:1px solid var(--border);padding:20px;margin-bottom:16px;">
+      <div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:14px;">ADICIONAR POSICAO DE RENDA</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px;">
+        <div class="form-field"><label>TICKER</label><input type="text" id="rTicker" placeholder="TAEE11"/></div>
+        <div class="form-field"><label>QUANTIDADE</label><input type="number" id="rQty" placeholder="100"/></div>
+        <div class="form-field"><label>PRECO MEDIO</label><input type="number" id="rPreco" placeholder="12.50" step="0.01"/></div>
+        <div class="form-field"><label>DATA COMPRA</label><input type="date" id="rData"/></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn" onclick="salvarRendaPos()" style="background:rgba(255,204,0,.15);border-color:var(--yellow);color:var(--yellow);">SALVAR</button>
+        <button onclick="document.getElementById('rendaFormDiv').style.display='none'" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px 16px;cursor:pointer;">CANCELAR</button>
+      </div>
+    </div>
+  </div>
 
 <!-- ATLAS CHAT -->
 <div id="chatBtn" onclick="toggleChat()" style="position:fixed;bottom:24px;right:24px;z-index:9990;width:52px;height:52px;background:linear-gradient(135deg,#1B3A6B,#2E5FA3);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.4);font-size:22px;" title="Chat ATLAS">💬</div>
