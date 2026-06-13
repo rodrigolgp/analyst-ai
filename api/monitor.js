@@ -10,27 +10,20 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Environment variables not configured" });
   }
 
-  // Horario de mercado Brasilia
   const agora = new Date();
   const horaBrasilia = new Date(agora.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
   const hora = horaBrasilia.getHours();
   const minutos = horaBrasilia.getMinutes();
   const diaSemana = horaBrasilia.getDay();
 
-  const fimDeSemana = diaSemana === 0 || diaSemana === 6;
-  const foraDoHorario = hora < 10 || hora >= 18;
-
-  if (fimDeSemana || foraDoHorario) {
-    return res.status(200).json({ ok: true, msg: "Fora do horario de mercado", hora, diaSemana });
+  if (diaSemana === 0 || diaSemana === 6 || hora < 10 || hora >= 18) {
+    return res.status(200).json({ ok: true, msg: "Fora do horario de mercado" });
   }
 
   async function redisGet(key) {
     const r = await fetch(`${REDIS_URL}/pipeline`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${REDIS_TOKEN}`,
-        "Content-Type": "application/json"
-      },
+      headers: { Authorization: `Bearer ${REDIS_TOKEN}`, "Content-Type": "application/json" },
       body: JSON.stringify([["GET", key]])
     });
     const d = await r.json();
@@ -51,7 +44,7 @@ export default async function handler(req, res) {
 
   async function fetchQuote(ticker) {
     try {
-      const isB3 = /^[A-Z]{4}[0-9]{1,2}$/.test(ticker) && !ticker.includes("-");
+      const isB3 = /^[A-Z]{4}[0-9]{1,2}$/.test(ticker);
       const sym = isB3 ? `${ticker}.SA` : ticker;
       const r = await fetch(
         `https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=1d&range=1d`,
@@ -71,35 +64,44 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Carrega carteira com chave correta
-    const portfolio = await redisGet("portfolio_v4");
+    // Chave correta — mesma usada pelo operacoes.js
+    const operacoes = await redisGet("operacoes_v1");
 
-    if (!portfolio.length) {
+    // Filtra apenas posicoes ABERTAS ou PARCIAIS (nao encerradas)
+    const carteira = operacoes.filter(op =>
+      op.status === "ABERTA" || op.status === "PARCIAL"
+    );
+
+    if (!carteira.length) {
       return res.status(200).json({ ok: true, msg: "Carteira vazia" });
     }
 
     const alertas = [];
     const resultados = [];
 
-    for (const p of portfolio) {
+    for (const p of carteira) {
       const quote = await fetchQuote(p.ticker);
       if (!quote) continue;
 
       const atual = quote.price;
-      const entradaNum = parseFloat(p.price) || 0;
-      const stopNum = p.stop ? parseFloat(String(p.stop).replace(/[R$US]/g,"").replace(",",".")) : null;
-      const alvoNum = p.target ? parseFloat(String(p.target).replace(/[R$US]/g,"").replace(",",".")) : null;
-      const varPct = entradaNum > 0 ? (((atual - entradaNum) / entradaNum) * 100).toFixed(2) : "0.00";
+      const entrada = parseFloat(p.preco_medio) || 0;
+      const stop = p.stop_loss ? parseFloat(p.stop_loss) : null;
+      const alvo = p.alvo ? parseFloat(p.alvo) : null;
+      const varEntrada = entrada > 0 ? (((atual - entrada) / entrada) * 100).toFixed(2) : "0.00";
       const varHoje = parseFloat(quote.change);
+      const distStop = stop ? (((atual - stop) / atual) * 100).toFixed(1) : null;
 
-      resultados.push({ ticker: p.ticker, atual, varPct, varHoje: quote.change });
+      resultados.push({ ticker: p.ticker, atual, varEntrada, varHoje: quote.change, distStop });
 
-      if (stopNum && atual <= stopNum) {
-        alertas.push(`🔴 *ATLAS WEALTH — STOP ATINGIDO*\n\nAtivo: *${p.ticker}*\nPreco atual: ${quote.currency}${atual.toFixed(2)}\nStop loss: ${p.stop}\nVariacao desde entrada: ${varPct}%\n\n⚠️ *VENDA IMEDIATAMENTE* para proteger seu capital.`);
-      } else if (alvoNum && atual >= alvoNum) {
-        alertas.push(`🟢 *ATLAS WEALTH — ALVO ATINGIDO*\n\nAtivo: *${p.ticker}*\nPreco atual: ${quote.currency}${atual.toFixed(2)}\nAlvo: ${p.target}\nLucro desde entrada: +${varPct}%\n\n✅ Considere realizar o lucro.`);
+      // Alertas por prioridade
+      if (stop && atual <= stop) {
+        alertas.push(`🔴 *STOP ATINGIDO — ${p.ticker}*\n\nPreco: ${quote.currency} ${atual.toFixed(2)}\nStop: ${quote.currency} ${stop.toFixed(2)}\nResultado: ${varEntrada}%\n\n⚠️ *VENDER AGORA*`);
+      } else if (alvo && atual >= alvo) {
+        alertas.push(`🟢 *ALVO ATINGIDO — ${p.ticker}*\n\nPreco: ${quote.currency} ${atual.toFixed(2)}\nAlvo: ${quote.currency} ${alvo.toFixed(2)}\nLucro: +${varEntrada}%\n\n✅ Considere realizar lucro`);
+      } else if (stop && distStop && parseFloat(distStop) <= 2) {
+        alertas.push(`🟡 *PROXIMO DO STOP — ${p.ticker}*\n\nPreco: ${quote.currency} ${atual.toFixed(2)}\nStop: ${quote.currency} ${stop.toFixed(2)}\nDistancia: ${distStop}%\n\n_Monitore de perto_`);
       } else if (varHoje <= -3) {
-        alertas.push(`🟡 *ATLAS WEALTH — ATENCAO*\n\nAtivo: *${p.ticker}*\nQueda de *${quote.change}%* hoje\nPreco atual: ${quote.currency}${atual.toFixed(2)}\nStop loss: ${p.stop || "nao definido"}\n\n_Monitore de perto_`);
+        alertas.push(`🟡 *QUEDA FORTE — ${p.ticker}*\n\nQueda de *${quote.change}%* hoje\nPreco: ${quote.currency} ${atual.toFixed(2)}\nStop: ${stop ? quote.currency+" "+stop.toFixed(2) : "nao definido"}`);
       }
     }
 
@@ -107,24 +109,24 @@ export default async function handler(req, res) {
       await sendTelegram(msg);
     }
 
-    // Resumo a cada hora cheia sem alertas
-    if (minutos < 30 && alertas.length === 0 && resultados.length > 0) {
+    // Resumo a cada hora cheia sem alertas urgentes
+    const alertasUrgentes = alertas.filter(a => a.includes("STOP ATINGIDO") || a.includes("ALVO ATINGIDO"));
+    if (minutos < 15 && alertasUrgentes.length === 0 && resultados.length > 0) {
       const resumo = resultados.map(r =>
-        `${parseFloat(r.varHoje) >= 0 ? "🟢" : "🔴"} *${r.ticker}*: hoje ${parseFloat(r.varHoje) >= 0 ? "+" : ""}${r.varHoje}% | desde entrada ${parseFloat(r.varPct) >= 0 ? "+" : ""}${r.varPct}%`
+        `${parseFloat(r.varHoje) >= 0 ? "🟢" : "🔴"} *${r.ticker}*: hoje ${parseFloat(r.varHoje) >= 0 ? "+" : ""}${r.varHoje}% | entrada ${parseFloat(r.varEntrada) >= 0 ? "+" : ""}${r.varEntrada}%${r.distStop ? " | stop dist "+r.distStop+"%" : ""}`
       ).join("\n");
 
-      await sendTelegram(`📊 *ATLAS WEALTH — RESUMO ${hora}h*\n\n${resumo}\n\n_Nenhum stop ou alvo atingido_`);
+      await sendTelegram(`📊 *ATLAS WEALTH — ${hora}h*\n\n${resumo}`);
     }
 
     return res.status(200).json({
       ok: true,
-      ativos_monitorados: portfolio.length,
+      carteira_monitorada: carteira.length,
       alertas_enviados: alertas.length,
       resultados,
-      hora: `${hora}:${minutos}`,
     });
 
   } catch(e) {
     return res.status(500).json({ error: e.message });
   }
-} 
+}
