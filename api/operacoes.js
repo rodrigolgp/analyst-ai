@@ -150,6 +150,25 @@ export default async function handler(req, res) {
       } catch(e) { return res.status(500).json({ error: e.message }); }
     }
 
+    // GET_RAW / SET_RAW — leitura e escrita de chaves genericas (renda, watchlist, etc)
+    if (acao === "GET") {
+      try {
+        const { key } = req.body;
+        if (!key) return res.status(400).json({ error: "key required" });
+        const val = await redis(`GET ${key}`);
+        const data = val ? JSON.parse(val) : [];
+        return res.status(200).json({ ok: true, data });
+      } catch(e) { return res.status(500).json({ error: e.message }); }
+    }
+    if (acao === "SET_RAW") {
+      try {
+        const { key, data } = req.body;
+        if (!key) return res.status(400).json({ error: "key required" });
+        await redis(`SET ${key} ${JSON.stringify(JSON.stringify(data))}`);
+        return res.status(200).json({ ok: true });
+      } catch(e) { return res.status(500).json({ error: e.message }); }
+    }
+
     // EDITAR — atualiza campos da operacao
     if (acao === "EDITAR") {
       try {
