@@ -150,13 +150,19 @@ export default async function handler(req, res) {
       } catch(e) { return res.status(500).json({ error: e.message }); }
     }
 
-    // GET_RAW / SET_RAW — leitura e escrita de chaves genericas (renda, watchlist, etc)
+    // GET / SET_RAW — leitura e escrita de chaves genericas (renda, watchlist, etc)
     if (acao === "GET") {
       try {
         const { key } = req.body;
         if (!key) return res.status(400).json({ error: "key required" });
-        const val = await redis(`GET ${key}`);
-        const data = val ? JSON.parse(val) : [];
+        const r = await fetch(`${REDIS_URL}/pipeline`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${REDIS_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify([["GET", key]])
+        });
+        const d = await r.json();
+        const result = d?.[0]?.result;
+        const data = result ? JSON.parse(result) : [];
         return res.status(200).json({ ok: true, data });
       } catch(e) { return res.status(500).json({ error: e.message }); }
     }
@@ -164,7 +170,11 @@ export default async function handler(req, res) {
       try {
         const { key, data } = req.body;
         if (!key) return res.status(400).json({ error: "key required" });
-        await redis(`SET ${key} ${JSON.stringify(JSON.stringify(data))}`);
+        await fetch(`${REDIS_URL}/pipeline`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${REDIS_TOKEN}`, "Content-Type": "application/json" },
+          body: JSON.stringify([["SET", key, JSON.stringify(data)]])
+        });
         return res.status(200).json({ ok: true });
       } catch(e) { return res.status(500).json({ error: e.message }); }
     }
