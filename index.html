@@ -1066,14 +1066,15 @@ setInterval(fetchBenchmark, 30 * 60 * 1000); // atualiza a cada 30 min
 
 // ─── TABS ─────────────────────────────────────────────────────
 function showTab(name) {
-  ["analisar","radar","guru","portfolio","historico","relatorio","mapa","config"].forEach(t => {
+  ["analisar","radar","guru","portfolio","historico","relatorio","mapa","config","renda"].forEach(t => {
     document.getElementById("tab-"+t).style.display = t===name ? "" : "none";
   });
   document.querySelectorAll(".tab").forEach((el,i) => {
-    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","relatorio","mapa","config"][i]===name);
+    el.classList.toggle("active", ["analisar","radar","guru","portfolio","historico","relatorio","mapa","renda"][i]===name);
   });
   if (name === "renda") {
-    loadRenda().then(() => renderRenda());
+    renderRenda(); // renderiza imediatamente com dados vazios
+    loadRenda().then(() => renderRenda()); // recarrega do Redis em background
   }
   if (name === "mapa") renderMapa();
   if (name === "historico") renderHistorico();
@@ -2474,12 +2475,12 @@ let rendaQuotes = {};
 
 async function loadRenda() {
   try {
-    const d = await apiOperacoes("GET", { key: RENDA_KEY });
-    rendaPosicoes = d?.data || [];
+    const d = await apiOperacoes("POST", { acao: "GET", key: RENDA_KEY });
+    rendaPosicoes = Array.isArray(d?.data) ? d.data : [];
   } catch(e) { rendaPosicoes = []; }
   try {
-    const d2 = await apiOperacoes("GET", { key: RENDA_HIST_KEY });
-    rendaHistorico = d2?.data || [];
+    const d2 = await apiOperacoes("POST", { acao: "GET", key: RENDA_HIST_KEY });
+    rendaHistorico = Array.isArray(d2?.data) ? d2.data : [];
   } catch(e) { rendaHistorico = []; }
 }
 
