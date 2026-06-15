@@ -4159,16 +4159,12 @@ function renderJournalCard(operacao) {
   <!-- RENDA -->
   <div id="tab-renda" style="display:none;">
     <div id="renda-resumo" style="margin-bottom:16px;"></div>
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
       <button class="btn" onclick="indicarCompraRenda()" style="background:rgba(255,204,0,.15);border-color:var(--yellow);color:var(--yellow);">* QUAL COMPRAR ESTE MES?</button>
       <button class="btn" onclick="addRendaPos()" style="background:rgba(0,170,255,.12);border-color:var(--blue);color:var(--blue);">+ ADICIONAR POSICAO</button>
     </div>
-    <div id="renda-indicacao" style="margin-bottom:16px;"></div>
-    <div id="renda-tabela" style="margin-bottom:20px;"></div>
-    <div id="renda-historico-div" style="margin-bottom:20px;"></div>
-    <div id="renda-dica" style="margin-bottom:20px;"></div>
-    <!-- Modal adicionar -->
-    <div id="rendaFormDiv" style="display:none;background:var(--card);border:1px solid var(--border);padding:20px;margin-bottom:16px;">
+    <!-- Formulario fixo — nao e sobrescrito pelo renderRenda -->
+    <div id="rendaFormDiv" style="display:none;background:var(--card);border:1px solid rgba(255,204,0,.3);padding:20px;margin-bottom:14px;">
       <div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:14px;">ADICIONAR POSICAO DE RENDA</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px;">
         <div class="form-field"><label>TICKER</label><input type="text" id="rTicker" placeholder="TAEE11"/></div>
@@ -4181,6 +4177,10 @@ function renderJournalCard(operacao) {
         <button onclick="document.getElementById('rendaFormDiv').style.display='none'" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px 16px;cursor:pointer;">CANCELAR</button>
       </div>
     </div>
+    <div id="renda-indicacao" style="margin-bottom:16px;"></div>
+    <div id="renda-tabela" style="margin-bottom:20px;"></div>
+    <div id="renda-historico-div" style="margin-bottom:20px;"></div>
+    <div id="renda-dica" style="margin-bottom:20px;"></div>
   </div>
 
 <!-- ATLAS CHAT -->
