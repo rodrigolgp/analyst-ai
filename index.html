@@ -1509,11 +1509,15 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
     const ind = indicadoresRadar[t];
     const rsi = ind?.indicadores?.rsi?.rsi_ponderado;
     const vol = ind?.indicadores?.volume?.status;
-    const rr = ind?.suporte_resistencia?.rr_natural;
     const conf = ind?.confluencia?.score;
     const sm = ind?.smart_money?.score;
     const stop = ind?.gestao_risco?.stop_sugerido;
     const alvo = ind?.gestao_risco?.alvo_sugerido;
+    const preco = q?.price || 0;
+    // Calcula R/R real: (alvo-preco)/(preco-stop)
+    const rrReal = (stop && alvo && preco)
+      ? ((parseFloat(alvo)-preco)/(preco-parseFloat(stop))).toFixed(2)
+      : ind?.suporte_resistencia?.rr_natural || "?";
     const macd = ind?.indicadores?.macd?.crossover !== "NENHUM"
       ? ind?.indicadores?.macd?.crossover
       : ind?.indicadores?.macd?.trend;
@@ -1525,7 +1529,7 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
       +",RSI="+(rsi||"?")
       +",MACD="+(macd||"?")
       +",VOL="+(vol||"?")
-      +",RR=1:"+(rr||"?")
+      +",RR=1:"+rrReal
       +",STOP="+(stop||"?")
       +",ALVO="+(alvo||"?")
       +(sm?",SM="+sm:"")
@@ -2085,15 +2089,14 @@ const RADAR_TICKERS = [
   "IRBR3", "WIZC3", "PSSA3", "BMGB4", "SMFT3", "CMIG4", "CPFE3", "EGIE3", "ENGI11", "TAEE11",
   "AURE3", "NEOE3", "RECV3", "UGPA3", "GGBR4", "USIM5", "CSNA3", "GOAU4", "CMIN3", "FESA4",
   "SLCE3", "SMTO3", "BEEF3", "AGRO3", "TTEN3", "JALL3", "CAML3", "MNPR3", "LREN3", "MGLU3",
-  "ASAI3", "VIVA3", "SBFG3", "ALPA4", "AMAR3", "TFCO4", "HAPV3", "RDOR3", "HYPE3", "FLRY3",
-  "QUAL3", "DASA3", "ODPV3", "PNVL3", "ONCO3", "TIMS3", "VIVT3", "RAIL3", "ECOR3", "POMO4",
-  "SIMH3", "CYRE3", "MRVE3", "EZTC3", "TEND3", "DIRR3", "EVEN3", "TRIS3", "JHSF3", "LAVV3",
-  "LWSA3", "FIQE3", "MLAS3", "CASH3", "RANI3", "MULT3", "ALUP11", "GMAT3", "MOVI3", "BLAU3",
-  "KNRI11", "HGLG11", "XPML11", "MXRF11", "VISC11", "IRDM11", "BTLG11", "KNCR11", "RBRF11", "HGRE11",
-  "HSML11", "BRCO11", "RBRR11", "RZTR11", "HGBS11", "VILG11", "GTWR11", "HBOR3", "MTRE3", "PLPL3",
-  "AZZA3", "GRND3", "CEAB3", "VAMO3", "TGMA3", "AMBP3", "CBAV3", "FRAS3", "RAPT4", "AESB3",
-  "MEGA3", "GEPA4", "PINE4", "PARD3", "MATD3", "TRXF11", "RBRY11", "DEVA11", "RECT11", "CSHG11",
-  "VGIP11", "HCTR11", "VCJR11", "URPR11", "TPFT11"
+  "ASAI3", "VIVA3", "ALPA4", "AMAR3", "TFCO4", "HAPV3", "RDOR3", "HYPE3", "FLRY3", "QUAL3",
+  "DASA3", "ODPV3", "PNVL3", "ONCO3", "TIMS3", "VIVT3", "RAIL3", "ECOR3", "SIMH3", "CYRE3",
+  "MRVE3", "EZTC3", "TEND3", "DIRR3", "EVEN3", "TRIS3", "JHSF3", "LAVV3", "LWSA3", "FIQE3",
+  "MLAS3", "CASH3", "RANI3", "MULT3", "ALUP11", "GMAT3", "MOVI3", "BLAU3", "KNRI11", "HGLG11",
+  "XPML11", "MXRF11", "VISC11", "IRDM11", "BTLG11", "KNCR11", "RBRF11", "HGRE11", "HSML11", "BRCO11",
+  "RBRR11", "RZTR11", "HGBS11", "VILG11", "GTWR11", "HBOR3", "MTRE3", "PLPL3", "AZZA3", "GRND3",
+  "CEAB3", "VAMO3", "TGMA3", "AMBP3", "CBAV3", "FRAS3", "RAPT4", "GEPA4", "PINE4", "MATD3",
+  "TRXF11", "RBRY11", "DEVA11", "RECT11", "VGIP11", "HCTR11", "VCJR11", "URPR11"
 ];
 
 const GURU_TICKERS = [
@@ -2430,28 +2433,11 @@ const RENDA_KEY = "renda_v1";
 const RENDA_HIST_KEY = "renda_historico_v1";
 
 const RENDA_TICKERS = [
-  // FIIs de papel
-  "MXRF11","KNCR11","IRDM11","RBRY11","DEVA11","HCTR11","VCJR11","URPR11",
-  // FIIs de tijolo
-  "KNRI11","HGLG11","XPML11","VISC11","HSML11","BRCO11","RECT11",
-  // FIIs logistica
-  "BTLG11","VILG11","TRXF11",
-  // FIIs hibridos
-  "RBRF11","CSHG11","RZTR11","TPFT11",
-  // Energia eletrica
-  "TAEE11","EGIE3","CMIG4","ENGI11","AURE3","CPFE3","TRPL4",
-  // Telecom
-  "VIVT3","TIMS3",
-  // Bancos
-  "BBAS3","ITUB4","BBDC4","SANB11","BRSR6",
-  // Saneamento
-  "SBSP3","CSMG3",
-  // Mineracao
-  "VALE3","CMIN3",
-  // Combustiveis
-  "VBBR3","CSAN3",
-  // Outros
-  "ABEV3","SULA11","PSSA3","VIVT3","KLBN11","SUZB3"
+  "MXRF11", "KNCR11", "IRDM11", "RBRY11", "DEVA11", "HCTR11", "VCJR11", "URPR11", "KNRI11", "HGLG11",
+  "XPML11", "VISC11", "HSML11", "BRCO11", "RECT11", "BTLG11", "VILG11", "TRXF11", "RBRF11", "RZTR11",
+  "TAEE11", "EGIE3", "CMIG4", "ENGI11", "AURE3", "CPFE3", "VIVT3", "TIMS3", "BBAS3", "ITUB4",
+  "BBDC4", "SANB11", "BRSR6", "SBSP3", "CSMG3", "VALE3", "CMIN3", "VBBR3", "CSAN3", "ABEV3",
+  "PSSA3", "KLBN11", "SUZB3"
 ];
 
 const RENDA_DICAS = [
@@ -3927,32 +3913,6 @@ async function rodarPrecalc() {
   btn.disabled = false;
   btn.textContent = "RECALCULAR INDICADORES AGORA";
 }
-
-// ─── GRAFICOS INTERATIVOS ──────────────────────────────────────
-let currentChartData = null;
-let currentChartTicker = null;
-let mainChart = null;
-let rsiChart = null;
-let macdChart = null;
-
-function destroyCharts() {
-  if (mainChart) { try { mainChart.remove(); } catch(e) {} mainChart = null; }
-  if (rsiChart) { try { rsiChart.remove(); } catch(e) {} rsiChart = null; }
-  if (macdChart) { try { macdChart.remove(); } catch(e) {} macdChart = null; }
-}
-
-
-function setChartPeriod(period) {
-  ["btn30","btn60","btn90","btn200"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.color = "var(--dim)";
-  });
-  const map = {30:"btn30",60:"btn60",90:"btn90",200:"btn200"};
-  const el = document.getElementById(map[period]);
-  if (el) el.style.color = "var(--cyan)";
-  if (currentChartData) renderCharts(currentChartData, period);
-}
-
 
 // ─── MAPA DE CALOR ────────────────────────────────────────────
 const MAPA_SETORES = {
