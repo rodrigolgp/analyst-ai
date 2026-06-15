@@ -717,6 +717,8 @@ function renderJournalCard(operacao) {
 
   <!-- CARTEIRA -->
   <div id="tab-portfolio" style="display:none;">
+    <!-- Patrimonio consolidado -->
+    <div id="patrimonioConsolidado" style="margin-bottom:12px;"></div>
     <!-- Benchmark card -->
     <div id="benchmarkCarteira" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;"></div>
     <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);margin-bottom:12px;">CADASTRAR POSICAO</div>
@@ -967,6 +969,55 @@ function calcTravas(ind, quote) {
   return { passou, aprovadas, total, travas };
 }
 // ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
+function renderPatrimonioConsolidado() {
+  const el = document.getElementById("patrimonioConsolidado");
+  if (!el) return;
+
+  // Carteira trade
+  const carteira = getCarteira();
+  const totalTradeInv = carteira.reduce((a,p) => a + p.quantidade_atual * p.preco_medio, 0);
+  const totalTradeAtual = carteira.reduce((a,p) => {
+    const q = portfolioQuotes[p.ticker];
+    return a + p.quantidade_atual * (q ? q.price : p.preco_medio);
+  }, 0);
+  const resTradeR = totalTradeAtual - totalTradeInv;
+  const resTradePct = totalTradeInv > 0 ? (resTradeR/totalTradeInv*100).toFixed(2) : "0.00";
+
+  // Carteira renda
+  const totalRendaInv = rendaPosicoes.reduce((a,p) => a + p.qty * p.preco_medio, 0);
+  const totalRendaAtual = rendaPosicoes.reduce((a,p) => {
+    const q = rendaQuotes[p.ticker];
+    return a + p.qty * (q ? q.price : p.preco_medio);
+  }, 0);
+  const resRendaR = totalRendaAtual - totalRendaInv;
+  const totalDividendos = rendaPosicoes.reduce((a,p) => a + (p.dividendos_recebidos||0), 0);
+
+  // Consolidado
+  const totalInv = totalTradeInv + totalRendaInv;
+  const totalAtual = totalTradeAtual + totalRendaAtual;
+  const resTotal = totalAtual - totalInv;
+  const resTotalPct = totalInv > 0 ? (resTotal/totalInv*100).toFixed(2) : "0.00";
+  const resC = resTotal >= 0 ? "var(--green)" : "var(--red)";
+
+  el.innerHTML = '<div style="background:linear-gradient(135deg,rgba(0,170,255,.06),rgba(0,255,136,.04));border:1px solid rgba(0,170,255,.2);padding:14px 18px;margin-bottom:4px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px;">PATRIMONIO CONSOLIDADO</div>'
+    +'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+    +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">TRADE</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--cyan)">R$ '+totalTradeAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div>'
+    +'<div style="font-family:monospace;font-size:9px;color:'+(resTradeR>=0?"var(--green)":"var(--red)")+'">'+(resTradeR>=0?"+":"")+resTradePct+'%</div></div>'
+    +'<div style="color:var(--border);font-size:20px;align-self:center;">|</div>'
+    +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">RENDA</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--yellow)">R$ '+totalRendaAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div>'
+    +(totalDividendos>0?'<div style="font-family:monospace;font-size:9px;color:var(--yellow)">+R$ '+totalDividendos.toFixed(2)+' div</div>':'<div style="font-family:monospace;font-size:9px;color:var(--dim)">sem dividendos</div>')
+    +'</div>'
+    +'<div style="color:var(--border);font-size:20px;align-self:center;">|</div>'
+    +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">TOTAL</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div>'
+    +'<div style="font-family:monospace;font-size:9px;color:'+resC+'">'+(resTotal>=0?"+":"")+resTotal.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+' ('+resTotalPct+'%)</div>'
+    +'</div>'
+    +'</div></div>';
+}
+
 // ─── BENCHMARK ────────────────────────────────────────────────
 async function updateBenchmarkCard() {
   const carteira = getCarteira();
@@ -1081,8 +1132,8 @@ function showTab(name) {
   if (name === "portfolio") {
     loadOperacoes().then(() => {
       renderPortfolio();
+      renderPatrimonioConsolidado();
       updateBenchmarkCard();
-      // Pre-preenche data de hoje no formulario
       const dateEl = document.getElementById("pDataEntrada");
       if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split("T")[0];
     });
@@ -2637,7 +2688,7 @@ async function renderRenda() {
     document.getElementById("renda-tabela").innerHTML =
       '<div style="font-family:monospace;font-size:10px;color:var(--dim);padding:20px;text-align:center;">Nenhuma posicao de renda cadastrada.<br>Clique em + ADICIONAR POSICAO ou use a indicacao mensal.</div>';
   } else {
-    const headers = ["TICKER","QTD","P.MEDIO","P.ATUAL","RESULT%","RESULT R$","DIVIDENDOS","DY ATUAL","ACOES"];
+    const headers = ["TICKER","DATA","QTD","P.MEDIO","TOTAL INV","P.ATUAL","RESULT%","RESULT R$","DIVIDENDOS","DY ATUAL","ACOES"];
     document.getElementById("renda-tabela").innerHTML =
       '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px">POSICOES DE RENDA</div>'
       +'<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'
@@ -2651,10 +2702,14 @@ async function renderRenda() {
         const dyAtual = p.dividendos_recebidos > 0
           ? ((p.dividendos_recebidos / (p.qty * p.preco_medio)) * 100).toFixed(1)+"%"
           : "--";
+        const totalInvPos = (p.qty * p.preco_medio);
+        const dataCompra = p.data_compra ? new Date(p.data_compra).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"2-digit"}) : "--";
         return '<tr>'
           +'<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700;color:var(--blue)">'+p.ticker+'</td>'
+          +'<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+dataCompra+'</td>'
           +'<td style="font-family:monospace">'+p.qty+'</td>'
           +'<td>R$ '+parseFloat(p.preco_medio).toFixed(2)+'</td>'
+          +'<td style="color:var(--cyan)">R$ '+totalInvPos.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</td>'
           +'<td style="color:var(--blue)">'+(q?'R$ '+atual.toFixed(2):'--')+'</td>'
           +'<td style="font-weight:700;color:'+rc+'">'+(parseFloat(res)>=0?"+":"")+res+'%</td>'
           +'<td style="font-weight:700;color:'+rc+'">'+(resR>=0?"+":"")+resR.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+'</td>'
