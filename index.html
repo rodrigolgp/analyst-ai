@@ -999,6 +999,21 @@ function renderPatrimonioConsolidado() {
   const resTotalPct = totalInv > 0 ? (resTotal/totalInv*100).toFixed(2) : "0.00";
   const resC = resTotal >= 0 ? "var(--green)" : "var(--red)";
 
+  // Resultado GLOBAL do trade (inclui posicoes encerradas + lucro ja realizado)
+  const todasOpsTrade = operacoes;
+  const investidoGlobalTrade = todasOpsTrade.reduce((a,p) => {
+    const qtdTotal = parseFloat(p.quantidade_total) || parseFloat(p.quantidade_atual) || 0;
+    return a + qtdTotal * (parseFloat(p.preco_medio) || 0);
+  }, 0);
+  const lucroRealizadoGlobalTrade = todasOpsTrade.reduce((a,p) => a + (parseFloat(p.lucro_total) || 0), 0);
+  const plGlobalTrade = lucroRealizadoGlobalTrade + resTradeR;
+
+  // Consolidado GLOBAL (trade global + renda atual)
+  const resGlobalTotal = plGlobalTrade + resRendaR;
+  const investidoGlobalTotal = investidoGlobalTrade + totalRendaInv;
+  const resGlobalTotalPct = investidoGlobalTotal > 0 ? (resGlobalTotal/investidoGlobalTotal*100).toFixed(2) : "0.00";
+  const resGlobalC = resGlobalTotal >= 0 ? "var(--green)" : "var(--red)";
+
   el.innerHTML = '<div style="background:linear-gradient(135deg,rgba(0,170,255,.06),rgba(0,255,136,.04));border:1px solid rgba(0,170,255,.2);padding:14px 18px;margin-bottom:4px;">'
     +'<div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px;">PATRIMONIO CONSOLIDADO</div>'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
@@ -1013,7 +1028,11 @@ function renderPatrimonioConsolidado() {
     +'<div style="color:var(--border);font-size:20px;align-self:center;">|</div>'
     +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">TOTAL</div>'
     +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div>'
-    +'<div style="font-family:monospace;font-size:9px;color:'+resC+'">'+(resTotal>=0?"+":"")+resTotal.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+' ('+resTotalPct+'%)</div>'
+    +'</div>'
+    +'<div style="color:var(--border);font-size:20px;align-self:center;">|</div>'
+    +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">RESULTADO GLOBAL</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+resGlobalC+'">'+(resGlobalTotal>=0?"+":"")+resGlobalTotal.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+'</div>'
+    +'<div style="font-family:monospace;font-size:9px;color:'+resGlobalC+'">'+(parseFloat(resGlobalTotalPct)>=0?"+":"")+resGlobalTotalPct+'%</div>'
     +'</div>'
     +'</div></div>';
 }
@@ -3496,7 +3515,8 @@ function renderPortfolio() {
     const plC = resultado >= 0 ? "var(--green)" : "var(--red)";
     const plB = resultado >= 0 ? "rgba(0,255,136,.3)" : "rgba(255,51,85,.3)";
 
-    el.innerHTML = '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">'+
+    el.innerHTML = '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:8px;">POSICAO</div>'+
+      '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;">'+
       '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">POSICOES</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">'+carteira.length+'</div></div>'+
       '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">INVESTIDO</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--cyan)">R$ '+totalInv.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
       (hasQ
