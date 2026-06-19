@@ -1027,7 +1027,7 @@ let ibovInicioAno = null;
 async function fetchIbovInicioTeste() {
   if (ibovInicioTeste !== null) return ibovInicioTeste;
   try {
-    const r = await fetch(`/api/historico-data?ticker=%5EBVSP&data=${DATA_INICIO_TESTE}`);
+    const r = await fetch(`/api/quote?ticker=%5EBVSP&data=${DATA_INICIO_TESTE}`);
     if (!r.ok) { ibovInicioTeste = null; return null; }
     const d = await r.json();
     ibovInicioTeste = d.price || null;
@@ -1039,7 +1039,7 @@ async function fetchIbovInicioAno() {
   if (ibovInicioAno !== null) return ibovInicioAno;
   try {
     const ano = new Date().getFullYear();
-    const r = await fetch(`/api/historico-data?ticker=%5EBVSP&data=${ano}-01-01`);
+    const r = await fetch(`/api/quote?ticker=%5EBVSP&data=${ano}-01-01`);
     if (!r.ok) { ibovInicioAno = null; return null; }
     const d = await r.json();
     ibovInicioAno = d.price || null;
