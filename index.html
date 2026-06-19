@@ -1019,6 +1019,24 @@ function renderPatrimonioConsolidado() {
 }
 
 // ─── BENCHMARK ────────────────────────────────────────────────
+// Data de inicio do teste — primeira operacao real
+const DATA_INICIO_TESTE = "2026-05-15";
+let ibovInicioTeste = null;
+
+async function fetchIbovInicioTeste() {
+  if (ibovInicioTeste !== null) return ibovInicioTeste;
+  try {
+    const isB3 = true;
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${Math.floor(new Date(DATA_INICIO_TESTE).getTime()/1000)}&period2=${Math.floor(new Date(DATA_INICIO_TESTE).getTime()/1000)+86400*5}&interval=1d`
+    );
+    const d = await r.json();
+    const closes = d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
+    ibovInicioTeste = closes ? closes.find(c => c != null) : null;
+  } catch(e) { ibovInicioTeste = null; }
+  return ibovInicioTeste;
+}
+
 async function updateBenchmarkCard() {
   // ─── RESULTADO GLOBAL (abertas + encerradas) — para cards do topo ───
   const todasOperacoes = operacoes; // todas, sem filtro de status
@@ -1078,10 +1096,21 @@ async function updateBenchmarkCard() {
   const ibovMes = parseFloat(benchmark.ibovespa.var_mes).toFixed(2);
   const ibovDia = parseFloat(benchmark.ibovespa.var_dia).toFixed(2);
   const cdiMes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
+
+  // Ibovespa desde a data de inicio do teste (global)
+  let ibovGlobalVar = null;
+  try {
+    const ibovAtualQ = await fetchQuote("%5EBVSP");
+    const ibovInicio = await fetchIbovInicioTeste();
+    if (ibovAtualQ && ibovInicio) {
+      ibovGlobalVar = (((ibovAtualQ.price - ibovInicio) / ibovInicio) * 100).toFixed(2);
+    }
+  } catch(e) {}
+
   const items = [
-    ["SUA CARTEIRA", (parseFloat(varGlobal)>=0?"+":"")+varGlobal+"%", parseFloat(varGlobal)>=0?"var(--green)":"var(--red)", (parseFloat(varDia)>=0?"+":"")+varDia+"% hoje"],
-    ["IBOVESPA", (parseFloat(ibovMes)>=0?"+":"")+ibovMes+"% mes", parseFloat(ibovMes)>=0?"var(--green)":"var(--red)", (parseFloat(ibovDia)>=0?"+":"")+ibovDia+"% hoje"],
-    ["CDI", "+"+cdiMes+"% mes", "var(--yellow)", "+"+parseFloat(benchmark.cdi.var_dia).toFixed(4)+"% hoje"]];
+    ["HOJE", (parseFloat(varGlobal>0||true?varDia:varDia)>=0?"+":"")+varDia+"%", parseFloat(varDia)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovDia)>=0?"+":"")+ibovDia+"%"],
+    ["MES", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%"],
+    ["GLOBAL (desde 15/05)", (parseFloat(varGlobal)>=0?"+":"")+varGlobal+"%", parseFloat(varGlobal)>=0?"var(--green)":"var(--red)", ibovGlobalVar!==null?"IBOV: "+(parseFloat(ibovGlobalVar)>=0?"+":"")+ibovGlobalVar+"%":"IBOV: --"]];
   benchEl.innerHTML = items.map(([k,v,c,sub])=>
     '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
     '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
