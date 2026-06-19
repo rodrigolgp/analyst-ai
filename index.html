@@ -1022,11 +1022,11 @@ function renderPatrimonioConsolidado() {
 // Data de inicio do teste — primeira operacao real
 const DATA_INICIO_TESTE = "2026-05-15";
 let ibovInicioTeste = null;
+let ibovInicioAno = null;
 
 async function fetchIbovInicioTeste() {
   if (ibovInicioTeste !== null) return ibovInicioTeste;
   try {
-    const isB3 = true;
     const r = await fetch(
       `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${Math.floor(new Date(DATA_INICIO_TESTE).getTime()/1000)}&period2=${Math.floor(new Date(DATA_INICIO_TESTE).getTime()/1000)+86400*5}&interval=1d`
     );
@@ -1035,6 +1035,21 @@ async function fetchIbovInicioTeste() {
     ibovInicioTeste = closes ? closes.find(c => c != null) : null;
   } catch(e) { ibovInicioTeste = null; }
   return ibovInicioTeste;
+}
+
+async function fetchIbovInicioAno() {
+  if (ibovInicioAno !== null) return ibovInicioAno;
+  try {
+    const ano = new Date().getFullYear();
+    const dataIni = `${ano}-01-01`;
+    const r = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${Math.floor(new Date(dataIni).getTime()/1000)}&period2=${Math.floor(new Date(dataIni).getTime()/1000)+86400*10}&interval=1d`
+    );
+    const d = await r.json();
+    const closes = d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
+    ibovInicioAno = closes ? closes.find(c => c != null) : null;
+  } catch(e) { ibovInicioAno = null; }
+  return ibovInicioAno;
 }
 
 async function updateBenchmarkCard() {
@@ -1097,25 +1112,33 @@ async function updateBenchmarkCard() {
   const ibovDia = parseFloat(benchmark.ibovespa.var_dia).toFixed(2);
   const cdiMes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
 
-  // Ibovespa desde a data de inicio do teste (global)
+  // Ibovespa desde inicio do teste (para "sua carteira global") e desde 01/01 (para comparacao anual)
   let ibovGlobalVar = null;
+  let ibovAnoVar = null;
   try {
     const ibovAtualQ = await fetchQuote("%5EBVSP");
     const ibovInicio = await fetchIbovInicioTeste();
+    const ibovJan1 = await fetchIbovInicioAno();
     if (ibovAtualQ && ibovInicio) {
       ibovGlobalVar = (((ibovAtualQ.price - ibovInicio) / ibovInicio) * 100).toFixed(2);
     }
+    if (ibovAtualQ && ibovJan1) {
+      ibovAnoVar = (((ibovAtualQ.price - ibovJan1) / ibovJan1) * 100).toFixed(2);
+    }
   } catch(e) {}
 
+  const subStyle = (v) => 'font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;margin-top:3px;color:'+(parseFloat(v)>=0?"var(--green)":"var(--red)")+';';
+
   const items = [
-    ["HOJE", (parseFloat(varGlobal>0||true?varDia:varDia)>=0?"+":"")+varDia+"%", parseFloat(varDia)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovDia)>=0?"+":"")+ibovDia+"%"],
-    ["MES", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%"],
-    ["GLOBAL (desde 15/05)", (parseFloat(varGlobal)>=0?"+":"")+varGlobal+"%", parseFloat(varGlobal)>=0?"var(--green)":"var(--red)", ibovGlobalVar!==null?"IBOV: "+(parseFloat(ibovGlobalVar)>=0?"+":"")+ibovGlobalVar+"%":"IBOV: --"]];
-  benchEl.innerHTML = items.map(([k,v,c,sub])=>
+    ["HOJE", (parseFloat(varDia)>=0?"+":"")+varDia+"%", parseFloat(varDia)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovDia)>=0?"+":"")+ibovDia+"%", ibovDia],
+    ["MES", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%", ibovMes],
+    ["ANUAL (minha desde 15/05)", (parseFloat(varGlobal)>=0?"+":"")+varGlobal+"%", parseFloat(varGlobal)>=0?"var(--green)":"var(--red)", ibovAnoVar!==null?"IBOV (no ano): "+(parseFloat(ibovAnoVar)>=0?"+":"")+ibovAnoVar+"%":"IBOV: --", ibovAnoVar],
+  ];
+  benchEl.innerHTML = items.map(([k,v,c,sub,ibovVal])=>
     '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
     '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
     '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
-    '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:2px;">'+sub+'</div>'+
+    '<div style="'+subStyle(ibovVal)+'">'+sub+'</div>'+
     '</div>'
   ).join("");
 }
