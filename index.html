@@ -1027,12 +1027,10 @@ let ibovInicioAno = null;
 async function fetchIbovInicioTeste() {
   if (ibovInicioTeste !== null) return ibovInicioTeste;
   try {
-    const r = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${Math.floor(new Date(DATA_INICIO_TESTE).getTime()/1000)}&period2=${Math.floor(new Date(DATA_INICIO_TESTE).getTime()/1000)+86400*5}&interval=1d`
-    );
+    const r = await fetch(`/api/historico-data?ticker=%5EBVSP&data=${DATA_INICIO_TESTE}`);
+    if (!r.ok) { ibovInicioTeste = null; return null; }
     const d = await r.json();
-    const closes = d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
-    ibovInicioTeste = closes ? closes.find(c => c != null) : null;
+    ibovInicioTeste = d.price || null;
   } catch(e) { ibovInicioTeste = null; }
   return ibovInicioTeste;
 }
@@ -1041,13 +1039,10 @@ async function fetchIbovInicioAno() {
   if (ibovInicioAno !== null) return ibovInicioAno;
   try {
     const ano = new Date().getFullYear();
-    const dataIni = `${ano}-01-01`;
-    const r = await fetch(
-      `https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?period1=${Math.floor(new Date(dataIni).getTime()/1000)}&period2=${Math.floor(new Date(dataIni).getTime()/1000)+86400*10}&interval=1d`
-    );
+    const r = await fetch(`/api/historico-data?ticker=%5EBVSP&data=${ano}-01-01`);
+    if (!r.ok) { ibovInicioAno = null; return null; }
     const d = await r.json();
-    const closes = d?.chart?.result?.[0]?.indicators?.quote?.[0]?.close;
-    ibovInicioAno = closes ? closes.find(c => c != null) : null;
+    ibovInicioAno = d.price || null;
   } catch(e) { ibovInicioAno = null; }
   return ibovInicioAno;
 }
@@ -1132,7 +1127,7 @@ async function updateBenchmarkCard() {
   const items = [
     ["HOJE", (parseFloat(varDia)>=0?"+":"")+varDia+"%", parseFloat(varDia)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovDia)>=0?"+":"")+ibovDia+"%", ibovDia],
     ["MES", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%", ibovMes],
-    ["ANUAL (minha desde 15/05)", (parseFloat(varGlobal)>=0?"+":"")+varGlobal+"%", parseFloat(varGlobal)>=0?"var(--green)":"var(--red)", ibovAnoVar!==null?"IBOV (no ano): "+(parseFloat(ibovAnoVar)>=0?"+":"")+ibovAnoVar+"%":"IBOV: --", ibovAnoVar],
+    ["ANUAL", (parseFloat(varGlobal)>=0?"+":"")+varGlobal+"%", parseFloat(varGlobal)>=0?"var(--green)":"var(--red)", ibovAnoVar!==null?"IBOV (no ano): "+(parseFloat(ibovAnoVar)>=0?"+":"")+ibovAnoVar+"%":"IBOV: --", ibovAnoVar],
   ];
   benchEl.innerHTML = items.map(([k,v,c,sub,ibovVal])=>
     '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
