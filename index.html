@@ -1020,23 +1020,39 @@ function renderPatrimonioConsolidado() {
 
 // ─── BENCHMARK ────────────────────────────────────────────────
 async function updateBenchmarkCard() {
+  // ─── RESULTADO GLOBAL (abertas + encerradas) — para cards do topo ───
+  const todasOperacoes = operacoes; // todas, sem filtro de status
+  const investidoGlobal = todasOperacoes.reduce((a,p) => {
+    const qtdTotal = parseFloat(p.quantidade_total) || parseFloat(p.quantidade_atual) || 0;
+    return a + qtdTotal * (parseFloat(p.preco_medio) || 0);
+  }, 0);
+  const lucroRealizadoGlobal = todasOperacoes.reduce((a,p) => a + (parseFloat(p.lucro_total) || 0), 0);
+  const valorAbertoGlobal = todasOperacoes.reduce((a,p) => {
+    if (p.status === "ENCERRADA") return a; // encerradas ja estao no lucro_total
+    const q = portfolioQuotes[p.ticker];
+    return a + (parseFloat(p.quantidade_atual)||0) * (q ? q.price : parseFloat(p.preco_medio)||0);
+  }, 0);
+  const investidoAbertoGlobal = todasOperacoes.reduce((a,p) => {
+    if (p.status === "ENCERRADA") return a;
+    return a + (parseFloat(p.quantidade_atual)||0) * (parseFloat(p.preco_medio)||0);
+  }, 0);
+  // PL Global = lucro ja realizado (todas as vendas, parciais e totais) + ganho/perda nao realizado das posicoes abertas
+  const plGlobal = (lucroRealizadoGlobal + (valorAbertoGlobal - investidoAbertoGlobal)).toFixed(2);
+  const varGlobal = investidoGlobal > 0 ? ((parseFloat(plGlobal) / investidoGlobal) * 100).toFixed(2) : "0.00";
+
+  // ─── Resultado das posicoes EM ANDAMENTO (como antes) ───
   const carteira = getCarteira();
-  // Custo original total (quantidade atual × preco medio)
   const totalInv = carteira.reduce((a,p)=>(a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0)),0);
-  // Valor atual das posicoes abertas
   const totalAtual = carteira.reduce((a,p)=>{const q=portfolioQuotes[p.ticker];return a+(parseFloat(p.quantidade_atual)||0)*(q?q.price:parseFloat(p.preco_medio)||0);},0);
-  // Lucro ja realizado em vendas parciais
   const lucroRealizado = carteira.reduce((a,p)=>a+(parseFloat(p.lucro_total)||0),0);
-  // PL total = ganho/perda atual + lucro ja realizado
   const cartPL = ((totalAtual - totalInv) + lucroRealizado).toFixed(2);
-  // Custo original considerando tudo que foi investido (incluindo parcelas vendidas)
   const custoOriginal = carteira.reduce((a,p)=>{
     const qtdTotal = (parseFloat(p.quantidade_total)||0);
     return a + qtdTotal * (parseFloat(p.preco_medio)||0);
   }, 0);
   const cartVar = custoOriginal > 0 ? ((parseFloat(cartPL) / custoOriginal) * 100).toFixed(2) : "0.00";
 
-  // Calcula resultado do dia (vs fechamento de ontem)
+  // Calcula resultado do dia (vs fechamento de ontem) — usa posicoes abertas (dia so existe para o que esta na carteira hoje)
   const totalOntem = getCarteira().reduce((a,p)=>{
     const q = portfolioQuotes[p.ticker];
     const prevClose = q && q.prevClose ? q.prevClose : (q ? q.price : parseFloat(p.preco_medio)||0);
@@ -1045,14 +1061,14 @@ async function updateBenchmarkCard() {
   const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
   const plDia = (totalAtual - totalOntem).toFixed(2);
 
-  // Atualiza barra de perfil
+  // Atualiza barra de perfil (header) — usa GLOBAL
   const barEl = document.getElementById("benchCarteiraBar");
-  if (barEl && totalInv > 0) {
-    const cTotal = parseFloat(cartVar) >= 0 ? "var(--green)" : "var(--red)";
+  if (barEl && investidoGlobal > 0) {
+    const cTotal = parseFloat(varGlobal) >= 0 ? "var(--green)" : "var(--red)";
     const cDia = parseFloat(varDia) >= 0 ? "var(--green)" : "var(--red)";
     barEl.innerHTML = '<div class="pf-key">MINHA CARTEIRA</div>'
       +'<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:'+cTotal+'">'+
-      (parseFloat(cartVar)>=0?"+":"")+cartVar+'% total</div>'
+      (parseFloat(varGlobal)>=0?"+":"")+varGlobal+'% global</div>'
       +'<div style="font-family:monospace;font-size:9px;color:'+cDia+'">'+
       (parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div>';
   }
@@ -1063,7 +1079,7 @@ async function updateBenchmarkCard() {
   const ibovDia = parseFloat(benchmark.ibovespa.var_dia).toFixed(2);
   const cdiMes = parseFloat(benchmark.cdi.var_mes).toFixed(2);
   const items = [
-    ["SUA CARTEIRA", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", (parseFloat(varDia)>=0?"+":"")+varDia+"% hoje"],
+    ["SUA CARTEIRA", (parseFloat(varGlobal)>=0?"+":"")+varGlobal+"%", parseFloat(varGlobal)>=0?"var(--green)":"var(--red)", (parseFloat(varDia)>=0?"+":"")+varDia+"% hoje"],
     ["IBOVESPA", (parseFloat(ibovMes)>=0?"+":"")+ibovMes+"% mes", parseFloat(ibovMes)>=0?"var(--green)":"var(--red)", (parseFloat(ibovDia)>=0?"+":"")+ibovDia+"% hoje"],
     ["CDI", "+"+cdiMes+"% mes", "var(--yellow)", "+"+parseFloat(benchmark.cdi.var_dia).toFixed(4)+"% hoje"]];
   benchEl.innerHTML = items.map(([k,v,c,sub])=>
