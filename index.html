@@ -1014,6 +1014,13 @@ function renderPatrimonioConsolidado() {
   const resGlobalTotalPct = investidoGlobalTotal > 0 ? (resGlobalTotal/investidoGlobalTotal*100).toFixed(2) : "0.00";
   const resGlobalC = resGlobalTotal >= 0 ? "var(--green)" : "var(--red)";
 
+  // Divisao Realizado vs Nao Realizado
+  // Realizado = lucro ja garantido (vendas de trade + nada de renda, pois renda so realiza com dividendos ja contados separado)
+  const totalRealizado = lucroRealizadoGlobalTrade;
+  const totalNaoRealizado = resTradeR + resRendaR; // ganho/perda das posicoes ainda abertas (trade + renda)
+  const realizadoC = totalRealizado >= 0 ? "var(--green)" : "var(--red)";
+  const naoRealizadoC = totalNaoRealizado >= 0 ? "var(--green)" : "var(--red)";
+
   el.innerHTML = '<div style="background:linear-gradient(135deg,rgba(0,170,255,.06),rgba(0,255,136,.04));border:1px solid rgba(0,170,255,.2);padding:14px 18px;margin-bottom:4px;">'
     +'<div style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px;">PATRIMONIO CONSOLIDADO</div>'
     +'<div style="display:flex;gap:16px;flex-wrap:wrap;">'
@@ -1034,7 +1041,15 @@ function renderPatrimonioConsolidado() {
     +'<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+resGlobalC+'">'+(resGlobalTotal>=0?"+":"")+resGlobalTotal.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+'</div>'
     +'<div style="font-family:monospace;font-size:9px;color:'+resGlobalC+'">'+(parseFloat(resGlobalTotalPct)>=0?"+":"")+resGlobalTotalPct+'%</div>'
     +'</div>'
-    +'</div></div>';
+    +'</div>'
+    +'<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);">'
+    +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">REALIZADO (garantido)</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+realizadoC+'">'+(totalRealizado>=0?"+":"")+totalRealizado.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+'</div></div>'
+    +'<div style="color:var(--border);font-size:18px;align-self:center;">|</div>'
+    +'<div><div style="font-family:monospace;font-size:8px;color:var(--dim)">NAO REALIZADO (pode mudar)</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+naoRealizadoC+'">'+(totalNaoRealizado>=0?"+":"")+totalNaoRealizado.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+'</div></div>'
+    +'</div>'
+    +'</div>';
 }
 
 // ─── BENCHMARK ────────────────────────────────────────────────
