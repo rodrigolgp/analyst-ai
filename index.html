@@ -3718,10 +3718,15 @@ function renderHistorico() {
   }
 
   if (enc.length) {
+    const encOrdenadas = [...enc].sort((a, b) => {
+      const dataA = a.saidas && a.saidas.length ? a.saidas[a.saidas.length-1].data : a.data_entrada || "";
+      const dataB = b.saidas && b.saidas.length ? b.saidas[b.saidas.length-1].data : b.data_entrada || "";
+      return new Date(dataB) - new Date(dataA);
+    });
     html += sec("OPERACOES ENCERRADAS")+
       '<div style="overflow-x:auto;"><table class="portfolio-table" style="min-width:900px;">'+
       '<thead><tr>'+["DATA","TICKER","ENTROU","SAIU","DIAS","RESULT%","RESULT R$","MOTIVO","ATLAS",""].map(h=>'<th>'+h+'</th>').join("")+'</tr></thead>'+
-      '<tbody>'+enc.map(op => {
+      '<tbody>'+encOrdenadas.map(op => {
         const res = parseFloat(op.resultado_pct||0);
         const rc = res>=0?"var(--green)":"var(--red)";
         const g = op.atlas_acertou===true?"SIM OK":op.atlas_acertou===false?"NAO X":"--";
