@@ -1230,6 +1230,9 @@ function showTab(name) {
   }
   if (name === "mapa") renderMapa();
   if (name === "historico") renderHistorico();
+  if (name === "relatorio") {
+    loadOperacoes().then(() => renderRelatorioTab());
+  }
   if (name === "portfolio") {
     loadOperacoes().then(() => {
       renderPortfolio();
