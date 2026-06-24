@@ -3801,9 +3801,10 @@ function renderRelatorioTab() {
   // Popula o select de meses com os meses que tem operacoes
   const sel = document.getElementById("relatorioMes");
   if (!sel) return;
+  const enc = getHistorico();
   const meses = {};
-  historico.forEach(h => {
-    const d = h.dataSaida || h.dataEntrada;
+  enc.forEach(o => {
+    const d = (o.saidas && o.saidas.length) ? o.saidas[o.saidas.length-1].data : null;
     if (!d) return;
     const [ano, mes] = d.split("-");
     const key = ano+"-"+mes;
@@ -3819,17 +3820,20 @@ function renderRelatorioTab() {
 }
 
 function buildRelatorioPrompt(mes, ops, capitalInicial) {
-  const enc = ops.filter(o=>o.status==="ENCERRADA");
-  const abertas = ops.filter(o=>o.status==="ABERTA");
-  const acertos = enc.filter(o=>o.guruAcertou===true).length;
-  const erros = enc.filter(o=>o.guruAcertou===false).length;
+  const enc = ops; // ja vem filtrado como ENCERRADA por getHistorico()
+  const acertos = enc.filter(o=>o.atlas_acertou===true).length;
+  const erros = enc.filter(o=>o.atlas_acertou===false).length;
   const taxaAcerto = enc.length > 0 ? ((acertos/enc.length)*100).toFixed(1) : 0;
-  const lucroTotal = enc.reduce((a,o)=>a+parseFloat(o.lucroReais||0),0);
+  const lucroTotal = enc.reduce((a,o)=>a+parseFloat(o.lucro_total||0),0);
   const retornoPct = capitalInicial > 0 ? ((lucroTotal/capitalInicial)*100).toFixed(2) : 0;
-  const melhor = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado)>parseFloat(a.resultado||"-999")?o:a,enc[0]) : null;
-  const pior = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado)<parseFloat(a.resultado||"999")?o:a,enc[0]) : null;
-  const detalhes = enc.map(o=>o.ticker+": entrada R$"+o.entrada+", saida R$"+o.saida+", resultado "+o.resultado+"%, lucro R$"+o.lucroReais+", motivo: "+o.motivo+", ATLAS acertou: "+o.guruAcertou).join(" | ");
-  const abertasInfo = abertas.length > 0 ? "POSICOES ABERTAS: "+abertas.map(o=>o.ticker).join(", ") : "";
+  const melhor = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado_pct)>parseFloat(a.resultado_pct||"-999")?o:a,enc[0]) : null;
+  const pior = enc.length ? enc.reduce((a,o)=>parseFloat(o.resultado_pct)<parseFloat(a.resultado_pct||"999")?o:a,enc[0]) : null;
+  const detalhes = enc.map(o=>{
+    const saida = o.saidas && o.saidas.length ? o.saidas[o.saidas.length-1] : null;
+    return o.ticker+": entrada R$"+o.preco_medio+", saida R$"+(saida?saida.preco:"?")+", resultado "+o.resultado_pct+"%, lucro R$"+o.lucro_total+", motivo: "+(saida?saida.motivo:"?")+", ATLAS acertou: "+o.atlas_acertou;
+  }).join(" | ");
+  const abertasAtuais = getCarteira();
+  const abertasInfo = abertasAtuais.length > 0 ? "POSICOES ABERTAS: "+abertasAtuais.map(o=>o.ticker).join(", ") : "";
   const p = [
     "Voce e ATLAS, gestor quantitativo do ATLAS WEALTH. Gere o relatorio mensal.",
     "MES: "+mes,
@@ -3837,8 +3841,8 @@ function buildRelatorioPrompt(mes, ops, capitalInicial) {
     "ACERTOS: "+acertos+" | ERROS: "+erros+" | TAXA: "+taxaAcerto+"%",
     "LUCRO/PREJUIZO: R$ "+lucroTotal.toFixed(2),
     "RETORNO: "+retornoPct+"% | META: +6% | META BATIDA: "+(parseFloat(retornoPct)>=6?"SIM":"NAO"),
-    melhor?"MELHOR: "+melhor.ticker+" +"+melhor.resultado+"%":"",
-    pior?"PIOR: "+pior.ticker+" "+pior.resultado+"%":"",
+    melhor?"MELHOR: "+melhor.ticker+" +"+melhor.resultado_pct+"%":"",
+    pior?"PIOR: "+pior.ticker+" "+pior.resultado_pct+"%":"",
     abertasInfo,
     "OPERACOES: "+detalhes,
     benchmark ? "CDI NO MES: +"+benchmark.cdi.var_mes+"% | IBOVESPA NO MES: "+(benchmark.ibovespa.var_mes>=0?"+":"")+benchmark.ibovespa.var_mes+"% | CDI NO ANO: +"+benchmark.cdi.var_ano+"% | IBOVESPA NO ANO: "+(benchmark.ibovespa.var_ano>=0?"+":"")+benchmark.ibovespa.var_ano+"%" : "",
@@ -3969,8 +3973,8 @@ async function gerarRelatorio() {
   const mesNome = new Date(ano, mes-1, 1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 
   // Filtra operacoes do mes
-  const opsDoMes = historico.filter(h=>{
-    const d = h.dataSaida || h.dataEntrada;
+  const opsDoMes = getHistorico().filter(o=>{
+    const d = (o.saidas && o.saidas.length) ? o.saidas[o.saidas.length-1].data : null;
     if (!d) return false;
     const [a,m] = d.split("-");
     return a===ano && m===mes;
