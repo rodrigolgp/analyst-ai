@@ -1182,12 +1182,24 @@ async function updateBenchmarkCard() {
   const hojeStr = new Date().toISOString().split("T")[0];
   let plVendasHoje = 0;
   let baseVendasHoje = 0;
+  const tickersVendaHoje = new Set();
+  operacoes.forEach(p => {
+    if (!p.saidas || !p.saidas.length) return;
+    if (p.saidas.some(s => s.data === hojeStr)) tickersVendaHoje.add(p.ticker);
+  });
+  // Busca cotacao de ativos vendidos hoje que nao estao mais na carteira aberta
+  for (const ticker of tickersVendaHoje) {
+    if (!portfolioQuotes[ticker]) {
+      const q = await fetchQuote(ticker);
+      if (q) portfolioQuotes[ticker] = q;
+    }
+  }
   operacoes.forEach(p => {
     if (!p.saidas || !p.saidas.length) return;
     p.saidas.forEach(saida => {
       if (saida.data !== hojeStr) return;
       const q = portfolioQuotes[p.ticker];
-      const prevClose = q && q.prevClose ? q.prevClose : parseFloat(p.preco_medio)||0;
+      const prevClose = q && q.prevClose ? q.prevClose : (q ? q.price : parseFloat(p.preco_medio)||0);
       const qtd = parseFloat(saida.qtd)||0;
       plVendasHoje += (parseFloat(saida.preco) - prevClose) * qtd;
       baseVendasHoje += prevClose * qtd;
