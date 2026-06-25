@@ -1171,14 +1171,33 @@ async function updateBenchmarkCard() {
   }, 0);
   const cartVar = custoOriginal > 0 ? ((parseFloat(cartPL) / custoOriginal) * 100).toFixed(2) : "0.00";
 
-  // Calcula resultado do dia (vs fechamento de ontem) — usa posicoes abertas (dia so existe para o que esta na carteira hoje)
+  // Calcula resultado do dia (vs fechamento de ontem) — posicoes abertas + vendas feitas hoje
   const totalOntem = getCarteira().reduce((a,p)=>{
     const q = portfolioQuotes[p.ticker];
     const prevClose = q && q.prevClose ? q.prevClose : (q ? q.price : parseFloat(p.preco_medio)||0);
     return a + (parseFloat(p.quantidade_atual)||0) * prevClose;
   }, 0);
-  const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
-  const plDia = (totalAtual - totalOntem).toFixed(2);
+
+  // Vendas feitas HOJE: contribuicao = (preco_venda - fechamento_ontem) x qtd_vendida
+  const hojeStr = new Date().toISOString().split("T")[0];
+  let plVendasHoje = 0;
+  let baseVendasHoje = 0;
+  operacoes.forEach(p => {
+    if (!p.saidas || !p.saidas.length) return;
+    p.saidas.forEach(saida => {
+      if (saida.data !== hojeStr) return;
+      const q = portfolioQuotes[p.ticker];
+      const prevClose = q && q.prevClose ? q.prevClose : parseFloat(p.preco_medio)||0;
+      const qtd = parseFloat(saida.qtd)||0;
+      plVendasHoje += (parseFloat(saida.preco) - prevClose) * qtd;
+      baseVendasHoje += prevClose * qtd;
+    });
+  });
+
+  const plDiaTotal = (totalAtual - totalOntem) + plVendasHoje;
+  const baseDiaTotal = totalOntem + baseVendasHoje;
+  const varDia = baseDiaTotal > 0 ? ((plDiaTotal / baseDiaTotal) * 100).toFixed(2) : "0.00";
+  const plDia = plDiaTotal.toFixed(2);
 
   // Atualiza barra de perfil (header) — usa GLOBAL
   const barEl = document.getElementById("benchCarteiraBar");
