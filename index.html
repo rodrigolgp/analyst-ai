@@ -717,6 +717,8 @@ function renderJournalCard(operacao) {
 
   <!-- CARTEIRA -->
   <div id="tab-portfolio" style="display:none;">
+    <!-- Alerta de compra mensal de renda -->
+    <div id="alertaCompraRenda" style="display:none;margin-bottom:14px;"></div>
     <!-- Patrimonio consolidado -->
     <div id="patrimonioConsolidado" style="margin-bottom:12px;"></div>
     <!-- Benchmark card -->
@@ -969,6 +971,57 @@ function calcTravas(ind, quote) {
   return { passou, aprovadas, total, travas };
 }
 // ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
+// ─── ALERTA MENSAL DE COMPRA DE RENDA ──────────────────────────
+const DIA_COMPRA_RENDA = 19;
+
+function calcularDataAlertaRenda(ano, mes) {
+  // mes: 0-11 (JS Date)
+  let data = new Date(ano, mes, DIA_COMPRA_RENDA);
+  const diaSemana = data.getDay();
+  if (diaSemana === 0) data.setDate(data.getDate() - 2); // domingo -> sexta
+  else if (diaSemana === 6) data.setDate(data.getDate() - 1); // sabado -> sexta
+  return data;
+}
+
+function checkAlertaCompraRenda() {
+  const el = document.getElementById("alertaCompraRenda");
+  if (!el) return;
+
+  const hoje = new Date();
+  const dataAlerta = calcularDataAlertaRenda(hoje.getFullYear(), hoje.getMonth());
+
+  // So mostra a partir da data de alerta (ja ajustada para dia util) até o fim do mes
+  if (hoje < dataAlerta) {
+    el.style.display = "none";
+    return;
+  }
+
+  // Verifica se ja comprou renda este mes (evita alerta repetido apos compra)
+  const mesAtual = hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0");
+  const jaComprouEsteMes = rendaPosicoes.some(p => {
+    if (!p.data_compra) return false;
+    const dataCompra = new Date(p.data_compra);
+    const mesCompra = dataCompra.getFullYear()+"-"+String(dataCompra.getMonth()+1).padStart(2,"0");
+    return mesCompra === mesAtual;
+  });
+
+  if (jaComprouEsteMes) {
+    el.style.display = "none";
+    return;
+  }
+
+  const dataFormatada = dataAlerta.toLocaleDateString("pt-BR",{day:"2-digit",month:"long"});
+  el.style.display = "block";
+  el.innerHTML = '<div style="background:linear-gradient(135deg,rgba(255,204,0,.1),rgba(255,204,0,.04));border:1px solid rgba(255,204,0,.35);padding:14px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">'
+    +'<div style="font-size:22px;">📅</div>'
+    +'<div style="flex:1;min-width:200px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--yellow);">HORA DA COMPRA MENSAL DE RENDA</div>'
+    +'<div style="font-family:monospace;font-size:10px;color:var(--sub);margin-top:2px;">Data de referencia: '+dataFormatada+' - voce ainda nao registrou compra de renda este mes.</div>'
+    +'</div>'
+    +'<button onclick="showTab(\'renda\')" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:rgba(255,204,0,.15);border:1px solid var(--yellow);color:var(--yellow);padding:8px 16px;cursor:pointer;white-space:nowrap;">IR PARA RENDA</button>'
+    +'</div>';
+}
+
 async function renderPatrimonioConsolidado() {
   const el = document.getElementById("patrimonioConsolidado");
   if (!el) return;
@@ -1238,6 +1291,7 @@ function showTab(name) {
       renderPortfolio();
       renderPatrimonioConsolidado();
       updateBenchmarkCard();
+      loadRenda().then(() => checkAlertaCompraRenda());
       const dateEl = document.getElementById("pDataEntrada");
       if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split("T")[0];
     });
