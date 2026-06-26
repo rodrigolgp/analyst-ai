@@ -1171,6 +1171,35 @@ async function updateBenchmarkCard() {
   }, 0);
   const cartVar = custoOriginal > 0 ? ((parseFloat(cartPL) / custoOriginal) * 100).toFixed(2) : "0.00";
 
+  // ─── Resultado REAL DO MES (desde dia 1 do mes corrente) ───
+  // Inclui: ganho/perda nao realizado das posicoes abertas + lucro de tudo vendido este mes
+  const agora2 = new Date();
+  const anoMesAtual = agora2.getFullYear()+"-"+String(agora2.getMonth()+1).padStart(2,"0");
+
+  // Parte 1: posicoes abertas hoje (ganho/perda nao realizado, independente de quando entraram)
+  const plNaoRealizadoMes = totalAtual - totalInv;
+  const investidoAbertasMes = totalInv;
+
+  // Parte 2: vendas (parciais ou totais) cuja DATA DE SAIDA caiu neste mes
+  let plVendidoMes = 0;
+  let investidoVendidoMes = 0;
+  operacoes.forEach(p => {
+    if (!p.saidas || !p.saidas.length) return;
+    p.saidas.forEach(s => {
+      if (!s.data) return;
+      const mesVenda = s.data.slice(0,7); // "YYYY-MM"
+      if (mesVenda !== anoMesAtual) return;
+      const qtd = parseFloat(s.qtd)||0;
+      const pm = parseFloat(p.preco_medio)||0;
+      plVendidoMes += (parseFloat(s.preco) - pm) * qtd;
+      investidoVendidoMes += pm * qtd;
+    });
+  });
+
+  const plMesTotal = plNaoRealizadoMes + plVendidoMes;
+  const investidoMesTotal = investidoAbertasMes + investidoVendidoMes;
+  const cartVarMes = investidoMesTotal > 0 ? ((plMesTotal / investidoMesTotal) * 100).toFixed(2) : "0.00";
+
   // Calcula resultado do dia (vs fechamento de ontem) — posicoes abertas + vendas feitas hoje
   const totalOntem = getCarteira().reduce((a,p)=>{
     const q = portfolioQuotes[p.ticker];
@@ -1248,7 +1277,7 @@ async function updateBenchmarkCard() {
 
   const items = [
     ["HOJE", (parseFloat(varDia)>=0?"+":"")+varDia+"%", parseFloat(varDia)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovDia)>=0?"+":"")+ibovDia+"%", ibovDia],
-    ["MES", (parseFloat(cartVar)>=0?"+":"")+cartVar+"%", parseFloat(cartVar)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%", ibovMes],
+    ["MES", (parseFloat(cartVarMes)>=0?"+":"")+cartVarMes+"%", parseFloat(cartVarMes)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%", ibovMes],
     ["ANUAL", (parseFloat(varGlobal)>=0?"+":"")+varGlobal+"%", parseFloat(varGlobal)>=0?"var(--green)":"var(--red)", ibovAnoVar!==null?"IBOV (no ano): "+(parseFloat(ibovAnoVar)>=0?"+":"")+ibovAnoVar+"%":"IBOV: --", ibovAnoVar],
   ];
   benchEl.innerHTML = items.map(([k,v,c,sub,ibovVal])=>
