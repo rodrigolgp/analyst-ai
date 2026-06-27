@@ -394,6 +394,10 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
 
 <script>
 
+let currentChartData = null;
+let mainChart = null;
+let rsiChart = null;
+let macdChart = null;
 
 function buildFundamentalsContext(fun) {
   if (!fun) return "";
