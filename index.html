@@ -98,6 +98,14 @@ function buildFundamentalsContext(fun) {
   if (fun.pl !== null) items.push("P/L="+fun.pl+(fun.pl<10?" (BARATO)":fun.pl<20?" (JUSTO)":fun.pl<30?" (CARO)":"(MUITO CARO)"));
   if (fun.pvp !== null) items.push("P/VP="+fun.pvp);
   if (fun.roe !== null) items.push("ROE="+fun.roe+"%"+(fun.roe>15?" (BOM)":fun.roe>8?" (OK)":" (FRACO)"));
+  if (fun.roa !== null && fun.roe !== null) {
+    const gap = fun.roe - fun.roa;
+    const qualidade = gap > 15 ? " (ALAVANCAGEM ALTA - ROE depende muito de divida)" :
+                       gap > 8 ? " (alavancagem moderada)" : " (retorno organico, pouca divida)";
+    items.push("ROA="+fun.roa+"%"+qualidade);
+  } else if (fun.roa !== null) {
+    items.push("ROA="+fun.roa+"%");
+  }
   if (fun.margem_liquida !== null) items.push("Mrg.Liq="+fun.margem_liquida+"%");
   if (fun.margem_ebitda !== null) items.push("Mrg.EBITDA="+fun.margem_ebitda+"%");
   if (fun.dy !== null) items.push("DY="+fun.dy+"%");
@@ -1675,6 +1683,29 @@ function buildMedoGananciaContext(mg) {
   return "\nINDICE MEDO/GANANCIA B3: "+mg.score+"/100 | "+mg.label+" | "+mg.sinalATLAS+"\n";
 }
 
+// ─── CAMBIO USD/BRL ───────────────────────────────────────────
+let usdCache = null;
+let usdCacheTime = 0;
+
+async function fetchUSD() {
+  if (usdCache && (Date.now() - usdCacheTime) < 300000) return usdCache;
+  try {
+    const q = await fetchQuote("USDBRL=X");
+    if (!q) throw new Error("sem dados");
+    usdCache = q; usdCacheTime = Date.now(); return q;
+  } catch(e) { return null; }
+}
+
+function buildUSDContext(usd) {
+  if (!usd) return "";
+  const v = parseFloat(usd.change||0);
+  const tendencia = v>0.5?"DOLAR EM ALTA":v<-0.5?"DOLAR EM QUEDA":"DOLAR ESTAVEL";
+  const impacto = v>0.5?"favorece exportadoras (VALE3,SUZB3,PRIO3,JBSS3) - pressiona importadoras":
+                  v<-0.5?"pressiona exportadoras - favorece importadoras e empresas com divida em dolar":
+                  "impacto cambial neutro no momento";
+  return "\nUSD/BRL: R$"+usd.price.toFixed(2)+" | "+(v>=0?"+":"")+usd.change+"% | "+tendencia+" | "+impacto+"\n";
+}
+
 // ─── HELPERS ──────────────────────────────────────────────────
 const sigCol = s => s&&s.includes("COMPRA") ? "var(--green)" : s==="VENDA" ? "var(--red)" : "var(--yellow)";
 const numCol = n => n>=75?"var(--green)":n>=60?"#88ff44":n>=40?"var(--yellow)":"var(--red)";
@@ -1776,7 +1807,9 @@ function buildAnalyzePrompt(ticker, quote, manualPrice, indicators, fundamentals
   const avisoH = foraDoPregao ? "\nFORA DO PREGAO: use dados historicos. NAO reprove volume zerado." : "";
   const indCtx = indicators ? buildIndicatorsContext(indicators) : "";
   const funCtx = fundamentals ? buildFundamentalsContext(fundamentals) : "";
-  return buildAtlasContext()+"\n\nMODO: ANALISE\nATIVO: "+ticker+"\n"+pi+avisoH+"\n\n"+indCtx+funCtx+"\n\nCAMPOS DO JSON  DEFINICOES CLARAS:\n- alvo_preco_15d: preco alvo para daqui a 15 dias\n- alvo_preco_30d: preco alvo para daqui a 30 dias\n- upside_15d: percentual de upside em 15 dias\n- upside_30d: percentual de upside em 30 dias\n- prev[].d: numero de dias | prev[].a: preco alvo naquele dia | prev[].u: upside% naquele dia\n\nRetorne APENAS JSON:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo_preco_15d\":\"\",\"alvo_preco_30d\":\"\",\"stop\":\"\",\"upside_15d\":\"\",\"upside_30d\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"dy\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"ok\":true,\"just\":\"\",\"res\":\"\"}";
+  const ibovCtxAnalise = ibovCache ? buildIbovContext(ibovCache) : "";
+  const usdCtxAnalise = usdCache ? buildUSDContext(usdCache) : "";
+  return buildAtlasContext()+ibovCtxAnalise+usdCtxAnalise+"\n\nMODO: ANALISE\nATIVO: "+ticker+"\n"+pi+avisoH+"\n\n"+indCtx+funCtx+"\n\nCAMPOS DO JSON  DEFINICOES CLARAS:\n- alvo_preco_15d: preco alvo para daqui a 15 dias\n- alvo_preco_30d: preco alvo para daqui a 30 dias\n- upside_15d: percentual de upside em 15 dias\n- upside_30d: percentual de upside em 30 dias\n- prev[].d: numero de dias | prev[].a: preco alvo naquele dia | prev[].u: upside% naquele dia\n\nRetorne APENAS JSON:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"alvo_preco_15d\":\"\",\"alvo_preco_30d\":\"\",\"stop\":\"\",\"upside_15d\":\"\",\"upside_30d\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"dy\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"ok\":true,\"just\":\"\",\"res\":\"\"}";
 }
 
 function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, resultadosTravas) {
@@ -1830,9 +1863,10 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
   }).join("\n");
 
   const ibovCtxRadar = ibovCache ? buildIbovContext(ibovCache) : "";
+  const usdCtxRadar = usdCache ? buildUSDContext(usdCache) : "";
   const mgCtxRadar = window._medoGanancia ? buildMedoGananciaContext(window._medoGanancia) : "";
 
-  return buildAtlasContext()+ibovCtxRadar+mgCtxRadar+`
+  return buildAtlasContext()+ibovCtxRadar+usdCtxRadar+mgCtxRadar+`
 
 MODO: RADAR DE OPORTUNIDADES - B3
 
@@ -1863,6 +1897,15 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru, travasGuru) {
   }, 0);
   const caixaDisponivel = Math.max(0, cap - capitalInvestido);
   const reserva = cap * 0.20;
+
+  // Contexto de correlacao/concentracao setorial - usado como TRAVA para novas entradas
+  const corrResult = calcCorrelacaoCarteira();
+  const corrCtx = (corrResult && corrResult.alertas.length)
+    ? "\nALERTA DE CONCENTRACAO/CORRELACAO NA CARTEIRA ATUAL:\n"
+      + corrResult.alertas.map(a => "- ["+a.nivel+"] "+a.msg).join("\n")
+      + "\nREGRA: NAO recomende novas entradas em setores ja com alerta RISCO/ATENCAO acima, "
+      + "a menos que seja para substituir uma posicao do mesmo setor que sera encerrada.\n"
+    : "";
 
   const hoje = new Date();
   const posicoes = temCarteira ? carteira.map(p => {
@@ -1917,7 +1960,8 @@ function buildGuruPrompt(quotes, cap, indicadoresGuru, travasGuru) {
     }).join("\n");
 
   const ibovCtxGuru = ibovCache ? buildIbovContext(ibovCache) : "";
-  return buildAtlasContext()+ibovCtxGuru+`
+  const usdCtxGuru = usdCache ? buildUSDContext(usdCache) : "";
+  return buildAtlasContext()+ibovCtxGuru+usdCtxGuru+corrCtx+`
 
 MODO: `+modo+`
 CAPITAL TOTAL: R$`+cap.toFixed(2)+`
@@ -2043,6 +2087,7 @@ async function analyze(tickerOverride) {
       fetchIndicators(ticker),
       fetchFundamentals(ticker)
     ]);
+    fetchIbov(); fetchUSD(); // atualiza cache em background, sem bloquear
     let quote = quoteRaw;
     if (mp) quote = { price:mp, change:quote&&quote.change||"0.00", high:quote&&quote.high||mp, low:quote&&quote.low||mp, volume:quote&&quote.volume||0, prevClose:quote&&quote.prevClose||mp, market:quote&&quote.market||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"B3":"NYSE/NASDAQ"), currency:quote&&quote.currency||(ticker.match(/^[A-Z]{4}[0-9]{1,2}$/)?"R$":"US$"), name:quote&&quote.name||ticker, source:"Manual" };
     const data = await callClaude(buildAnalyzePrompt(ticker, quote, mp, indicators, fundamentals));
@@ -2398,6 +2443,7 @@ async function runRadar() {
 
   // Busca IBOV em paralelo
   fetchIbov();
+  fetchUSD();
 
   // PASSO 1: Cotacoes em tempo real de todos os ativos
   const quotes = {};
@@ -4149,25 +4195,6 @@ async function fetchFundamentals(ticker) {
   } catch(e) { return null; }
 }
 
-function buildFundamentalsContext(fun) {
-  if (!fun) return "";
-  const items = [];
-  if (fun.pl !== null) items.push("P/L="+fun.pl+(fun.pl<10?" (BARATO)":fun.pl<20?" (JUSTO)":fun.pl<30?" (CARO)":"(MUITO CARO)"));
-  if (fun.pvp !== null) items.push("P/VP="+fun.pvp);
-  if (fun.roe !== null) items.push("ROE="+fun.roe+"%"+(fun.roe>15?" (BOM)":fun.roe>8?" (OK)":" (FRACO)"));
-  if (fun.margem_liquida !== null) items.push("Mrg.Liq="+fun.margem_liquida+"%");
-  if (fun.margem_ebitda !== null) items.push("Mrg.EBITDA="+fun.margem_ebitda+"%");
-  if (fun.dy !== null) items.push("DY="+fun.dy+"%");
-  if (fun.divida_pl !== null) items.push("Div/PL="+fun.divida_pl+(fun.divida_pl>2?" (ALTO)":fun.divida_pl>1?" (MODERADO)":" (BAIXO)"));
-  if (fun.crescimento_receita !== null) items.push("Cresc.Rec="+fun.crescimento_receita+"%");
-  if (fun.setor) items.push("Setor="+fun.setor);
-  if (!items.length) return "";
-  if (!items.length) return "";
-  return "\n--- DADOS FUNDAMENTALISTAS REAIS ("+fun.fonte+") ---\n"+items.join(" | ")+"\n";
-
-
-}
-
 // ─── PRECALC / CACHE ──────────────────────────────────────────
 async function verificarCachePrecalc() {
   try {
@@ -4332,61 +4359,6 @@ const CORRELACOES_SETOR = {
   "NVDA":["AMD","AAPL","MSFT"],"AMD":["NVDA","AAPL"],"AAPL":["NVDA","MSFT","GOOGL"],
   "JPM":["BAC","V","MA"],"BAC":["JPM","V"],"V":["JPM","BAC","MA"],"MA":["JPM","V"],
 };
-
-function calcCorrelacaoCarteira() {
-  const carteira = getCarteira();
-  if (carteira.length < 2) return null;
-
-  const alertas = [];
-  const setoresPresentes = {};
-
-  carteira.forEach(p => {
-    // Detecta setor pelo ticker
-    for (const [setor, tickers] of Object.entries(MAPA_SETORES || {})) {
-      if (tickers.includes(p.ticker)) {
-        if (!setoresPresentes[setor]) setoresPresentes[setor] = [];
-        setoresPresentes[setor].push(p.ticker);
-      }
-    }
-    // Verifica correlacoes diretas
-    const correlatos = CORRELACOES_SETOR[p.ticker] || [];
-    const correlNaCart = correlatos.filter(t => carteira.some(c => c.ticker === t));
-    if (correlNaCart.length > 0) {
-      alertas.push({
-        tipo: "CORRELACAO_ALTA",
-        msg: p.ticker+" e "+correlNaCart.join(", ")+" sao altamente correlacionados",
-        nivel: "ATENCAO"
-      });
-    }
-  });
-
-  // Alerta concentracao por setor
-  Object.entries(setoresPresentes).forEach(([setor, tickers]) => {
-    if (tickers.length >= 2) {
-      const pct = (tickers.length / carteira.length * 100).toFixed(0);
-      alertas.push({
-        tipo: "CONCENTRACAO_SETOR",
-        msg: pct+"% da carteira no setor "+setor+" ("+tickers.join(", ")+")",
-        nivel: tickers.length >= 3 ? "RISCO" : "ATENCAO"
-      });
-    }
-  });
-
-  return { alertas, setoresPresentes };
-}
-
-function renderCorrelacaoAlert() {
-  const result = calcCorrelacaoCarteira();
-  if (!result || !result.alertas.length) return "";
-  return '<div style="background:rgba(255,204,0,.04);border:1px solid rgba(255,204,0,.2);padding:14px 18px;margin-bottom:12px;">'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:10px;">ANALISE DE CORRELACAO E RISCO</div>'+
-    result.alertas.map(a => {
-      const c = a.nivel === "RISCO" ? "var(--red)" : "var(--yellow)";
-      return '<div style="display:flex;gap:8px;margin-bottom:6px;font-size:11px;">'+
-        '<span style="color:'+c+';font-weight:700;">!'+a.tipo.replace(/_/g," ")+'</span>'+
-        '<span style="color:var(--sub);">'+a.msg+'</span></div>';
-    }).join("")+'</div>';
-}
 
 // ─── ATLAS JOURNAL ────────────────────────────────────────────
 async function gerarJournal(operacao) {
