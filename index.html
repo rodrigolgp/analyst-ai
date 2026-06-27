@@ -754,8 +754,13 @@ function calcTravas(ind, quote, forcaRelativa) {
   const criticasFalhas = criticas.filter(k => !travas[k]);
   const secundariasAprovadas = Object.keys(secundarias).filter(k => secundarias[k]).length;
 
-  // Regra nova: precisa passar em TODAS as criticas + pelo menos 2 das 4 secundarias
-  const passouCriticas = criticasFalhas.length === 0;
+  // Regra calibrada: RR e Volume sao SEMPRE obrigatorios (protecao de capital).
+  // Das outras 3 criticas (stop_viavel, tendencia, upside), permite 1 falha.
+  // Isso evita rigor multiplicativo (exigir 5 criticas simultaneas e quase impossivel).
+  const rrEVolumeOk = travas.rr && travas.volume;
+  const outrasCriticas = ["stop_viavel","tendencia","upside"];
+  const outrasFalhas = outrasCriticas.filter(k => !travas[k]);
+  const passouCriticas = rrEVolumeOk && outrasFalhas.length <= 1;
   const passouSecundarias = secundariasAprovadas >= 2;
   const passou = passouCriticas && passouSecundarias;
 
