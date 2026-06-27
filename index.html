@@ -2088,10 +2088,11 @@ function renderResult(d, quote, indicators) {
     +(d.variacao_hoje?'<div style="margin-top:6px;font-family:monospace;font-size:9px;color:'+(String(d.variacao_hoje).startsWith("-")?"var(--red)":"var(--green)")+'">HOJE: '+d.variacao_hoje+'</div>':"")
     +'</div>'
     +'<div style="background:var(--card);border:1px solid var(--hi);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:18px;">'
-    +'<div style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:2px">SCORE</div>'
-    +'<div style="font-family:Rajdhani,sans-serif;font-size:52px;font-weight:700;color:'+(d.score>=75?"var(--green)":d.score>=60?"#88ff44":d.score>=40?"var(--yellow)":"var(--red)")+';line-height:1">'+(d.score||0)+'</div>'
+    +'<div style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:2px">SCORE TECNICO</div>'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:52px;font-weight:700;color:'+(d.ok===false?"var(--dim)":(d.score>=75?"var(--green)":d.score>=60?"#88ff44":d.score>=40?"var(--yellow)":"var(--red)"))+';line-height:1">'+(d.score||0)+'</div>'
     +'<div style="font-family:monospace;font-size:9px;color:var(--sub)">/100</div>'
     +'<div style="font-family:monospace;font-size:8px;color:var(--dim);text-align:center;margin-top:4px">FORCA '+(d.forca||0)+'/10 | '+(d.confianca||0)+'% CONF.</div>'
+    +(d.ok===false?'<div style="font-family:monospace;font-size:8px;color:var(--red);text-align:center;margin-top:6px;line-height:1.4;">⚠ forca tecnica alta nao garante entrada segura agora</div>':"")
     +'</div>'
     +'<div style="background:var(--card);border:1px solid var(--hi);padding:18px;">'
     +kv("PRECO REAL",d.preco,"var(--blue)")
