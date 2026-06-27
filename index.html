@@ -704,49 +704,92 @@ Object.defineProperty(window, "historico", { get: () => getHistorico() });
 })();
 
 // ─── TRAVAS MATEMATICAS ───────────────────────────────────────
-function calcTravas(ind, quote) {
-  if (!ind) return { passou: false, aprovadas: 0, total: 7, travas: {} };
+function calcTravas(ind, quote, forcaRelativa) {
+  if (!ind) return { passou: false, aprovadas: 0, total: 7, travas: {}, criticasFalhas: [] };
 
   const i = ind.indicadores;
   const travas = {};
 
-  // TRAVA 1: RSI entre 25-75 (zona extrema mesmo)
-  const rsi = i.rsi?.rsi_ponderado || 50;
-  travas.rsi = rsi >= 25 && rsi <= 75;
+  // ─── TRAVAS CRITICAS (todas precisam passar) ───
+  // CRITICA 1: R/R real >= 1:2 (calculado por ATR, nao mais pelo rr_natural fraco)
+  const stopSug = ind.gestao_risco?.stop_sugerido;
+  const alvoSug = ind.gestao_risco?.alvo_sugerido;
+  const precoAtual = quote?.price || 0;
+  const rrReal = (stopSug && alvoSug && precoAtual && precoAtual > stopSug)
+    ? (alvoSug - precoAtual) / (precoAtual - stopSug)
+    : (ind.suporte_resistencia?.rr_natural || 0);
+  travas.rr = rrReal >= 1.5;
 
-  // TRAVA 2: Volume - usa ratio historico como principal (cotacao ao vivo pode atrasar)
+  // CRITICA 2: Volume/liquidez
   const volRatio = i.volume?.ratio || 0;
   const volDia = quote?.volume || 0;
   const volMedia = i.volume?.media20 || 0;
   if (volDia > 0 && volMedia > 0) {
-    // Tem volume do dia: aceita >= 30% da media (mercado pode estar lento)
     travas.volume = (volDia / volMedia) >= 0.3;
   } else {
-    // Sem volume do dia: usa historico (ratio dos ultimos 20 dias)
     travas.volume = volRatio >= 0.5;
   }
 
-  // TRAVA 3: R/R natural >= 1:1.2 (mais realista)
-  travas.rr = (ind.suporte_resistencia?.rr_natural || 0) >= 1.2;
+  // CRITICA 3: Stop tecnicamente viavel (nao pode exigir perda > 6% para nao ficar apertado/largo demais)
+  const distStopPct = (stopSug && precoAtual) ? ((precoAtual - stopSug) / precoAtual) * 100 : null;
+  travas.stop_viavel = distStopPct === null ? true : (distStopPct > 0.5 && distStopPct <= 6);
 
-  // TRAVA 4: Tendencia nao fortemente baixista
+  // CRITICA 4: Tendencia nao fortemente contraria
   travas.tendencia = ind.tendencia !== "BAIXA_FORTE";
 
-  // TRAVA 5: MACD sem cruzamento baixista recente
-  travas.macd = i.macd?.crossover !== "CRUZAMENTO_BAIXA";
+  // CRITICA 5: Upside real até resistencia, em camadas
+  const distResist = ind.suporte_resistencia?.distResist || 0;
+  travas.upside = distResist >= 3; // volta para 3%, menos restritivo
 
-  // TRAVA 6: Bollinger nao sobrecomprado
-  travas.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
+  // ─── TRAVAS SECUNDARIAS (precisa de pelo menos 2 de 4) ───
+  const secundarias = {};
+  secundarias.rsi = (i.rsi?.rsi_ponderado || 50) >= 25 && (i.rsi?.rsi_ponderado || 50) <= 75;
+  secundarias.macd = i.macd?.crossover !== "CRUZAMENTO_BAIXA";
+  secundarias.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
+  secundarias.volume_forte = volMedia > 0 && volDia > 0 ? (volDia/volMedia) >= 1.2 : volRatio >= 1.0;
 
-  // TRAVA 7: Upside para resistencia >= 3% (mais realista para B3)
-  travas.upside = (ind.suporte_resistencia?.distResist || 0) >= 3;
+  Object.assign(travas, secundarias);
+
+  const criticas = ["rr","volume","stop_viavel","tendencia","upside"];
+  const criticasFalhas = criticas.filter(k => !travas[k]);
+  const secundariasAprovadas = Object.keys(secundarias).filter(k => secundarias[k]).length;
+
+  // Regra nova: precisa passar em TODAS as criticas + pelo menos 2 das 4 secundarias
+  const passouCriticas = criticasFalhas.length === 0;
+  const passouSecundarias = secundariasAprovadas >= 2;
+  const passou = passouCriticas && passouSecundarias;
 
   const aprovadas = Object.values(travas).filter(Boolean).length;
   const total = Object.keys(travas).length;
-  // Precisa passar em 4 de 7 (antes era 5)
-  const passou = aprovadas >= 4;
 
-  return { passou, aprovadas, total, travas };
+  // Penalidade adicional por resistencia em camadas (para classificacao de confianca, nao para aprovar/reprovar)
+  const camadaResistencia = distResist < 3 ? "REJEITA" : distResist < 4 ? "REDUZIDA" : distResist >= 6 ? "FAVORAVEL" : "OK";
+
+  return {
+    passou, aprovadas, total, travas, criticasFalhas, secundariasAprovadas,
+    camadaResistencia, rrReal: rrReal.toFixed(2), forcaRelativa
+  };
+}
+
+// ─── FORCA RELATIVA VS IBOVESPA ────────────────────────────────
+function calcForcaRelativa(ind, ibovHistRecente) {
+  // Compara variacao do ativo nos ultimos 5 dias vs variacao do Ibov no mesmo periodo
+  const hist = ind?.historico_recente || [];
+  if (hist.length < 6 || !ibovHistRecente || ibovHistRecente.length < 6) return null;
+
+  const precoAtivoAtras = hist[hist.length-6]?.close;
+  const precoAtivoHoje = hist[hist.length-1]?.close;
+  const precoIbovAtras = ibovHistRecente[ibovHistRecente.length-6]?.close;
+  const precoIbovHoje = ibovHistRecente[ibovHistRecente.length-1]?.close;
+
+  if (!precoAtivoAtras || !precoAtivoHoje || !precoIbovAtras || !precoIbovHoje) return null;
+
+  const varAtivo5d = ((precoAtivoHoje - precoAtivoAtras) / precoAtivoAtras) * 100;
+  const varIbov5d = ((precoIbovHoje - precoIbovAtras) / precoIbovAtras) * 100;
+  const diff5d = varAtivo5d - varIbov5d;
+  const status = diff5d > 2 ? "FORTE_VS_IBOV" : diff5d < -2 ? "FRACO_VS_IBOV" : "ALINHADO_IBOV";
+
+  return { varAtivo5d: varAtivo5d.toFixed(2), varIbov5d: varIbov5d.toFixed(2), diff5d: diff5d.toFixed(2), status };
 }
 // ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
 // ─── ALERTA MENSAL DE COMPRA DE RENDA ──────────────────────────
@@ -1604,6 +1647,7 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
       ? ind?.indicadores?.macd?.crossover
       : ind?.indicadores?.macd?.trend;
     const candle = ind?.candle_pattern?.pattern;
+    const fr = tr?.forcaRelativa;
     return t
       +"(R$"+(q?.price||"?")
       +","+(q?.change||"0")+"% hoje"
@@ -1616,6 +1660,7 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
       +",ALVO="+(alvo||"?")
       +(sm?",SM="+sm:"")
       +(candle&&candle!=="NENHUM"?",CANDLE="+candle:"")
+      +(fr?",FORCA_REL="+fr.status+"("+fr.diff5d+"pp)":"")
       +",travas="+(tr?tr.aprovadas+"/"+tr.total:"?")
       +(tr&&!tr.passou?",FALHOU="+Object.entries(tr.travas||{}).filter(([k,v])=>!v).map(([k])=>k).join("+"):"")
       +")";
@@ -2252,6 +2297,13 @@ async function runRadar() {
   }
   console.log(`Indicadores: ${Object.keys(indicadoresRadar).length}/${tickersComCotacao.length}`);
 
+  // Busca historico do Ibovespa para calcular forca relativa
+  let ibovHistRecente = null;
+  try {
+    const ibovInd = await fetchIndicators("%5EBVSP");
+    ibovHistRecente = ibovInd?.historico_recente || null;
+  } catch(e) {}
+
   // PASSO 3: Travas matematicas em TODOS os ativos com indicadores
   document.getElementById("stepsR").innerHTML = steps(STEPS_R, 3);
   const agora = new Date();
@@ -2264,7 +2316,8 @@ async function runRadar() {
   Object.keys(indicadoresRadar).forEach(t => {
     const ind = indicadoresRadar[t];
     const q = quotes[t];
-    const trava = calcTravas(ind, foraDoPregao ? null : q);
+    const forcaRel = ibovHistRecente ? calcForcaRelativa(ind, ibovHistRecente) : null;
+    const trava = calcTravas(ind, foraDoPregao ? null : q, forcaRel);
     resultadosTravas[t] = trava;
     const score = ind?.confluencia?.score || 0;
 
