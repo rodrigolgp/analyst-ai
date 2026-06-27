@@ -82,499 +82,7 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
   .tab{padding:8px 10px;font-size:9px;letter-spacing:1px;}
 }
 </style>
-<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js">
-// ─── FUNDAMENTALISTA ──────────────────────────────────────────
-async function fetchFundamentals(ticker) {
-  try {
-    const r = await fetch("/api/fundamentus?ticker="+ticker);
-    if (!r.ok) return null;
-    return await r.json();
-  } catch(e) { return null; }
-}
-
-function buildFundamentalsContext(fun) {
-  if (!fun) return "";
-  const items = [];
-  if (fun.pl !== null) items.push("P/L="+fun.pl+(fun.pl<10?" (BARATO)":fun.pl<20?" (JUSTO)":fun.pl<30?" (CARO)":"(MUITO CARO)"));
-  if (fun.pvp !== null) items.push("P/VP="+fun.pvp);
-  if (fun.roe !== null) items.push("ROE="+fun.roe+"%"+(fun.roe>15?" (BOM)":fun.roe>8?" (OK)":" (FRACO)"));
-  if (fun.roa !== null && fun.roe !== null) {
-    const gap = fun.roe - fun.roa;
-    const qualidade = gap > 15 ? " (ALAVANCAGEM ALTA - ROE depende muito de divida)" :
-                       gap > 8 ? " (alavancagem moderada)" : " (retorno organico, pouca divida)";
-    items.push("ROA="+fun.roa+"%"+qualidade);
-  } else if (fun.roa !== null) {
-    items.push("ROA="+fun.roa+"%");
-  }
-  if (fun.margem_liquida !== null) items.push("Mrg.Liq="+fun.margem_liquida+"%");
-  if (fun.margem_ebitda !== null) items.push("Mrg.EBITDA="+fun.margem_ebitda+"%");
-  if (fun.dy !== null) items.push("DY="+fun.dy+"%");
-  if (fun.divida_pl !== null) items.push("Div/PL="+fun.divida_pl+(fun.divida_pl>2?" (ALTO)":fun.divida_pl>1?" (MODERADO)":" (BAIXO)"));
-  if (fun.crescimento_receita !== null) items.push("Cresc.Rec="+fun.crescimento_receita+"%");
-  if (fun.setor) items.push("Setor="+fun.setor);
-  if (!items.length) return "";
-  return "\n--- DADOS FUNDAMENTALISTAS REAIS ("+fun.fonte+") ---\n"+items.join(" | ")+"\n";
-}
-
-// ─── PRECALC / CACHE ──────────────────────────────────────────
-async function verificarCachePrecalc() {
-  try {
-    const r = await fetch("/api/indicators?ticker=PETR4");
-    if (r.ok) {
-      const d = await r.json();
-      const el = document.getElementById("precalcStatus");
-      if (!el) return;
-      if (d._from_cache) {
-        const cached_at = d.cached_at ? new Date(d.cached_at).toLocaleString("pt-BR") : "desconhecido";
-        el.innerHTML = '<span style="color:var(--green)">Cache ATIVO</span> - Calculado em: '+cached_at;
-      } else {
-        el.innerHTML = '<span style="color:var(--yellow)">Cache INATIVO</span> - Calculando ao vivo (mais lento)';
-      }
-    }
-  } catch(e) {}
-}
-
-async function rodarPrecalc() {
-  const btn = document.getElementById("btnPrecalc");
-  const status = document.getElementById("precalcStatus");
-  btn.disabled = true;
-  btn.textContent = "Calculando... (pode demorar 2-3 min)";
-  status.innerHTML = '<span style="color:var(--yellow)">Calculando indicadores de todos os ativos...</span>';
-  try {
-    const r = await fetch("/api/precalc");
-    if (r.ok) {
-      const d = await r.json();
-      status.innerHTML = '<span style="color:var(--green)">Concluido!</span> '+d.message;
-    } else {
-      status.innerHTML = '<span style="color:var(--red)">Erro no precalc</span>';
-    }
-  } catch(e) {
-    status.innerHTML = '<span style="color:var(--red)">Erro: '+e.message+'</span>';
-  }
-  btn.disabled = false;
-  btn.textContent = "RECALCULAR INDICADORES AGORA";
-}
-
-// ─── GRAFICOS INTERATIVOS ──────────────────────────────────────
-let currentChartData = null;
-let currentChartTicker = null;
-let mainChart = null;
-let rsiChart = null;
-let macdChart = null;
-
-function destroyCharts() {
-  if (mainChart) { try { mainChart.remove(); } catch(e) {} mainChart = null; }
-  if (rsiChart) { try { rsiChart.remove(); } catch(e) {} rsiChart = null; }
-  if (macdChart) { try { macdChart.remove(); } catch(e) {} macdChart = null; }
-}
-
-function renderCharts(indicatorData, period) {
-  if (!indicatorData || !indicatorData.historico_recente) return;
-  currentChartData = indicatorData;
-  period = period || 60;
-
-  destroyCharts();
-
-  const hist = indicatorData.historico_recente || [];
-  if (!hist.length) return;
-
-  // Slice para o periodo selecionado
-  const data = hist.slice(-period);
-
-  const chartOpts = {
-    layout: {
-      background: { color: "#090f18" },
-      textColor: "#7a9bb5",
-    },
-    grid: {
-      vertLines: { color: "#0f2035" },
-      horzLines: { color: "#0f2035" },
-    },
-    crosshair: { mode: 1 },
-    rightPriceScale: { borderColor: "#0f2035" },
-    timeScale: { borderColor: "#0f2035", timeVisible: true },
-    handleScroll: true,
-    handleScale: true,
-  };
-
-  // ── GRAFICO PRINCIPAL - Candlestick + Volume + MMs ──────────
-  const mainEl = document.getElementById("chartMain");
-  mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
-
-  const candleSeries = mainChart.addCandlestickSeries
-    ? mainChart.addCandlestickSeries({ upColor:"#00ff88",downColor:"#ff3355",borderUpColor:"#00ff88",borderDownColor:"#ff3355",wickUpColor:"#00ff88",wickDownColor:"#ff3355" })
-    : mainChart.addSeries(LightweightCharts.CandlestickSeries, { upColor:"#00ff88",downColor:"#ff3355",borderUpColor:"#00ff88",borderDownColor:"#ff3355",wickUpColor:"#00ff88",wickDownColor:"#ff3355" });
-
-  const candleData = data.map(d => ({
-    time: d.date,
-    open: parseFloat(d.open||d.close),
-    high: parseFloat(d.high),
-    low: parseFloat(d.low),
-    close: parseFloat(d.close),
-  })).filter(d => d.open && d.high && d.low && d.close);
-
-  candleSeries.setData(candleData);
-
-  // Volume como histograma
-  const volOpts = { color:"rgba(0,170,255,0.3)", priceFormat:{type:"volume"}, priceScaleId:"volume", scaleMargins:{top:0.85,bottom:0} };
-  const volumeSeries = mainChart.addHistogramSeries
-    ? mainChart.addHistogramSeries(volOpts)
-    : mainChart.addSeries(LightweightCharts.HistogramSeries, volOpts);
-
-  const volumeData = data.map(d => ({
-    time: d.date,
-    value: d.volume || 0,
-    color: parseFloat(d.close) >= parseFloat(d.open||d.close) ? "rgba(0,255,136,0.3)" : "rgba(255,51,85,0.3)",
-  }));
-  volumeSeries.setData(volumeData);
-
-  // Medias moveis - dados reais historicos
-  const ind = indicatorData.indicadores;
-  const mmDefs = [
-    { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
-    { key: "historico_mm21", color: "#00aaff", label: "MM21", width: 1 },
-    { key: "historico_mm50", color: "#ff8800", label: "MM50", width: 1.5 }];
-  mmDefs.forEach(mm => {
-    const hist = (indicatorData[mm.key] || []).slice(-period);
-    if (!hist.length) return;
-    const mmSeries = addLine(mainChart, {
-      color: mm.color, lineWidth: mm.width,
-      priceLineVisible: false, lastValueVisible: true,
-      title: mm.label,
-    });
-    mmSeries.setData(hist.map(d => ({ time: d.date, value: d.value })));
-  });
-
-  // Suporte e Resistencia como linhas horizontais
-  if (indicatorData.suporte_resistencia) {
-    const sup = indicatorData.suporte_resistencia.suporte;
-    const res = indicatorData.suporte_resistencia.resistencia;
-    if (sup) candleSeries.createPriceLine({ price: sup, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Suporte" });
-    if (res) candleSeries.createPriceLine({ price: res, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Resistencia" });
-    if (indicatorData.gestao_risco?.stop_sugerido) {
-      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.stop_sugerido, color: "#ff3355", lineWidth: 1, lineStyle: 3, title: "Stop ATR" });
-    }
-    if (indicatorData.gestao_risco?.alvo_sugerido) {
-      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.alvo_sugerido, color: "#00ff88", lineWidth: 1, lineStyle: 3, title: "Alvo ATR" });
-    }
-  }
-
-  mainChart.timeScale().fitContent();
-
-  // ── RSI REAL ──────────────────────────────────────────────────
-  const rsiEl = document.getElementById("chartRSI");
-  rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
-
-  const rsiSeries = addLine(rsiChart, {
-    color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
-  });
-
-  // Usa dados historicos reais do indicators.js
-  const rsiHistData = (indicatorData.historico_rsi || []).slice(-period);
-  if (rsiHistData.length) {
-    rsiSeries.setData(rsiHistData.map(d => ({ time: d.date, value: d.value })));
-  }
-
-  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomp." });
-  rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
-  rsiSeries.createPriceLine({ price: 50, color: "#3a5570", lineWidth: 1, lineStyle: 2 });
-  rsiChart.timeScale().fitContent();
-
-  // ── MACD REAL ─────────────────────────────────────────────────
-  const macdEl = document.getElementById("chartMACD");
-
-  // Helper compatibilidade LightweightCharts v3/v4
-  function addLine(chart, opts) {
-    return chart.addLineSeries ? chart.addLineSeries(opts) : chart.addSeries(LightweightCharts.LineSeries, opts);
-  }
-  function addHist(chart, opts) {
-    return chart.addHistogramSeries ? chart.addHistogramSeries(opts) : chart.addSeries(LightweightCharts.HistogramSeries, opts);
-  }
-
-  macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
-
-  const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
-  const signalSeries = addLine(macdChart, { color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
-  const histSeries = addHist(macdChart, { priceLineVisible: false, title: "Hist" });
-
-  const macdHistData = indicatorData.historico_macd || {};
-  const macdLineData = (macdHistData.macdLine || []).slice(-period);
-  const signalLineData = (macdHistData.signalLine || []).slice(-period);
-  const histData = (macdHistData.histogram || []).slice(-period);
-
-  if (macdLineData.length) macdSeries.setData(macdLineData.map(d => ({ time: d.date, value: d.value })));
-  if (signalLineData.length) signalSeries.setData(signalLineData.map(d => ({ time: d.date, value: d.value })));
-  if (histData.length) histSeries.setData(histData.map(d => ({
-    time: d.date, value: d.value,
-    color: d.value >= 0 ? "rgba(0,255,136,0.6)" : "rgba(255,51,85,0.6)"
-  })));
-
-  macdChart.timeScale().fitContent();
-
-  // Sincroniza zoom entre os 3 graficos
-  mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
-    if (range) {
-      rsiChart.timeScale().setVisibleLogicalRange(range);
-      macdChart.timeScale().setVisibleLogicalRange(range);
-    }
-  });
-
-  document.getElementById("chartContainer").style.display = "block";
-}
-
-function setChartPeriod(period) {
-  ["btn30","btn60","btn90","btn200"].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.color = "var(--dim)";
-  });
-  const map = {30:"btn30",60:"btn60",90:"btn90",200:"btn200"};
-  const el = document.getElementById(map[period]);
-  if (el) el.style.color = "var(--cyan)";
-  if (currentChartData) renderCharts(currentChartData, period);
-}
-
-
-// ─── MAPA DE CALOR ────────────────────────────────────────────
-const MAPA_SETORES = {
-  "Energia": ["PETR4","PRIO3","VBBR3","CSAN3"],
-  "Bancos": ["ITUB4","BBDC4","BBAS3","SANB11","BPAC11"],
-  "Mineracao": ["VALE3","KLBN11","SUZB3"],
-  "Consumo": ["ABEV3","LREN3","ASAI3"],
-  "Industria": ["WEGE3","RDOR3"],
-  "Energia Elet.": ["EGIE3","ENGI11","CMIG4","CPFE3","EQTL3","TAEE11"],
-  "Telecom": ["TIMS3","VIVT3"],
-  "Saude": ["HAPV3","HYPE3","RADL3"],
-  "Construcao": ["CYRE3","MRVE3"],
-  "FIIs": ["KNRI11","HGLG11","XPML11","MXRF11","VISC11","IRDM11","KNCR11","BTLG11"],
-  "Tech EUA": ["NVDA","AMD","AAPL","MSFT","GOOGL","META","AMZN","ADBE","CRM"],
-  "Finan. EUA": ["JPM","BAC","V","MA"],
-  "Saude EUA": ["MRK","ABBV"],
-  "ETFs": ["SPY","QQQ","IVVB11"],
-};
-
-function varColor(v) {
-  const n = parseFloat(v);
-  if (n >= 3) return "#00ff88";
-  if (n >= 1.5) return "#44ff99";
-  if (n >= 0.5) return "#88ffbb";
-  if (n >= 0) return "#aaffcc";
-  if (n >= -0.5) return "#ffaaaa";
-  if (n >= -1.5) return "#ff7777";
-  if (n >= -3) return "#ff4444";
-  return "#ff1111";
-}
-
-function varBg(v) {
-  const n = parseFloat(v);
-  if (n >= 3) return "rgba(0,255,136,.25)";
-  if (n >= 1.5) return "rgba(0,255,136,.15)";
-  if (n >= 0.5) return "rgba(0,255,136,.08)";
-  if (n >= 0) return "rgba(0,255,136,.04)";
-  if (n >= -0.5) return "rgba(255,51,85,.04)";
-  if (n >= -1.5) return "rgba(255,51,85,.08)";
-  if (n >= -3) return "rgba(255,51,85,.15)";
-  return "rgba(255,51,85,.25)";
-}
-
-async function renderMapa() {
-  document.getElementById("mapaLoading").style.display = "flex";
-  document.getElementById("mapaContent").innerHTML = "";
-  document.getElementById("btnMapa").disabled = true;
-
-  // Busca todas as cotacoes em paralelo
-  const allTickers = Object.values(MAPA_SETORES).flat();
-  const quotes = {};
-  await Promise.all(allTickers.map(async t => {
-    const q = await fetchQuote(t);
-    if (q) quotes[t] = q;
-  }));
-
-  document.getElementById("mapaLoading").style.display = "none";
-  document.getElementById("btnMapa").disabled = false;
-
-  // Calcula sentimento geral do mercado
-  const variacoes = Object.values(quotes).map(q => parseFloat(q.change||0)).filter(v => !isNaN(v));
-  const mediaGeral = variacoes.length ? (variacoes.reduce((a,b)=>a+b,0)/variacoes.length).toFixed(2) : 0;
-  const emAlta = variacoes.filter(v => v > 0).length;
-  const emBaixa = variacoes.filter(v => v < 0).length;
-  const sentimento = parseFloat(mediaGeral) > 1 ? "OTIMISTA" : parseFloat(mediaGeral) > 0 ? "NEUTRO POSITIVO" : parseFloat(mediaGeral) > -1 ? "NEUTRO NEGATIVO" : "PESSIMISTA";
-  const sentCor = parseFloat(mediaGeral) > 0 ? "var(--green)" : "var(--red)";
-
-  let html = "";
-
-  // Header - sentimento geral
-  html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;">'+
-    [
-      ["SENTIMENTO", sentimento, sentCor],
-      ["VARIACAO MEDIA", (parseFloat(mediaGeral)>=0?"+":"")+mediaGeral+"%", sentCor],
-      ["EM ALTA", emAlta+" ativos", "var(--green)"],
-      ["EM BAIXA", emBaixa+" ativos", "var(--red)"]].map(([k,v,c])=>'<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
-      '<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:4px;">'+k+'</div>'+
-      '<div style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:'+c+'">'+v+'</div>'+
-      '</div>'
-    ).join("")+'</div>';
-
-  // Setores
-  Object.entries(MAPA_SETORES).forEach(([setor, tickers]) => {
-    const tickersComQuote = tickers.filter(t => quotes[t]);
-    if (!tickersComQuote.length) return;
-
-    const vars = tickersComQuote.map(t => parseFloat(quotes[t].change||0));
-    const mediaSetor = (vars.reduce((a,b)=>a+b,0)/vars.length).toFixed(2);
-    const setorCor = parseFloat(mediaSetor) >= 0 ? "var(--green)" : "var(--red)";
-
-    html += '<div style="margin-bottom:16px;">'+
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">'+
-      '<div style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;color:var(--dim);">'+setor+'</div>'+
-      '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+setorCor+'">'+
-        (parseFloat(mediaSetor)>=0?"+":"")+mediaSetor+"%"+'</div>'+
-      '<div style="flex:1;height:1px;background:var(--border);"></div>'+
-      '</div>'+
-      '<div style="display:flex;flex-wrap:wrap;gap:6px;">'+
-      tickersComQuote.map(t => {
-        const q = quotes[t];
-        const v = parseFloat(q.change||0);
-        const vStr = (v>=0?"+":"")+v.toFixed(2)+"%";
-        const isCart = getCarteira().some(p => p.ticker === t);
-        return '<div onclick="showTab(\'analisar\');document.getElementById(\'tickerInput\').value=\''+t+'\';analyze(\''+t+'\')" '+
-          'style="background:'+varBg(v)+';border:1px solid '+varColor(v)+'44;padding:10px 14px;cursor:pointer;min-width:90px;position:relative;">'+
-          (isCart ? '<div style="position:absolute;top:3px;right:4px;font-size:7px;color:var(--cyan);">NA CART.</div>' : "")+
-          '<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+varColor(v)+'">'+t+'</div>'+
-          '<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:'+varColor(v)+'">'+vStr+'</div>'+
-          '<div style="font-family:monospace;font-size:9px;color:var(--dim);">'+q.currency+q.price.toFixed(2)+'</div>'+
-          '</div>';
-      }).join("")+'</div></div>';
-  });
-
-  document.getElementById("mapaContent").innerHTML = html;
-}
-
-
-// ─── MOTOR DE CORRELACAO ──────────────────────────────────────
-const CORRELACOES_SETOR = {
-  "PETR4":["PRIO3","VBBR3","CSAN3"],"PRIO3":["PETR4","VBBR3"],"VBBR3":["PETR4","PRIO3"],
-  "ITUB4":["BBDC4","BBAS3","SANB11","BPAC11"],"BBDC4":["ITUB4","BBAS3","SANB11"],"BBAS3":["ITUB4","BBDC4"],
-  "VALE3":["KLBN11","SUZB3"],"KLBN11":["VALE3","SUZB3"],"SUZB3":["VALE3","KLBN11"],
-  "EGIE3":["ENGI11","CMIG4","CPFE3","EQTL3","TAEE11"],"ENGI11":["EGIE3","CMIG4","TAEE11"],
-  "NVDA":["AMD","AAPL","MSFT"],"AMD":["NVDA","AAPL"],"AAPL":["NVDA","MSFT","GOOGL"],
-  "JPM":["BAC","V","MA"],"BAC":["JPM","V"],"V":["JPM","BAC","MA"],"MA":["JPM","V"],
-};
-
-function calcCorrelacaoCarteira() {
-  const carteira = getCarteira();
-  if (carteira.length < 2) return null;
-
-  const alertas = [];
-  const setoresPresentes = {};
-
-  carteira.forEach(p => {
-    // Detecta setor pelo ticker
-    for (const [setor, tickers] of Object.entries(MAPA_SETORES || {})) {
-      if (tickers.includes(p.ticker)) {
-        if (!setoresPresentes[setor]) setoresPresentes[setor] = [];
-        setoresPresentes[setor].push(p.ticker);
-      }
-    }
-    // Verifica correlacoes diretas
-    const correlatos = CORRELACOES_SETOR[p.ticker] || [];
-    const correlNaCart = correlatos.filter(t => carteira.some(c => c.ticker === t));
-    if (correlNaCart.length > 0) {
-      alertas.push({
-        tipo: "CORRELACAO_ALTA",
-        msg: p.ticker+" e "+correlNaCart.join(", ")+" sao altamente correlacionados",
-        nivel: "ATENCAO"
-      });
-    }
-  });
-
-  // Alerta concentracao por setor
-  Object.entries(setoresPresentes).forEach(([setor, tickers]) => {
-    if (tickers.length >= 2) {
-      const pct = (tickers.length / carteira.length * 100).toFixed(0);
-      alertas.push({
-        tipo: "CONCENTRACAO_SETOR",
-        msg: pct+"% da carteira no setor "+setor+" ("+tickers.join(", ")+")",
-        nivel: tickers.length >= 3 ? "RISCO" : "ATENCAO"
-      });
-    }
-  });
-
-  return { alertas, setoresPresentes };
-}
-
-function renderCorrelacaoAlert() {
-  const result = calcCorrelacaoCarteira();
-  if (!result || !result.alertas.length) return "";
-  return '<div style="background:rgba(255,204,0,.04);border:1px solid rgba(255,204,0,.2);padding:14px 18px;margin-bottom:12px;">'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:10px;">ANALISE DE CORRELACAO E RISCO</div>'+
-    result.alertas.map(a => {
-      const c = a.nivel === "RISCO" ? "var(--red)" : "var(--yellow)";
-      return '<div style="display:flex;gap:8px;margin-bottom:6px;font-size:11px;">'+
-        '<span style="color:'+c+';font-weight:700;">!'+a.tipo.replace(/_/g," ")+'</span>'+
-        '<span style="color:var(--sub);">'+a.msg+'</span></div>';
-    }).join("")+'</div>';
-}
-
-// ─── ATLAS JOURNAL ────────────────────────────────────────────
-async function gerarJournal(operacao) {
-  if (!operacao || operacao.status !== "ENCERRADA") return;
-  try {
-    const diasOp = operacao.data_entrada && operacao.saidas?.length
-      ? Math.round((new Date(operacao.saidas[operacao.saidas.length-1].data) - new Date(operacao.data_entrada)) / (1000*60*60*24))
-      : null;
-
-    const prompt = "Voce e ATLAS, gestor quantitativo. Analise esta operacao encerrada e gere um journal de aprendizado:\n\n"
-      + "TICKER: "+operacao.ticker+"\n"
-      + "ENTRADA: R$"+operacao.preco_medio+" em "+operacao.data_entrada+"\n"
-      + "SAIDA: R$"+operacao.saidas[operacao.saidas.length-1]?.preco+" em "+operacao.saidas[operacao.saidas.length-1]?.data+"\n"
-      + "RESULTADO: "+operacao.resultado_pct+"% | R$"+operacao.lucro_total+"\n"
-      + "MOTIVO SAIDA: "+operacao.saidas[operacao.saidas.length-1]?.motivo+"\n"
-      + "DIAS NA OPERACAO: "+(diasOp||"?")+"\n"
-      + "SCORE ATLAS NA ENTRADA: "+(operacao.score_atlas||"nao registrado")+"\n"
-      + "SINAL ATLAS: "+(operacao.sinal_atlas||"nao registrado")+"\n"
-      + "ATLAS ACERTOU: "+(operacao.atlas_acertou?"SIM":"NAO")+"\n\n"
-      + "Gere uma analise de aprendizado honesta e concisa. O que funcionou, o que falhou, o que aprender.\n\n"
-      + "Retorne APENAS JSON: {"acertou":true,"resumo":"","o_que_funcionou":"","o_que_falhou":"","licao_principal":"","setup_ideal_para_proximo":"","nota_operacao":"A"}";
-
-    const data = await callClaude(prompt);
-
-    // Salva journal na operacao
-    const idx = operacoes.findIndex(o => o.id === operacao.id);
-    if (idx >= 0) {
-      operacoes[idx].journal = data;
-      localStorage.setItem("operacoes_v1", JSON.stringify(operacoes));
-      await apiOperacoes("POST", { acao: "EDITAR", id: operacao.id, journal: data });
-    }
-    return data;
-  } catch(e) {
-    console.log("Journal erro:", e.message);
-    return null;
-  }
-}
-
-function renderJournalCard(operacao) {
-  const j = operacao.journal;
-  if (!j) return "";
-  const notaCor = j.nota_operacao === "A" ? "var(--green)" : j.nota_operacao === "B" ? "var(--cyan)" : j.nota_operacao === "C" ? "var(--yellow)" : "var(--red)";
-  return '<div style="background:rgba(0,170,255,.04);border:1px solid rgba(0,170,255,.2);padding:14px 18px;margin-top:8px;">'+
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--blue);">ATLAS JOURNAL</div>'+
-    '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+notaCor+'">NOTA '+j.nota_operacao+'</div>'+
-    '</div>'+
-    '<div style="font-size:11px;color:var(--sub);line-height:1.7;margin-bottom:8px;">'+j.resumo+'</div>'+
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:10px;">'+
-    '<div><span style="color:var(--green);">OK: </span><span style="color:var(--sub);">'+j.o_que_funcionou+'</span></div>'+
-    '<div><span style="color:var(--red);">FALHOU: </span><span style="color:var(--sub);">'+j.o_que_falhou+'</span></div>'+
-    '</div>'+
-    '<div style="margin-top:8px;padding:8px;background:rgba(255,204,0,.06);border:1px solid rgba(255,204,0,.15);">'+
-    '<span style="font-family:monospace;font-size:8px;color:var(--yellow);">LICAO: </span>'+
-    '<span style="font-size:10px;color:var(--sub);">'+j.licao_principal+'</span>'+
-    '</div>'+
-    '<div style="margin-top:6px;font-size:10px;color:var(--dim);">Proximo setup ideal: '+j.setup_ideal_para_proximo+'</div>'+
-    '</div>';
-}
-
-</script>
+<script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
 </head>
 <body>
 
@@ -885,6 +393,267 @@ function renderJournalCard(operacao) {
 </div>
 
 <script>
+
+
+function buildFundamentalsContext(fun) {
+  if (!fun) return "";
+  const items = [];
+  if (fun.pl !== null) items.push("P/L="+fun.pl+(fun.pl<10?" (BARATO)":fun.pl<20?" (JUSTO)":fun.pl<30?" (CARO)":"(MUITO CARO)"));
+  if (fun.pvp !== null) items.push("P/VP="+fun.pvp);
+  if (fun.roe !== null) items.push("ROE="+fun.roe+"%"+(fun.roe>15?" (BOM)":fun.roe>8?" (OK)":" (FRACO)"));
+  if (fun.roa !== null && fun.roe !== null) {
+    const gap = fun.roe - fun.roa;
+    const qualidade = gap > 15 ? " (ALAVANCAGEM ALTA - ROE depende muito de divida)" :
+                       gap > 8 ? " (alavancagem moderada)" : " (retorno organico, pouca divida)";
+    items.push("ROA="+fun.roa+"%"+qualidade);
+  } else if (fun.roa !== null) {
+    items.push("ROA="+fun.roa+"%");
+  }
+  if (fun.margem_liquida !== null) items.push("Mrg.Liq="+fun.margem_liquida+"%");
+  if (fun.margem_ebitda !== null) items.push("Mrg.EBITDA="+fun.margem_ebitda+"%");
+  if (fun.dy !== null) items.push("DY="+fun.dy+"%");
+  if (fun.divida_pl !== null) items.push("Div/PL="+fun.divida_pl+(fun.divida_pl>2?" (ALTO)":fun.divida_pl>1?" (MODERADO)":" (BAIXO)"));
+  if (fun.crescimento_receita !== null) items.push("Cresc.Rec="+fun.crescimento_receita+"%");
+  if (fun.setor) items.push("Setor="+fun.setor);
+  if (!items.length) return "";
+  return "\n--- DADOS FUNDAMENTALISTAS REAIS ("+fun.fonte+") ---\n"+items.join(" | ")+"\n";
+}
+
+function destroyCharts() {
+  if (mainChart) { try { mainChart.remove(); } catch(e) {} mainChart = null; }
+  if (rsiChart) { try { rsiChart.remove(); } catch(e) {} rsiChart = null; }
+  if (macdChart) { try { macdChart.remove(); } catch(e) {} macdChart = null; }
+}
+
+function renderCharts(indicatorData, period) {
+  if (!indicatorData || !indicatorData.historico_recente) return;
+  currentChartData = indicatorData;
+  period = period || 60;
+
+  destroyCharts();
+
+  const hist = indicatorData.historico_recente || [];
+  if (!hist.length) return;
+
+  // Slice para o periodo selecionado
+  const data = hist.slice(-period);
+
+  const chartOpts = {
+    layout: {
+      background: { color: "#090f18" },
+      textColor: "#7a9bb5",
+    },
+    grid: {
+      vertLines: { color: "#0f2035" },
+      horzLines: { color: "#0f2035" },
+    },
+    crosshair: { mode: 1 },
+    rightPriceScale: { borderColor: "#0f2035" },
+    timeScale: { borderColor: "#0f2035", timeVisible: true },
+    handleScroll: true,
+    handleScale: true,
+  };
+
+  // ── GRAFICO PRINCIPAL - Candlestick + Volume + MMs ──────────
+  const mainEl = document.getElementById("chartMain");
+  mainChart = LightweightCharts.createChart(mainEl, { ...chartOpts, height: 380 });
+
+  const candleSeries = mainChart.addCandlestickSeries
+    ? mainChart.addCandlestickSeries({ upColor:"#00ff88",downColor:"#ff3355",borderUpColor:"#00ff88",borderDownColor:"#ff3355",wickUpColor:"#00ff88",wickDownColor:"#ff3355" })
+    : mainChart.addSeries(LightweightCharts.CandlestickSeries, { upColor:"#00ff88",downColor:"#ff3355",borderUpColor:"#00ff88",borderDownColor:"#ff3355",wickUpColor:"#00ff88",wickDownColor:"#ff3355" });
+
+  const candleData = data.map(d => ({
+    time: d.date,
+    open: parseFloat(d.open||d.close),
+    high: parseFloat(d.high),
+    low: parseFloat(d.low),
+    close: parseFloat(d.close),
+  })).filter(d => d.open && d.high && d.low && d.close);
+
+  candleSeries.setData(candleData);
+
+  // Volume como histograma
+  const volOpts = { color:"rgba(0,170,255,0.3)", priceFormat:{type:"volume"}, priceScaleId:"volume", scaleMargins:{top:0.85,bottom:0} };
+  const volumeSeries = mainChart.addHistogramSeries
+    ? mainChart.addHistogramSeries(volOpts)
+    : mainChart.addSeries(LightweightCharts.HistogramSeries, volOpts);
+
+  const volumeData = data.map(d => ({
+    time: d.date,
+    value: d.volume || 0,
+    color: parseFloat(d.close) >= parseFloat(d.open||d.close) ? "rgba(0,255,136,0.3)" : "rgba(255,51,85,0.3)",
+  }));
+  volumeSeries.setData(volumeData);
+
+  // Medias moveis - dados reais historicos
+  const ind = indicatorData.indicadores;
+  const mmDefs = [
+    { key: "historico_mm9",  color: "#ffcc00", label: "MM9",  width: 1 },
+    { key: "historico_mm21", color: "#00aaff", label: "MM21", width: 1 },
+    { key: "historico_mm50", color: "#ff8800", label: "MM50", width: 1.5 }];
+  mmDefs.forEach(mm => {
+    const hist = (indicatorData[mm.key] || []).slice(-period);
+    if (!hist.length) return;
+    const mmSeries = addLine(mainChart, {
+      color: mm.color, lineWidth: mm.width,
+      priceLineVisible: false, lastValueVisible: true,
+      title: mm.label,
+    });
+    mmSeries.setData(hist.map(d => ({ time: d.date, value: d.value })));
+  });
+
+  // Suporte e Resistencia como linhas horizontais
+  if (indicatorData.suporte_resistencia) {
+    const sup = indicatorData.suporte_resistencia.suporte;
+    const res = indicatorData.suporte_resistencia.resistencia;
+    if (sup) candleSeries.createPriceLine({ price: sup, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Suporte" });
+    if (res) candleSeries.createPriceLine({ price: res, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Resistencia" });
+    if (indicatorData.gestao_risco?.stop_sugerido) {
+      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.stop_sugerido, color: "#ff3355", lineWidth: 1, lineStyle: 3, title: "Stop ATR" });
+    }
+    if (indicatorData.gestao_risco?.alvo_sugerido) {
+      candleSeries.createPriceLine({ price: indicatorData.gestao_risco.alvo_sugerido, color: "#00ff88", lineWidth: 1, lineStyle: 3, title: "Alvo ATR" });
+    }
+  }
+
+  mainChart.timeScale().fitContent();
+
+  // ── RSI REAL ──────────────────────────────────────────────────
+  const rsiEl = document.getElementById("chartRSI");
+  rsiChart = LightweightCharts.createChart(rsiEl, { ...chartOpts, height: 100 });
+
+  const rsiSeries = addLine(rsiChart, {
+    color: "#ffcc00", lineWidth: 2, priceLineVisible: false, title: "RSI Pond.",
+  });
+
+  // Usa dados historicos reais do indicators.js
+  const rsiHistData = (indicatorData.historico_rsi || []).slice(-period);
+  if (rsiHistData.length) {
+    rsiSeries.setData(rsiHistData.map(d => ({ time: d.date, value: d.value })));
+  }
+
+  rsiSeries.createPriceLine({ price: 70, color: "#ff335566", lineWidth: 1, lineStyle: 2, title: "Sobrecomp." });
+  rsiSeries.createPriceLine({ price: 30, color: "#00ff8866", lineWidth: 1, lineStyle: 2, title: "Sobrevendido" });
+  rsiSeries.createPriceLine({ price: 50, color: "#3a5570", lineWidth: 1, lineStyle: 2 });
+  rsiChart.timeScale().fitContent();
+
+  // ── MACD REAL ─────────────────────────────────────────────────
+  const macdEl = document.getElementById("chartMACD");
+
+  // Helper compatibilidade LightweightCharts v3/v4
+  function addLine(chart, opts) {
+    return chart.addLineSeries ? chart.addLineSeries(opts) : chart.addSeries(LightweightCharts.LineSeries, opts);
+  }
+  function addHist(chart, opts) {
+    return chart.addHistogramSeries ? chart.addHistogramSeries(opts) : chart.addSeries(LightweightCharts.HistogramSeries, opts);
+  }
+
+  macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
+
+  const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
+  const signalSeries = addLine(macdChart, { color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
+  const histSeries = addHist(macdChart, { priceLineVisible: false, title: "Hist" });
+
+  const macdHistData = indicatorData.historico_macd || {};
+  const macdLineData = (macdHistData.macdLine || []).slice(-period);
+  const signalLineData = (macdHistData.signalLine || []).slice(-period);
+  const histData = (macdHistData.histogram || []).slice(-period);
+
+  if (macdLineData.length) macdSeries.setData(macdLineData.map(d => ({ time: d.date, value: d.value })));
+  if (signalLineData.length) signalSeries.setData(signalLineData.map(d => ({ time: d.date, value: d.value })));
+  if (histData.length) histSeries.setData(histData.map(d => ({
+    time: d.date, value: d.value,
+    color: d.value >= 0 ? "rgba(0,255,136,0.6)" : "rgba(255,51,85,0.6)"
+  })));
+
+  macdChart.timeScale().fitContent();
+
+  // Sincroniza zoom entre os 3 graficos
+  mainChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+    if (range) {
+      rsiChart.timeScale().setVisibleLogicalRange(range);
+      macdChart.timeScale().setVisibleLogicalRange(range);
+    }
+  });
+
+  document.getElementById("chartContainer").style.display = "block";
+}
+
+function addLine(chart, opts) {
+    return chart.addLineSeries ? chart.addLineSeries(opts) : chart.addSeries(LightweightCharts.LineSeries, opts);
+  }
+
+function addHist(chart, opts) {
+    return chart.addHistogramSeries ? chart.addHistogramSeries(opts) : chart.addSeries(LightweightCharts.HistogramSeries, opts);
+  }
+
+function setChartPeriod(period) {
+  ["btn30","btn60","btn90","btn200"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.color = "var(--dim)";
+  });
+  const map = {30:"btn30",60:"btn60",90:"btn90",200:"btn200"};
+  const el = document.getElementById(map[period]);
+  if (el) el.style.color = "var(--cyan)";
+  if (currentChartData) renderCharts(currentChartData, period);
+}
+
+function calcCorrelacaoCarteira() {
+  const carteira = getCarteira();
+  if (carteira.length < 2) return null;
+
+  const alertas = [];
+  const setoresPresentes = {};
+
+  carteira.forEach(p => {
+    // Detecta setor pelo ticker
+    for (const [setor, tickers] of Object.entries(MAPA_SETORES || {})) {
+      if (tickers.includes(p.ticker)) {
+        if (!setoresPresentes[setor]) setoresPresentes[setor] = [];
+        setoresPresentes[setor].push(p.ticker);
+      }
+    }
+    // Verifica correlacoes diretas
+    const correlatos = CORRELACOES_SETOR[p.ticker] || [];
+    const correlNaCart = correlatos.filter(t => carteira.some(c => c.ticker === t));
+    if (correlNaCart.length > 0) {
+      alertas.push({
+        tipo: "CORRELACAO_ALTA",
+        msg: p.ticker+" e "+correlNaCart.join(", ")+" sao altamente correlacionados",
+        nivel: "ATENCAO"
+      });
+    }
+  });
+
+  // Alerta concentracao por setor
+  Object.entries(setoresPresentes).forEach(([setor, tickers]) => {
+    if (tickers.length >= 2) {
+      const pct = (tickers.length / carteira.length * 100).toFixed(0);
+      alertas.push({
+        tipo: "CONCENTRACAO_SETOR",
+        msg: pct+"% da carteira no setor "+setor+" ("+tickers.join(", ")+")",
+        nivel: tickers.length >= 3 ? "RISCO" : "ATENCAO"
+      });
+    }
+  });
+
+  return { alertas, setoresPresentes };
+}
+
+function renderCorrelacaoAlert() {
+  const result = calcCorrelacaoCarteira();
+  if (!result || !result.alertas.length) return "";
+  return '<div style="background:rgba(255,204,0,.04);border:1px solid rgba(255,204,0,.2);padding:14px 18px;margin-bottom:12px;">'+
+    '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:10px;">ANALISE DE CORRELACAO E RISCO</div>'+
+    result.alertas.map(a => {
+      const c = a.nivel === "RISCO" ? "var(--red)" : "var(--yellow)";
+      return '<div style="display:flex;gap:8px;margin-bottom:6px;font-size:11px;">'+
+        '<span style="color:'+c+';font-weight:700;">!'+a.tipo.replace(/_/g," ")+'</span>'+
+        '<span style="color:var(--sub);">'+a.msg+'</span></div>';
+    }).join("")+'</div>';
+}
+
+
 // ─── ESTADO ───────────────────────────────────────────────────
 let historyArr = JSON.parse(localStorage.getItem("ai_history") || "[]");
 let operacoes = [];
