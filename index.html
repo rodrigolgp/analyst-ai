@@ -3542,7 +3542,8 @@ function renderPortfolio() {
     }, 0);
     const resultado = totalAtual - totalInv;
     const resultadoPct = totalInv > 0 ? (resultado / totalInv * 100).toFixed(2) : "0.00";
-    const varDia = totalOntem > 0 ? ((totalAtual - totalOntem) / totalOntem * 100).toFixed(2) : "0.00";
+    const resultadoDiaR = totalAtual - totalOntem;
+    const varDia = totalOntem > 0 ? (resultadoDiaR / totalOntem * 100).toFixed(2) : "0.00";
     const hasQ = Object.keys(portfolioQuotes).length > 0;
     const plC = resultado >= 0 ? "var(--green)" : "var(--red)";
     const plB = resultado >= 0 ? "rgba(0,255,136,.3)" : "rgba(255,51,85,.3)";
@@ -3555,7 +3556,7 @@ function renderPortfolio() {
         ? '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
           '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO</div>'+
           '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+(resultado>=0?"+":"")+resultado.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+(parseFloat(resultadoPct)>=0?"+":"")+resultadoPct+'%)</div>'+
-          '<div style="font-family:monospace;font-size:9px;color:'+(parseFloat(varDia)>=0?"var(--green)":"var(--red)")+';margin-top:3px">'+(parseFloat(varDia)>=0?"+":"")+varDia+'% hoje</div></div>'
+          '<div style="font-family:monospace;font-size:9px;color:'+(parseFloat(varDia)>=0?"var(--green)":"var(--red)")+';margin-top:3px">'+(resultadoDiaR>=0?"+":"")+resultadoDiaR.toLocaleString("pt-BR",{minimumFractionDigits:2,style:"currency",currency:"BRL"})+' ('+(parseFloat(varDia)>=0?"+":"")+varDia+'% hoje)</div></div>'
         : '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;opacity:.5;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:monospace;font-size:10px;color:var(--dim)">Clique ATUALIZAR</div></div>'
       )+
       '<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'+
