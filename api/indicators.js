@@ -333,6 +333,25 @@ export default async function handler(req, res) {
     const mm21Historico=calcMMHistorico(c,21);
     const mm50Historico=calcMMHistorico(c,50);
 
+    // Gestao de risco: stop = MENOR RISCO entre 2xATR e suporte tecnico (evita stop arbitrario sem relacao com o grafico)
+    // Alvo = MENOR entre 3xATR e resistencia tecnica (evita alvo otimista demais ignorando barreira real)
+    let stopSugerido = null, alvoSugerido = null;
+    if (atr) {
+      const stopATR = precoAtual - 2*atr;
+      const alvoATR = precoAtual + 3*atr;
+      // Stop final: o MAIOR entre stopATR e suporte (ou seja, o que da MENOR risco/distancia)
+      // Mas nao deixa o stop ficar exatamente no suporte (que e zona obvia de stop-hunt) - usa 0.3% abaixo
+      const suporteAjustado = suporte ? suporte * 0.997 : null;
+      stopSugerido = suporteAjustado && suporteAjustado > stopATR
+        ? parseFloat(suporteAjustado.toFixed(4))
+        : parseFloat(stopATR.toFixed(4));
+      // Alvo final: o MENOR entre alvoATR e resistencia (nao prometer alvo alem de uma barreira real)
+      const resistenciaAjustada = resistencia ? resistencia * 0.997 : null; // um pouco antes da resistencia
+      alvoSugerido = resistenciaAjustada && resistenciaAjustada < alvoATR
+        ? parseFloat(resistenciaAjustada.toFixed(4))
+        : parseFloat(alvoATR.toFixed(4));
+    }
+
     const payload = {
       ticker,mercado:isB3?"B3":"NYSE/NASDAQ",moeda:isB3?"R$":"US$",
       preco_atual:precoAtual,
@@ -347,7 +366,7 @@ export default async function handler(req, res) {
       },
       suporte_resistencia:{suporte,resistencia,distResist,distSuport,rr_natural:rrNatural},
       kelly_criterion:{kelly_completo:parseFloat(kelly.toFixed(2)),half_kelly:parseFloat((kelly/2).toFixed(2)),recomendado:parseFloat((kelly/2).toFixed(2)),explicacao:kelly/2<5?"NAO_OPERAR":kelly/2<10?"POSICAO_PEQUENA":kelly/2<15?"POSICAO_MEDIA":"POSICAO_GRANDE"},
-      gestao_risco:{stop_sugerido:atr?parseFloat((precoAtual-2*atr).toFixed(4)):null,alvo_sugerido:atr?parseFloat((precoAtual+3*atr).toFixed(4)):null,atr_pct:atr?parseFloat((atr/precoAtual*100).toFixed(2)):null,tamanho_posicao_recomendado:(kelly/2).toFixed(2)+"% do capital"},
+      gestao_risco:{stop_sugerido:stopSugerido,alvo_sugerido:alvoSugerido,atr_pct:atr?parseFloat((atr/precoAtual*100).toFixed(2)):null,tamanho_posicao_recomendado:(kelly/2).toFixed(2)+"% do capital"},
       historico_recente:validData,
       historico_rsi:rsiHistorico,historico_macd:macdHistorico,
       historico_mm9:mm9Historico,historico_mm21:mm21Historico,historico_mm50:mm50Historico,
