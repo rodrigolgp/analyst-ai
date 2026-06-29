@@ -1113,9 +1113,9 @@ async function updateBenchmarkCard() {
     '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
     '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
     '<div style="'+subStyle(ibovVal)+'">'+sub+'</div></div>'+
-    (k==="MES"?'<button onclick="toggleMiniChartMes()" style="background:transparent;border:1px solid var(--border);color:var(--dim);font-family:monospace;font-size:9px;padding:4px 8px;cursor:pointer;border-radius:3px;flex-shrink:0;" title="Ver evolucao diaria">📈</button>':"")+
+    (k==="MES"?'<button onclick="toggleMiniChartMes()" style="background:rgba(0,170,255,.1);border:1px solid rgba(0,170,255,.4);color:var(--blue);font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;padding:8px 14px;cursor:pointer;border-radius:5px;flex-shrink:0;white-space:nowrap;" title="Ver evolucao diaria">📈 EVOLUCAO</button>':"")+
     '</div>'+
-    (k==="MES"?'<div id="miniChartMesWrap" style="display:none;position:relative;width:100%;height:60px;margin-top:12px;"><canvas id="miniChartMes"></canvas></div>':"")+
+    (k==="MES"?'<div id="miniChartMesWrap" style="display:none;position:relative;width:100%;height:100px;margin-top:14px;"><canvas id="miniChartMes"></canvas></div>':"")+
     '</div>'
   ).join("");
 }
@@ -1139,8 +1139,16 @@ async function renderMiniChartMes() {
     const carteiraSerie = [];
     const ibovSerie = [];
 
-    // Resultado acumulado da carteira: soma de lucro_total de saidas no mes, dia a dia
-    const investidoBase = getCarteira().reduce((a,p)=>a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0),0) || 1;
+    // Base de investimento: posicoes ainda abertas HOJE + posicoes que foram TOTALMENTE encerradas
+    // dentro deste mes (capital que esteve em risco durante o periodo, nao so o que resta hoje)
+    const investidoAbertasHoje = getCarteira().reduce((a,p)=>a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0),0);
+    const investidoEncerradasNoMes = operacoes
+      .filter(p => p.status === "ENCERRADA" && p.saidas?.some(s => s.data && s.data.slice(0,7) === `${ano}-${mes}`))
+      .reduce((a,p) => {
+        const qtdTotal = parseFloat(p.quantidade_total) || p.saidas.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
+        return a + qtdTotal * (parseFloat(p.preco_medio)||0);
+      }, 0);
+    const investidoBase = (investidoAbertasHoje + investidoEncerradasNoMes) || 1;
 
     // Busca historico REAL do Ibovespa (mesmo array usado nos indicadores, com candles diarios)
     let ibovHistDiario = [];
@@ -1204,10 +1212,31 @@ async function renderMiniChartMes() {
       },
       options: {
         responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            enabled: true,
+            backgroundColor: "#0a0e14",
+            borderColor: "#2a3340",
+            borderWidth: 1,
+            titleColor: "#8a929e",
+            bodyColor: "#fff",
+            titleFont: { size: 10 },
+            bodyFont: { size: 11, weight: "bold" },
+            padding: 8,
+            callbacks: {
+              title: (items) => "Dia " + items[0].label,
+              label: (item) => (item.datasetIndex === 0 ? "Carteira: " : "Ibov: ") + (item.parsed.y>=0?"+":"") + item.parsed.y.toFixed(2) + "%"
+            }
+          }
+        },
         scales: {
           x: { display: true, grid: { display: false }, ticks: { color: "#5a6472", font: { size: 8 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
-          y: { display: false }
+          y: {
+            display: true,
+            grid: { color: "rgba(255,255,255,.05)" },
+            ticks: { color: "#5a6472", font: { size: 8 }, callback: (v) => v.toFixed(1)+"%" }
+          }
         }
       }
     });
