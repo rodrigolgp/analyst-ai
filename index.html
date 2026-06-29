@@ -83,6 +83,7 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
 }
 </style>
 <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 </head>
 <body>
 
@@ -1108,11 +1109,96 @@ async function updateBenchmarkCard() {
   ];
   benchEl.innerHTML = items.map(([k,v,c,sub,ibovVal])=>
     '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
-    '<div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
+    '<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:10px;">'+
+    '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
     '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
-    '<div style="'+subStyle(ibovVal)+'">'+sub+'</div>'+
-    '</div>'
+    '<div style="'+subStyle(ibovVal)+'">'+sub+'</div></div>'+
+    (k==="MES"?'<div style="position:relative;width:90px;height:40px;flex-shrink:0;"><canvas id="miniChartMes"></canvas></div>':"")+
+    '</div></div>'
   ).join("");
+
+  if (document.getElementById("miniChartMes")) {
+    renderMiniChartMes();
+  }
+}
+
+let miniChartMesInstance = null;
+async function renderMiniChartMes() {
+  try {
+    const hoje = new Date();
+    const ano = hoje.getFullYear();
+    const mes = String(hoje.getMonth()+1).padStart(2,"0");
+    const diaInicio = `${ano}-${mes}-01`;
+
+    // Busca preco do ibov no dia 1 do mes (base de comparacao)
+    const ibovBaseQ = await fetch(`/api/quote?ticker=%5EBVSP&data=${diaInicio}`).then(r=>r.ok?r.json():null).catch(()=>null);
+    const ibovBase = ibovBaseQ?.price;
+
+    // Monta historico diario da carteira a partir de operacoes (aproximacao: usa resultado acumulado por dia de saida)
+    const diasNoMes = hoje.getDate();
+    const labels = [];
+    const carteiraSerie = [];
+    const ibovSerie = [];
+
+    // Resultado acumulado da carteira: soma de lucro_total de saidas no mes, dia a dia
+    const investidoBase = getCarteira().reduce((a,p)=>a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0),0) || 1;
+
+    let acumuladoCarteira = 0;
+    for (let d = 1; d <= diasNoMes; d++) {
+      const diaStr = `${ano}-${mes}-${String(d).padStart(2,"0")}`;
+      labels.push(d);
+
+      // Soma lucro de vendas feitas nesse dia
+      operacoes.forEach(p => {
+        (p.saidas||[]).forEach(s => {
+          if (s.data === diaStr) acumuladoCarteira += parseFloat(s.preco - p.preco_medio) * parseFloat(s.qtd||0);
+        });
+      });
+      carteiraSerie.push(((acumuladoCarteira/investidoBase)*100));
+
+      // Ibov: busca preco daquele dia (so para os ultimos ~10 dias, para nao sobrecarregar)
+      if (d === diasNoMes && ibovBase) {
+        const ibovHojeQ = await fetchQuote("%5EBVSP");
+        if (ibovHojeQ) ibovSerie.push(((ibovHojeQ.price - ibovBase)/ibovBase)*100);
+        else ibovSerie.push(null);
+      } else {
+        ibovSerie.push(null); // preenchido depois de forma simplificada
+      }
+    }
+
+    // Interpola pontos nulos do ibov linearmente entre inicio (0) e o ultimo valor conhecido
+    const ultimoIbov = ibovSerie[ibovSerie.length-1];
+    if (ultimoIbov !== null) {
+      for (let i = 0; i < ibovSerie.length; i++) {
+        if (ibovSerie[i] === null) {
+          ibovSerie[i] = (ultimoIbov / (diasNoMes-1)) * i;
+        }
+      }
+    }
+
+    const corPonto = (serie, i) => i===0 ? "#5a6472" : (serie[i] >= serie[i-1] ? "#00ff88" : "#ff3355");
+    const coresCarteira = carteiraSerie.map((_,i)=>corPonto(carteiraSerie,i));
+    const coresIbov = ibovSerie.map((_,i)=>corPonto(ibovSerie,i));
+
+    if (miniChartMesInstance) miniChartMesInstance.destroy();
+    const ctx = document.getElementById("miniChartMes");
+    if (!ctx) return;
+    miniChartMesInstance = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [
+          { data: carteiraSerie, borderColor: "#3a8fd6", borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: coresCarteira, pointBorderWidth: 0, tension: 0.3 },
+          { data: ibovSerie, borderColor: "#8a929e", borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: coresIbov, pointBorderWidth: 0, tension: 0.3 }
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { enabled: false } },
+        scales: { x: { display: false }, y: { display: false } }
+      }
+    });
+  } catch(e) { console.error("Erro ao renderizar mini grafico do mes:", e); }
 }
 
 async function fetchBenchmark() {
