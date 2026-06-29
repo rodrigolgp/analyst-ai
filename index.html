@@ -1127,13 +1127,6 @@ async function renderMiniChartMes() {
     const hoje = new Date();
     const ano = hoje.getFullYear();
     const mes = String(hoje.getMonth()+1).padStart(2,"0");
-    const diaInicio = `${ano}-${mes}-01`;
-
-    // Busca preco do ibov no dia 1 do mes (base de comparacao)
-    const ibovBaseQ = await fetch(`/api/quote?ticker=%5EBVSP&data=${diaInicio}`).then(r=>r.ok?r.json():null).catch(()=>null);
-    const ibovBase = ibovBaseQ?.price;
-
-    // Monta historico diario da carteira a partir de operacoes (aproximacao: usa resultado acumulado por dia de saida)
     const diasNoMes = hoje.getDate();
     const labels = [];
     const carteiraSerie = [];
@@ -1142,12 +1135,27 @@ async function renderMiniChartMes() {
     // Resultado acumulado da carteira: soma de lucro_total de saidas no mes, dia a dia
     const investidoBase = getCarteira().reduce((a,p)=>a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0),0) || 1;
 
+    // Busca historico REAL do Ibovespa (mesmo array usado nos indicadores, com candles diarios)
+    let ibovHistDiario = [];
+    try {
+      const ibovInd = await fetchIndicators("%5EBVSP");
+      ibovHistDiario = ibovInd?.historico_recente || [];
+    } catch(e) {}
+
+    // Mapeia historico do ibov por data (formato esperado: {date ou data, close})
+    const ibovPorData = {};
+    ibovHistDiario.forEach(c => {
+      const d = (c.date || c.data || "").slice(0,10);
+      if (d) ibovPorData[d] = c.close;
+    });
+    const diaInicioStr = `${ano}-${mes}-01`;
+    const ibovBase = ibovPorData[diaInicioStr] || null;
+
     let acumuladoCarteira = 0;
     for (let d = 1; d <= diasNoMes; d++) {
       const diaStr = `${ano}-${mes}-${String(d).padStart(2,"0")}`;
       labels.push(d);
 
-      // Soma lucro de vendas feitas nesse dia
       operacoes.forEach(p => {
         (p.saidas||[]).forEach(s => {
           if (s.data === diaStr) acumuladoCarteira += parseFloat(s.preco - p.preco_medio) * parseFloat(s.qtd||0);
@@ -1155,24 +1163,20 @@ async function renderMiniChartMes() {
       });
       carteiraSerie.push(((acumuladoCarteira/investidoBase)*100));
 
-      // Ibov: busca preco daquele dia (so para os ultimos ~10 dias, para nao sobrecarregar)
-      if (d === diasNoMes && ibovBase) {
-        const ibovHojeQ = await fetchQuote("%5EBVSP");
-        if (ibovHojeQ) ibovSerie.push(((ibovHojeQ.price - ibovBase)/ibovBase)*100);
-        else ibovSerie.push(null);
+      // Ibov: usa preco real daquele dia se disponivel no historico
+      const ibovDia = ibovPorData[diaStr];
+      if (ibovDia && ibovBase) {
+        ibovSerie.push(((ibovDia - ibovBase)/ibovBase)*100);
       } else {
-        ibovSerie.push(null); // preenchido depois de forma simplificada
+        ibovSerie.push(null); // dia sem pregao (fim de semana/feriado) ou fora do historico disponivel
       }
     }
 
-    // Interpola pontos nulos do ibov linearmente entre inicio (0) e o ultimo valor conhecido
-    const ultimoIbov = ibovSerie[ibovSerie.length-1];
-    if (ultimoIbov !== null) {
-      for (let i = 0; i < ibovSerie.length; i++) {
-        if (ibovSerie[i] === null) {
-          ibovSerie[i] = (ultimoIbov / (diasNoMes-1)) * i;
-        }
-      }
+    // Preenche nulos restantes (dias sem pregao) repetindo o ultimo valor conhecido, sem inventar tendencia
+    let ultimoValido = 0;
+    for (let i = 0; i < ibovSerie.length; i++) {
+      if (ibovSerie[i] === null) ibovSerie[i] = ultimoValido;
+      else ultimoValido = ibovSerie[i];
     }
 
     const corPonto = (serie, i) => i===0 ? "#5a6472" : (serie[i] >= serie[i-1] ? "#00ff88" : "#ff3355");
@@ -1194,7 +1198,10 @@ async function renderMiniChartMes() {
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { display: false }, tooltip: { enabled: false } },
-        scales: { x: { display: false }, y: { display: false } }
+        scales: {
+          x: { display: true, grid: { display: false }, ticks: { color: "#5a6472", font: { size: 8 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 } },
+          y: { display: false }
+        }
       }
     });
   } catch(e) { console.error("Erro ao renderizar mini grafico do mes:", e); }
