@@ -1194,7 +1194,7 @@ async function renderMiniChartMes() {
       else ultimoValido = ibovSerie[i];
     }
 
-    const corPonto = (serie, i) => i===0 ? "#5a6472" : (serie[i] >= serie[i-1] ? "#00ff88" : "#ff3355");
+    const corPonto = (serie, i) => serie[i] >= 0 ? "#00ff88" : "#ff3355";
     const coresCarteira = carteiraSerie.map((_,i)=>corPonto(carteiraSerie,i));
     const coresIbov = ibovSerie.map((_,i)=>corPonto(ibovSerie,i));
 
