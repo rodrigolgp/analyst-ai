@@ -404,6 +404,7 @@ let macdChart = null;
 let indicadoresRadar = {};
 let resultadosTravas = {};
 let indicadoresGuru = {};
+let quotesRadar = {}; // debug: cotacoes do radar, acessivel no console
 
 function buildFundamentalsContext(fun) {
   if (!fun) return "";
@@ -2472,6 +2473,7 @@ async function runRadar() {
     if (i + 8 < RADAR_TICKERS.length) await new Promise(r => setTimeout(r, 150));
   }
   console.log(`Cotacoes: ${Object.keys(quotes).length}/${RADAR_TICKERS.length}`);
+  Object.assign(quotesRadar, quotes); // espelha para debug global
 
   // FILTRO DE LIQUIDEZ - minimo R$5 milhoes/dia
   const LIQUIDEZ_MINIMA = 5000000;
