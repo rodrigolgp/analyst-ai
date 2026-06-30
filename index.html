@@ -240,8 +240,10 @@ select{background:var(--card);border:1px solid var(--hi);color:var(--txt);paddin
     <div style="font-family:'Rajdhani',sans-serif;font-size:11px;font-weight:700;letter-spacing:3px;color:var(--dim);margin-bottom:12px;">CADASTRAR POSICAO</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:8px;align-items:end;">
       <div class="form-field"><label>TICKER</label><input type="text" id="pTicker" placeholder="PETR4"/></div>
-      <div class="form-field"><label>QTDE</label><input type="number" id="pQty" placeholder="100"/></div>
-      <div class="form-field"><label>PRECO MEDIO</label><input type="number" id="pPrice" placeholder="38.50" step="0.01"/></div>
+      <div class="form-field"><label>QTDE</label><input type="number" id="pQty" placeholder="100" oninput="atualizarPrecoComCustos()"/></div>
+      <div class="form-field"><label>PRECO ORDEM</label><input type="number" id="pPriceOrdem" placeholder="38.50" step="0.01" oninput="atualizarPrecoComCustos()"/></div>
+      <div class="form-field"><label>CUSTOS (R$)</label><input type="number" id="pCustos" placeholder="4.55" step="0.01" oninput="atualizarPrecoComCustos()"/></div>
+      <div class="form-field"><label>PRECO MEDIO REAL</label><input type="number" id="pPrice" placeholder="38.50" step="0.01" readonly style="background:rgba(0,255,136,.06);color:var(--green);font-weight:700;"/></div>
       <div class="form-field"><label>STOP LOSS</label><input type="number" id="pStop" placeholder="36.00" step="0.01"/></div>
       <div class="form-field"><label>ALVO</label><input type="number" id="pTarget" placeholder="42.00" step="0.01"/></div>
       <div class="form-field"><label>PRAZO (dias)</label><select id="pPrazo"><option value="5">5 dias</option><option value="10">10 dias</option><option value="15" selected>15 dias</option><option value="20">20 dias</option></select></div>
@@ -1139,25 +1141,34 @@ async function renderMiniChartMes() {
     const carteiraSerie = [];
     const ibovSerie = [];
 
-    // Base de investimento: posicoes ainda abertas HOJE + posicoes que foram TOTALMENTE encerradas
-    // dentro deste mes (capital que esteve em risco durante o periodo, nao so o que resta hoje)
-    const investidoAbertasHoje = getCarteira().reduce((a,p)=>a+(parseFloat(p.quantidade_atual)||0)*(parseFloat(p.preco_medio)||0),0);
-    const investidoEncerradasNoMes = operacoes
-      .filter(p => p.status === "ENCERRADA" && p.saidas?.some(s => s.data && s.data.slice(0,7) === `${ano}-${mes}`))
-      .reduce((a,p) => {
-        const qtdTotal = parseFloat(p.quantidade_total) || p.saidas.reduce((s,x)=>s+(parseFloat(x.qtd)||0),0);
-        return a + qtdTotal * (parseFloat(p.preco_medio)||0);
-      }, 0);
-    const investidoBase = (investidoAbertasHoje + investidoEncerradasNoMes) || 1;
+    // Todas as posicoes que estiveram em jogo neste mes (abertas hoje + encerradas dentro do mes)
+    const posicoesDoMes = operacoes.filter(p => {
+      if (p.status === "ABERTA" || p.status === "PARCIAL") return true;
+      if (p.status === "ENCERRADA") {
+        return p.saidas?.some(s => s.data && s.data.slice(0,7) === `${ano}-${mes}`);
+      }
+      return false;
+    });
 
-    // Busca historico REAL do Ibovespa (mesmo array usado nos indicadores, com candles diarios)
+    // Busca historico diario REAL de cada ativo envolvido + do Ibovespa
+    const tickersUnicos = [...new Set(posicoesDoMes.map(p => p.ticker))];
+    const historicos = {};
+    await Promise.all(tickersUnicos.map(async t => {
+      try {
+        const ind = await fetchIndicators(t);
+        historicos[t] = {};
+        (ind?.historico_recente || []).forEach(c => {
+          const d = (c.date || c.data || "").slice(0,10);
+          if (d) historicos[t][d] = c.close;
+        });
+      } catch(e) { historicos[t] = {}; }
+    }));
+
     let ibovHistDiario = [];
     try {
       const ibovInd = await fetchIndicators("%5EBVSP");
       ibovHistDiario = ibovInd?.historico_recente || [];
     } catch(e) {}
-
-    // Mapeia historico do ibov por data (formato esperado: {date ou data, close})
     const ibovPorData = {};
     ibovHistDiario.forEach(c => {
       const d = (c.date || c.data || "").slice(0,10);
@@ -1166,28 +1177,62 @@ async function renderMiniChartMes() {
     const diaInicioStr = `${ano}-${mes}-01`;
     const ibovBase = ibovPorData[diaInicioStr] || null;
 
-    let acumuladoCarteira = 0;
+    // Para cada dia do mes, calcula o valor de mercado real da carteira naquele dia
+    // (posicoes ja vendidas contam pelo preco de venda; posicoes ainda abertas usam o preco historico daquele dia)
+    let ultimoPrecoConhecido = {}; // fallback para dias sem pregao (fds/feriado)
+
     for (let d = 1; d <= diasNoMes; d++) {
       const diaStr = `${ano}-${mes}-${String(d).padStart(2,"0")}`;
       labels.push(d);
 
-      operacoes.forEach(p => {
-        (p.saidas||[]).forEach(s => {
-          if (s.data === diaStr) acumuladoCarteira += parseFloat(s.preco - p.preco_medio) * parseFloat(s.qtd||0);
-        });
-      });
-      carteiraSerie.push(((acumuladoCarteira/investidoBase)*100));
+      let valorCarteiraNoDia = 0;
+      let investidoNoDia = 0;
 
-      // Ibov: usa preco real daquele dia se disponivel no historico
+      posicoesDoMes.forEach(p => {
+        const dataEntradaStr = (p.data_entrada || "").slice(0,10);
+        // So conta essa posicao a partir do dia em que ela realmente foi comprada
+        if (dataEntradaStr && dataEntradaStr > diaStr) return; // ainda nao existia nesse dia
+
+        const qtdTotal = parseFloat(p.quantidade_total) || parseFloat(p.quantidade_atual) || 0;
+        const pm = parseFloat(p.preco_medio) || 0;
+        investidoNoDia += qtdTotal * pm;
+
+        // Verifica se ja foi vendida (parcial ou total) ate essa data
+        const vendaAteEssaDada = (p.saidas||[]).find(s => s.data === diaStr);
+        const jaEncerradaAntes = p.status === "ENCERRADA" && p.saidas?.some(s => s.data < diaStr);
+
+        if (jaEncerradaAntes) {
+          // Ja foi totalmente vendida antes desse dia: usa o valor da ultima venda (nao oscila mais)
+          const ultimaVenda = p.saidas[p.saidas.length-1];
+          valorCarteiraNoDia += qtdTotal * parseFloat(ultimaVenda.preco);
+        } else if (vendaAteEssaDada) {
+          // Foi vendida exatamente nesse dia
+          valorCarteiraNoDia += qtdTotal * parseFloat(vendaAteEssaDada.preco);
+        } else {
+          // Ainda esta aberta nesse dia: usa o preco historico real do ativo naquele dia
+          const precoHist = historicos[p.ticker]?.[diaStr];
+          if (precoHist) {
+            ultimoPrecoConhecido[p.ticker] = precoHist;
+            valorCarteiraNoDia += qtdTotal * precoHist;
+          } else if (ultimoPrecoConhecido[p.ticker]) {
+            valorCarteiraNoDia += qtdTotal * ultimoPrecoConhecido[p.ticker];
+          } else {
+            valorCarteiraNoDia += qtdTotal * pm; // fallback: preco medio se nao ha historico ainda
+          }
+        }
+      });
+
+      const pctDia = investidoNoDia > 0 ? ((valorCarteiraNoDia - investidoNoDia) / investidoNoDia) * 100 : 0;
+      carteiraSerie.push(pctDia);
+
       const ibovDia = ibovPorData[diaStr];
       if (ibovDia && ibovBase) {
         ibovSerie.push(((ibovDia - ibovBase)/ibovBase)*100);
       } else {
-        ibovSerie.push(null); // dia sem pregao (fim de semana/feriado) ou fora do historico disponivel
+        ibovSerie.push(null);
       }
     }
 
-    // Preenche nulos restantes (dias sem pregao) repetindo o ultimo valor conhecido, sem inventar tendencia
     let ultimoValido = 0;
     for (let i = 0; i < ibovSerie.length; i++) {
       if (ibovSerie[i] === null) ibovSerie[i] = ultimoValido;
@@ -3328,6 +3373,20 @@ function abrirPosicaoDaAnalise() {
   }, 300);
 }
 
+function atualizarPrecoComCustos() {
+  const qty = parseFloat(document.getElementById("pQty")?.value) || 0;
+  const precoOrdem = parsePreco(document.getElementById("pPriceOrdem")?.value) || 0;
+  const custos = parseFloat(document.getElementById("pCustos")?.value) || 0;
+  const campoFinal = document.getElementById("pPrice");
+  if (!campoFinal) return;
+  if (qty > 0 && precoOrdem > 0) {
+    const precoReal = precoOrdem + (custos / qty);
+    campoFinal.value = precoReal.toFixed(4);
+  } else if (precoOrdem > 0) {
+    campoFinal.value = precoOrdem.toFixed(2);
+  }
+}
+
 function addPosition() {
   const ticker = document.getElementById("pTicker").value.trim().toUpperCase();
   const qty = parseFloat(document.getElementById("pQty").value);
@@ -3476,15 +3535,59 @@ async function confirmarEncerramento(id) {
   }
 }
 
-async function reforcarPosicao(id) {
+function reforcarPosicao(id) {
   const op = operacoes.find(o => o.id === id);
   if (!op) return;
-  const qtd = parseFloat(prompt("Quantas acoes de "+op.ticker+" deseja adicionar?"));
-  if (!qtd || isNaN(qtd) || qtd <= 0) return;
-  const preco = parseFloat(prompt("Preco de entrada (R$):"));
-  if (!preco || isNaN(preco)) return;
+  const q = portfolioQuotes[op.ticker];
+
+  document.querySelectorAll(".reforco-modal").forEach(e => e.remove());
+  const modal = document.createElement("div");
+  modal.className = "reforco-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;";
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);padding:24px;width:380px;max-width:95vw;">
+    <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--blue);margin-bottom:16px;">REFORCAR POSICAO  ${op.ticker}</div>
+    <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:14px;">
+      Atual: ${op.quantidade_atual} acoes | Preco medio: R$${parseFloat(op.preco_medio).toFixed(2)}${q ? ' | Cotacao: R$'+q.price.toFixed(2) : ''}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="form-field"><label>QUANTIDADE</label><input type="number" id="rf_qty" placeholder="Ex: 10" min="1" step="1" oninput="atualizarPrecoReforco()"/></div>
+      <div class="form-field"><label>PRECO ORDEM (R$)</label><input type="number" id="rf_preco_ordem" value="${q ? q.price.toFixed(2) : ''}" step="0.01" placeholder="0.00" oninput="atualizarPrecoReforco()"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div class="form-field"><label>CUSTOS (R$)</label><input type="number" id="rf_custos" placeholder="0.00" step="0.01" value="0" oninput="atualizarPrecoReforco()"/></div>
+      <div class="form-field"><label>PRECO MEDIO REAL</label><input type="number" id="rf_preco_final" readonly style="background:rgba(0,255,136,.06);color:var(--green);font-weight:700;"/></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" onclick="confirmarReforco(${id})" style="background:rgba(0,170,255,.15);border-color:var(--blue);color:var(--blue);">CONFIRMAR REFORCO</button>
+      <button onclick="document.querySelector('.reforco-modal').remove()" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px 16px;cursor:pointer;">CANCELAR</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function atualizarPrecoReforco() {
+  const qty = parseFloat(document.getElementById("rf_qty")?.value) || 0;
+  const precoOrdem = parsePreco(document.getElementById("rf_preco_ordem")?.value) || 0;
+  const custos = parseFloat(document.getElementById("rf_custos")?.value) || 0;
+  const campoFinal = document.getElementById("rf_preco_final");
+  if (!campoFinal) return;
+  if (qty > 0 && precoOrdem > 0) {
+    campoFinal.value = (precoOrdem + (custos/qty)).toFixed(4);
+  } else if (precoOrdem > 0) {
+    campoFinal.value = precoOrdem.toFixed(2);
+  }
+}
+
+async function confirmarReforco(id) {
+  const qtd = parseFloat(document.getElementById("rf_qty")?.value);
+  const preco = parsePreco(document.getElementById("rf_preco_final")?.value);
+  if (!qtd || isNaN(qtd) || qtd <= 0) { alert("Informe a quantidade."); return; }
+  if (!preco || isNaN(preco)) { alert("Informe o preco."); return; }
+
+  const op = operacoes.find(o => o.id === id);
   const d = await reforcarOperacao(id, qtd, preco);
   if (d && d.ok) {
+    document.querySelector(".reforco-modal")?.remove();
     alert("Posicao reforcada!\n"+op.ticker+" | Novo preco medio: R$"+d.operacao.preco_medio.toFixed(2)+"\nQuantidade total: "+d.operacao.quantidade_atual+" acoes");
   }
 }
@@ -3770,7 +3873,7 @@ function registrarOperacao() {
 async function encerrarOperacao(id) {
   const op = operacoes.find(o => o.id === id);
   if (!op) return;
-  const saida = parseFloat(prompt("Preco de saida:"));
+  const saida = parsePreco(prompt("Preco de saida:"));
   if (!saida||isNaN(saida)) return;
   const motivo = prompt("Motivo (ALVO ATINGIDO / STOP ATINGIDO / SAIDA MANUAL):")||"SAIDA MANUAL";
   await venderOperacao(id, op.quantidade_atual, saida, motivo);
