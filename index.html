@@ -1109,12 +1109,15 @@ async function updateBenchmarkCard() {
     ["MES", (parseFloat(cartVarMes)>=0?"+":"")+cartVarMes+"%", parseFloat(cartVarMes)>=0?"var(--green)":"var(--red)", "IBOV: "+(parseFloat(ibovMes)>=0?"+":"")+ibovMes+"%", ibovMes],
     ["ANUAL", (parseFloat(varGlobal)>=0?"+":"")+varGlobal+"%", parseFloat(varGlobal)>=0?"var(--green)":"var(--red)", ibovAnoVar!==null?"IBOV (no ano): "+(parseFloat(ibovAnoVar)>=0?"+":"")+ibovAnoVar+"%":"IBOV: --", ibovAnoVar],
   ];
+  const labelCard = { "HOJE": "posicoes abertas + operacoes", "MES": "acumulado do mes", "ANUAL": "acumulado do ano" };
   benchEl.innerHTML = items.map(([k,v,c,sub,ibovVal])=>
     '<div style="background:var(--card);border:1px solid var(--border);padding:12px 16px;">'+
     '<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:8px;">'+
     '<div><div style="font-family:monospace;font-size:8px;color:var(--dim);letter-spacing:1px;margin-bottom:4px;">'+k+'</div>'+
     '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+c+'">'+v+'</div>'+
-    '<div style="'+subStyle(ibovVal)+'">'+sub+'</div></div>'+
+    '<div style="'+subStyle(ibovVal)+'">'+sub+'</div>'+
+    '<div style="font-family:monospace;font-size:7px;color:var(--dim);margin-top:3px;letter-spacing:1px;">'+(labelCard[k]||"")+'</div>'+
+    '</div>'+
     (k==="MES"?'<button onclick="toggleMiniChartMes()" style="background:rgba(0,170,255,.1);border:1px solid rgba(0,170,255,.4);color:var(--blue);font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:1px;padding:8px 14px;cursor:pointer;border-radius:5px;flex-shrink:0;white-space:nowrap;" title="Ver evolucao diaria">📈 EVOLUCAO</button>':"")+
     '</div>'+
     (k==="MES"?'<div id="miniChartMesWrap" style="display:none;position:relative;width:100%;height:100px;margin-top:14px;"><canvas id="miniChartMes"></canvas></div>':"")+
@@ -3792,7 +3795,8 @@ function renderPortfolio() {
         ? '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:var(--blue)">R$ '+totalAtual.toLocaleString("pt-BR",{minimumFractionDigits:2})+'</div></div>'+
           '<div style="background:var(--card);border:1px solid '+plB+';padding:12px 18px;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">RESULTADO</div>'+
           '<div style="font-family:Rajdhani,sans-serif;font-size:20px;font-weight:700;color:'+plC+'">'+(resultado>=0?"+":"")+resultado.toLocaleString("pt-BR",{minimumFractionDigits:2})+' ('+(parseFloat(resultadoPct)>=0?"+":"")+resultadoPct+'%)</div>'+
-          '<div style="font-family:monospace;font-size:9px;color:'+(parseFloat(varDia)>=0?"var(--green)":"var(--red)")+';margin-top:3px">'+(resultadoDiaR>=0?"+":"")+resultadoDiaR.toLocaleString("pt-BR",{minimumFractionDigits:2,style:"currency",currency:"BRL"})+' ('+(parseFloat(varDia)>=0?"+":"")+varDia+'% hoje)</div></div>'
+          '<div style="font-family:monospace;font-size:9px;color:'+(parseFloat(varDia)>=0?"var(--green)":"var(--red)")+';margin-top:3px">'+(resultadoDiaR>=0?"+":"")+resultadoDiaR.toLocaleString("pt-BR",{minimumFractionDigits:2,style:"currency",currency:"BRL"})+' ('+(parseFloat(varDia)>=0?"+":"")+varDia+'% hoje)</div>'+
+          '<div style="font-family:monospace;font-size:7px;color:var(--dim);margin-top:2px;letter-spacing:1px;">posicoes abertas</div></div>'
         : '<div style="background:var(--card);border:1px solid var(--border);padding:12px 18px;opacity:.5;"><div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:3px">VALOR ATUAL</div><div style="font-family:monospace;font-size:10px;color:var(--dim)">Clique ATUALIZAR</div></div>'
       )+
       '<button onclick="atualizarCotacoesCarteira()" style="background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3);padding:12px 16px;cursor:pointer;font-family:Rajdhani,sans-serif;font-size:11px;font-weight:600;">ATUALIZAR</button>'+
