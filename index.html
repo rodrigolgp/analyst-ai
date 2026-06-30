@@ -557,7 +557,7 @@ function renderCharts(indicatorData, period) {
 
   macdChart = LightweightCharts.createChart(macdEl, { ...chartOpts, height: 100 });
 
-  const macdSeries = macdChart.addLineSeries({ color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
+  const macdSeries = addLine(macdChart, { color: "#00aaff", lineWidth: 2, priceLineVisible: false, title: "MACD" });
   const signalSeries = addLine(macdChart, { color: "#ff8800", lineWidth: 1, priceLineVisible: false, title: "Signal" });
   const histSeries = addHist(macdChart, { priceLineVisible: false, title: "Hist" });
 
