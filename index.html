@@ -401,6 +401,9 @@ let currentChartData = null;
 let mainChart = null;
 let rsiChart = null;
 let macdChart = null;
+let indicadoresRadar = {};
+let resultadosTravas = {};
+let indicadoresGuru = {};
 
 function buildFundamentalsContext(fun) {
   if (!fun) return "";
@@ -2484,7 +2487,7 @@ async function runRadar() {
 
   // PASSO 2: Indicadores do Redis (instantaneo para ativos com cache)
   document.getElementById("stepsR").innerHTML = steps(STEPS_R, 2);
-  const indicadoresRadar = {};
+  indicadoresRadar = {};
 
   for (let i = 0; i < tickersComCotacao.length; i += 10) {
     await Promise.all(tickersComCotacao.slice(i, i+10).map(async t => {
@@ -2507,7 +2510,7 @@ async function runRadar() {
   const agora = new Date();
   const foraDoPregao = agora.getDay()===0||agora.getDay()===6||agora.getHours()<10||agora.getHours()>17;
 
-  const resultadosTravas = {};
+  resultadosTravas = {};
   const aprovadosTravas = [];
   const emObservacaoTravas = [];
 
@@ -2689,7 +2692,7 @@ async function guruMontar() {
 
   // Busca indicadores de todos os ativos liquidos em paralelo (do cache Redis)
   si = 4; document.getElementById("stepsG").innerHTML = steps(STEPS_G, si);
-  const indicadoresGuru = {};
+  indicadoresGuru = {};
   for (let i = 0; i < guruTickersLiquidos.length; i += 10) {
     await Promise.all(guruTickersLiquidos.slice(i, i+10).map(async t => {
       const ind = await fetchIndicators(t);
