@@ -717,8 +717,8 @@ function calcTravas(ind, quote, forcaRelativa) {
   const i = ind.indicadores;
   const travas = {};
 
-  // ─── TRAVAS CRITICAS (todas precisam passar) ───
-  // CRITICA 1: R/R real >= 1:2 (calculado por ATR, nao mais pelo rr_natural fraco)
+  // ─── TRAVAS CRITICAS (R/R obrigatorio; das outras 3 permite 1 falha) ───
+  // CRITICA 1: R/R real >= 1.5
   const stopSug = ind.gestao_risco?.stop_sugerido;
   const alvoSug = ind.gestao_risco?.alvo_sugerido;
   const precoAtual = quote?.price || 0;
@@ -727,47 +727,42 @@ function calcTravas(ind, quote, forcaRelativa) {
     : (ind.suporte_resistencia?.rr_natural || 0);
   travas.rr = rrReal >= 1.5;
 
-  // CRITICA 2: Volume/liquidez
-  const volRatio = i.volume?.ratio || 0;
-  const volDia = quote?.volume || 0;
-  const volMedia = i.volume?.media20 || 0;
-  if (volDia > 0 && volMedia > 0) {
-    travas.volume = (volDia / volMedia) >= 0.3;
-  } else {
-    travas.volume = volRatio >= 0.5;
-  }
-
-  // CRITICA 3: Stop tecnicamente viavel (nao pode exigir perda > 6% para nao ficar apertado/largo demais)
+  // CRITICA 2: Stop tecnicamente viavel
   const distStopPct = (stopSug && precoAtual) ? ((precoAtual - stopSug) / precoAtual) * 100 : null;
   travas.stop_viavel = distStopPct === null ? true : (distStopPct > 0.5 && distStopPct <= 6);
 
-  // CRITICA 4: Tendencia nao fortemente contraria
+  // CRITICA 3: Tendencia nao fortemente contraria
   travas.tendencia = ind.tendencia !== "BAIXA_FORTE";
 
-  // CRITICA 5: Upside real até resistencia, em camadas
+  // CRITICA 4: Upside real ate resistencia >= 3%
   const distResist = ind.suporte_resistencia?.distResist || 0;
-  travas.upside = distResist >= 3; // volta para 3%, menos restritivo
+  travas.upside = distResist >= 3;
 
-  // ─── TRAVAS SECUNDARIAS (precisa de pelo menos 2 de 4) ───
+  // ─── TRAVAS SECUNDARIAS (precisa de pelo menos 2 de 5) ───
+  // Volume movido para secundaria: filtro de liquidez (R$5M/dia) ja protege contra iliquidez real
+  // Volume fraco penaliza confianca mas nao reprova sozinho
+  const volRatio = i.volume?.ratio || 0;
+  const volDia = quote?.volume || 0;
+  const volMedia = i.volume?.media20 || 0;
   const secundarias = {};
+  secundarias.volume = volDia > 0 && volMedia > 0 ? (volDia/volMedia) >= 0.3 : volRatio >= 0.3;
+  secundarias.volume_forte = volDia > 0 && volMedia > 0 ? (volDia/volMedia) >= 1.2 : volRatio >= 1.0;
   secundarias.rsi = (i.rsi?.rsi_ponderado || 50) >= 25 && (i.rsi?.rsi_ponderado || 50) <= 75;
   secundarias.macd = i.macd?.crossover !== "CRUZAMENTO_BAIXA";
   secundarias.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
-  secundarias.volume_forte = volMedia > 0 && volDia > 0 ? (volDia/volMedia) >= 1.2 : volRatio >= 1.0;
 
   Object.assign(travas, secundarias);
 
-  const criticas = ["rr","volume","stop_viavel","tendencia","upside"];
+  const criticas = ["rr","stop_viavel","tendencia","upside"];
   const criticasFalhas = criticas.filter(k => !travas[k]);
   const secundariasAprovadas = Object.keys(secundarias).filter(k => secundarias[k]).length;
 
-  // Regra calibrada: RR e Volume sao SEMPRE obrigatorios (protecao de capital).
-  // Das outras 3 criticas (stop_viavel, tendencia, upside), permite 1 falha.
-  // Isso evita rigor multiplicativo (exigir 5 criticas simultaneas e quase impossivel).
-  const rrEVolumeOk = travas.rr && travas.volume;
+  // R/R e sempre obrigatorio. Das outras 3 criticas permite 1 falha.
+  // Secundarias: precisa de pelo menos 2 de 5 (volume agora conta aqui).
+  const rrOk = travas.rr;
   const outrasCriticas = ["stop_viavel","tendencia","upside"];
   const outrasFalhas = outrasCriticas.filter(k => !travas[k]);
-  const passouCriticas = rrEVolumeOk && outrasFalhas.length <= 1;
+  const passouCriticas = rrOk && outrasFalhas.length <= 1;
   const passouSecundarias = secundariasAprovadas >= 2;
   const passou = passouCriticas && passouSecundarias;
 
@@ -2520,7 +2515,7 @@ async function runRadar() {
     const ind = indicadoresRadar[t];
     const q = quotes[t];
     const forcaRel = ibovHistRecente ? calcForcaRelativa(ind, ibovHistRecente) : null;
-    const trava = calcTravas(ind, foraDoPregao ? null : q, forcaRel);
+    const trava = calcTravas(ind, q, forcaRel); // sempre passa q - volume do dia real disponivel mesmo fora do pregao
     resultadosTravas[t] = trava;
     const score = ind?.confluencia?.score || 0;
 
