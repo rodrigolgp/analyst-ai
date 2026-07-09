@@ -885,22 +885,23 @@ async function renderPatrimonioConsolidado() {
 
   // Consolidado
   const totalInv = totalTradeInv + totalRendaInv;
-  const totalAtual = totalTradeAtual + totalRendaAtual;
+  const totalAtual = totalTradeAtual + totalRendaAtual + totalDividendos;
   const resTotal = totalAtual - totalInv;
   const resTotalPct = totalInv > 0 ? (resTotal/totalInv*100).toFixed(2) : "0.00";
   const resC = resTotal >= 0 ? "var(--green)" : "var(--red)";
 
-  // Resultado GLOBAL do trade (inclui posicoes encerradas + lucro ja realizado)
+  // Resultado GLOBAL do trade (inclui posicoes encerradas + lucro ja realizado + dividendos da carteira)
   const todasOpsTrade = operacoes;
   const investidoGlobalTrade = todasOpsTrade.reduce((a,p) => {
     const qtdTotal = parseFloat(p.quantidade_total) || parseFloat(p.quantidade_atual) || 0;
     return a + qtdTotal * (parseFloat(p.preco_medio) || 0);
   }, 0);
   const lucroRealizadoGlobalTrade = todasOpsTrade.reduce((a,p) => a + (parseFloat(p.lucro_total) || 0), 0);
-  const plGlobalTrade = lucroRealizadoGlobalTrade + resTradeR;
+  const dividendosCarteira = todasOpsTrade.reduce((a,p) => a + (p.dividendos||[]).reduce((s,d)=>s+(parseFloat(d.total)||0),0), 0);
+  const plGlobalTrade = lucroRealizadoGlobalTrade + resTradeR + dividendosCarteira;
 
-  // Consolidado GLOBAL (trade global + renda atual)
-  const resGlobalTotal = plGlobalTrade + resRendaR;
+  // Consolidado GLOBAL (trade global + renda atual + dividendos renda)
+  const resGlobalTotal = plGlobalTrade + resRendaR + totalDividendos;
   const investidoGlobalTotal = investidoGlobalTrade + totalRendaInv;
   const resGlobalTotalPct = investidoGlobalTotal > 0 ? (resGlobalTotal/investidoGlobalTotal*100).toFixed(2) : "0.00";
   const resGlobalC = resGlobalTotal >= 0 ? "var(--green)" : "var(--red)";
