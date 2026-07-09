@@ -3915,7 +3915,7 @@ function renderPortfolio() {
           '<td style="color:var(--blue);font-weight:600">'+( atual?cur+' '+atual.toFixed(2):"--")+'</td>'+
           '<td style="color:var(--cyan)">'+( totalA?"R$ "+totalA.toLocaleString("pt-BR",{minimumFractionDigits:2}):"--")+'</td>'+
           '<td style="font-weight:700;color:'+plColor+'">'+( plP?(parseFloat(plP)>=0?"+":"")+plP+"%":"--")+'</td>'+
-          '<td style="font-weight:700;font-family:monospace;font-size:11px;">'+(atual?(()=>{
+          '<td style="font-weight:700;font-family:monospace;font-size:11px;white-space:nowrap;">'+(atual?(()=>{
             const total=ganhoCapital+divTotal;
             return '<span style="color:'+(total>=0?"var(--green)":"var(--red)")+'">'+( total>=0?"+":"")+total.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+'</span>';
           })():"--")+'</td>'+
