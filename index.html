@@ -3868,7 +3868,9 @@ function renderPortfolio() {
         const prev = q && q.prevClose ? q.prevClose : atual;
         const totalP = qty * pm;
         const totalA = atual ? qty * atual : null;
-        const plP = atual ? ((atual - pm) / pm * 100).toFixed(2) : null;
+        const divTotal = (p.dividendos||[]).reduce((a,d)=>a+(parseFloat(d.total)||0),0);
+        const ganhoCapital = atual ? (atual - pm) * qty : 0;
+        const plP = atual ? ((ganhoCapital + divTotal) / (pm * qty) * 100).toFixed(2) : null;
         const plH = atual && prev ? ((atual - prev) / prev * 100).toFixed(2) : null;
         const cur = (p.mercado||"B3").includes("NYSE") || (p.mercado||"B3").includes("NASDAQ") ? "US$" : "R$";
         const stopN = p.stop_loss || null;
@@ -3893,11 +3895,9 @@ function renderPortfolio() {
           '<td style="color:var(--blue);font-weight:600">'+( atual?cur+' '+atual.toFixed(2):"--")+'</td>'+
           '<td style="color:var(--cyan)">'+( totalA?"R$ "+totalA.toLocaleString("pt-BR",{minimumFractionDigits:2}):"--")+'</td>'+
           '<td style="font-weight:700;color:'+plColor+'">'+( plP?(parseFloat(plP)>=0?"+":"")+plP+"%":"--")+'</td>'+
-          '<td style="font-weight:600;color:var(--yellow);font-family:monospace;font-size:11px;">'+(()=>{const divTotal=(p.dividendos||[]).reduce((a,d)=>a+(parseFloat(d.total)||0),0);return divTotal>0?"+"+divTotal.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}):"--";})()+'</td>'+
-          '<td style="font-weight:700;font-family:monospace;font-size:11px;">'+(atual&&pm?(()=>{
-            const ganho=(atual-pm)*qty;
-            const divTotal=(p.dividendos||[]).reduce((a,d)=>a+(parseFloat(d.total)||0),0);
-            const total=ganho+divTotal;
+          '<td style="font-weight:600;color:var(--yellow);font-family:monospace;font-size:11px;">'+(divTotal>0?"+"+divTotal.toLocaleString("pt-BR",{style:"currency",currency:"BRL"}):"--")+'</td>'+
+          '<td style="font-weight:700;font-family:monospace;font-size:11px;">'+(atual?(()=>{
+            const total=ganhoCapital+divTotal;
             return '<span style="color:'+(total>=0?"var(--green)":"var(--red)")+'">'+( total>=0?"+":"")+total.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+'</span>';
           })():"--")+'</td>'+
           '<td style="color:'+hColor+'">'+( plH?(parseFloat(plH)>=0?"+":"")+plH+"%":"--")+'</td>'+
