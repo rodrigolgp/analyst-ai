@@ -3538,6 +3538,62 @@ async function confirmarEncerramento(id) {
   }
 }
 
+function registrarDivCarteira(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+
+  document.querySelectorAll(".div-modal").forEach(e => e.remove());
+  const modal = document.createElement("div");
+  modal.className = "div-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;";
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid var(--border);padding:24px;width:340px;max-width:95vw;">
+    <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--green);margin-bottom:16px;">+DIV  ${op.ticker}</div>
+    <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:14px;">
+      ${op.quantidade_atual} acoes em carteira
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div class="form-field"><label>VALOR POR ACAO (R$)</label><input type="number" id="div_valor" placeholder="0.10" step="0.01" oninput="atualizarTotalDiv(${op.quantidade_atual})"/></div>
+      <div class="form-field"><label>TOTAL ESTIMADO</label><input type="number" id="div_total" readonly style="background:rgba(0,255,136,.06);color:var(--green);font-weight:700;"/></div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <div class="form-field"><label>DATA DE PAGAMENTO</label><input type="date" id="div_data" value="${new Date().toISOString().split('T')[0]}"/></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn" onclick="confirmarDivCarteira(${id})" style="background:rgba(0,255,136,.15);border-color:var(--green);color:var(--green);">REGISTRAR</button>
+      <button onclick="document.querySelector('.div-modal').remove()" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px 16px;cursor:pointer;">CANCELAR</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function atualizarTotalDiv(qty) {
+  const valor = parseFloat(document.getElementById("div_valor")?.value) || 0;
+  const total = document.getElementById("div_total");
+  if (total) total.value = (valor * qty).toFixed(2);
+}
+
+async function confirmarDivCarteira(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+  const valor = parsePreco(document.getElementById("div_valor")?.value);
+  const data = document.getElementById("div_data")?.value;
+  if (!valor || isNaN(valor) || valor <= 0) { alert("Informe o valor por acao."); return; }
+
+  const qty = parseFloat(op.quantidade_atual) || 0;
+  const total = parseFloat((valor * qty).toFixed(2));
+
+  // Registra no historico de dividendos da operacao
+  op.dividendos = op.dividendos || [];
+  op.dividendos.push({ data, valor_por_acao: valor, qty, total });
+  op.lucro_total = parseFloat(((op.lucro_total||0) + total).toFixed(2));
+
+  await apiOperacoes("POST", { acao: "EDITAR", id, lucro_total: op.lucro_total, dividendos: op.dividendos });
+  document.querySelector(".div-modal")?.remove();
+  renderPortfolio();
+  renderPatrimonioConsolidado();
+  alert(`Dividendo registrado!\n${op.ticker}: ${qty} x R$${valor.toFixed(4)} = R$${total.toFixed(2)}`);
+}
+
 function reforcarPosicao(id) {
   const op = operacoes.find(o => o.id === id);
   if (!op) return;
@@ -3846,6 +3902,7 @@ function renderPortfolio() {
           '<td style="font-family:monospace;font-size:9px;text-align:center;">'+(dataEntrada?'<div style="color:var(--dim)">'+formatarDataSegura(p.data_entrada)+'</div><div style="font-size:8px;color:'+prazoC+'">'+(diasRestantes!==null?(diasRestantes>0?diasRestantes+"d rest":"VENCIDO"):"")+'</div>':"--")+'</td>'+
           '<td><div style="display:flex;gap:4px;flex-wrap:wrap;">'+
           '<button class="btn-sm" style="background:rgba(0,170,255,.12);border:1px solid rgba(0,170,255,.3);color:var(--blue);" onclick="reforcarPosicao('+p.id+')">+</button>'+
+          '<button class="btn-sm" style="background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);color:var(--green);font-size:9px;" onclick="registrarDivCarteira('+p.id+')">+DIV</button>'+
           '<button class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.3);color:var(--yellow);" onclick="venderParcial('+p.id+')">PARCIAL</button>'+
           '<button class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.3);color:var(--red);" onclick="removePosition('+p.id+')">TOTAL</button>'+
           '<button class="btn-sm" style="background:rgba(0,200,255,.12);border:1px solid rgba(0,200,255,.3);color:var(--cyan);font-size:9px;" onclick="editarPosicao('+p.id+')">EDITAR</button>'+
