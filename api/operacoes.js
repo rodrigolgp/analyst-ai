@@ -197,6 +197,11 @@ export default async function handler(req, res) {
         if (req.body.quantidade_atual !== undefined) ops[idx].quantidade_atual = parseFloat(req.body.quantidade_atual);
         if (req.body.preco_medio !== undefined) ops[idx].preco_medio = Math.round(parseFloat(req.body.preco_medio) * 10000) / 10000;
         if (req.body.data_entrada !== undefined) ops[idx].data_entrada = req.body.data_entrada;
+        if (req.body.dividendos !== undefined) ops[idx].dividendos = req.body.dividendos;
+        if (req.body.lucro_total !== undefined && req.body.saidas === undefined) {
+          // So atualiza lucro_total diretamente se nao vier junto com saidas (que recalcula automaticamente)
+          ops[idx].lucro_total = Math.round(parseFloat(req.body.lucro_total) * 100) / 100;
+        }
         if (req.body.saidas !== undefined) {
           ops[idx].saidas = req.body.saidas;
           // Recalcula lucro total das saidas
