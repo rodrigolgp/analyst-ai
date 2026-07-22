@@ -2718,14 +2718,23 @@ function renderRadar(d, quotes, indicators) {
     const conf = op.confluencia || ind?.confluencia?.score || 0;
     const sm = op.smart_money || ind?.smart_money?.score || 0;
     const confC = conf>=75?"var(--green)":conf>=60?"#88ff44":conf>=45?"var(--yellow)":"var(--red)";
-    return '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid '+(i===0?"var(--green)":i<3?"var(--cyan)":"var(--border)")+';padding:16px 20px;margin-bottom:8px;">'
+    const rev = quotesRadar[op.ticker]?.reversao;
+    return '<div style="background:var(--card);border:1px solid '+(rev?"rgba(255,153,0,.5)":"var(--border)")+';border-left:3px solid '+(rev?"#ff9900":i===0?"var(--green)":i<3?"var(--cyan)":"var(--border)")+';padding:16px 20px;margin-bottom:8px;">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:10px;">'
       +'<div><div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">'
       +'<span style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;color:var(--dim)">#'+(op.rank||i+1)+'</span>'
-      +'<span style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--blue)">'+op.ticker+'</span>'
+      +'<span style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:'+(rev?"#ff9900":"var(--blue)")+'">'+op.ticker+'</span>'
       +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--green);background:rgba(0,255,136,.1);padding:3px 8px;">'+op.score+' pts</span>'
-      +(quotesRadar[op.ticker]?.reversao ? '<span style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;color:#ff9900;background:rgba(255,153,0,.15);padding:3px 8px;border:1px solid rgba(255,153,0,.3);">REVERSAO '+quotesRadar[op.ticker].reversao.forca+'</span>' : '')
       +'</div>'
+      +(rev?'<div style="background:rgba(255,153,0,.12);border:1px solid rgba(255,153,0,.4);padding:8px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+        +'<span style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:#ff9900;">REVERSAO '+rev.forca+'</span>'
+        +'<span style="font-family:monospace;font-size:8px;color:var(--sub);">'
+        +'RSI '+rev.rsi?.toFixed(1)
+        +(rev.criterios?.bollinger_extremo?' | Bollinger %B='+rev.pctB:'')
+        +(rev.criterios?.volume_confirmando?' | Vol '+rev.volRatio?.toFixed(2)+'x':'')
+        +(rev.criterios?.proximo_suporte?' | No suporte':'')
+        +'</span>'
+        +'</div>':"")
       +'<div style="font-family:monospace;font-size:9px;color:var(--sub);margin-bottom:6px;">'+op.nome+'</div>'
       +'<div style="display:flex;gap:12px;font-family:monospace;font-size:9px;flex-wrap:wrap;">'
       +'<span style="color:'+confC+'">CONF:'+conf+'</span>'
