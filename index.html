@@ -402,6 +402,62 @@ let mainChart = null;
 let rsiChart = null;
 let macdChart = null;
 let indicadoresRadar = {};
+let monitorList = JSON.parse(localStorage.getItem("atlas_monitor_v1")||"[]");
+
+function salvarMonitor() {
+  localStorage.setItem("atlas_monitor_v1", JSON.stringify(monitorList));
+}
+
+function adicionarMonitor(ticker, preco) {
+  // Abre modal para capturar a condicao de entrada
+  document.querySelectorAll(".monitor-modal").forEach(e=>e.remove());
+  const modal = document.createElement("div");
+  modal.className = "monitor-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;";
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid rgba(255,153,0,.4);padding:24px;width:400px;max-width:95vw;">
+    <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:#ff9900;margin-bottom:16px;">MONITORAR ${ticker}</div>
+    <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:14px;">Preco atual: R$${preco} | Defina o gatilho de entrada</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="form-field"><label>PRECO GATILHO (R$)</label><input type="number" id="mon_preco" placeholder="Ex: 21.37" step="0.01"/></div>
+      <div class="form-field"><label>VOLUME MINIMO (x media)</label><input type="number" id="mon_vol" placeholder="Ex: 1.5" step="0.1" value="1.5"/></div>
+    </div>
+    <div style="margin-bottom:16px;">
+      <div class="form-field"><label>CONDICAO (descricao livre)</label><input type="text" id="mon_cond" placeholder="Ex: Fechar 2 pregoes acima MM50 com volume" style="width:100%;box-sizing:border-box;"/></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmarMonitor('${ticker}','${preco}')" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:rgba(255,153,0,.15);border:1px solid #ff9900;color:#ff9900;padding:10px 16px;cursor:pointer;">SALVAR</button>
+      <button onclick="document.querySelector('.monitor-modal').remove()" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px 16px;cursor:pointer;">CANCELAR</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function confirmarMonitor(ticker, precoEntrada) {
+  const gatilho = parseFloat(document.getElementById("mon_preco")?.value);
+  const volMin = parseFloat(document.getElementById("mon_vol")?.value)||1.5;
+  const cond = document.getElementById("mon_cond")?.value||"";
+  if (!gatilho || isNaN(gatilho)) { alert("Informe o preco gatilho."); return; }
+
+  // Remove se ja existia
+  monitorList = monitorList.filter(m => m.ticker !== ticker);
+  monitorList.push({
+    ticker,
+    preco_entrada_ref: parseFloat(precoEntrada)||0,
+    gatilho,
+    vol_min: volMin,
+    condicao: cond,
+    data_adicao: new Date().toISOString().split("T")[0]
+  });
+  salvarMonitor();
+  document.querySelector(".monitor-modal")?.remove();
+  alert(ticker+" adicionado ao monitoramento!\nGatilho: R$"+gatilho+" | Vol >"+volMin+"x");
+}
+
+function removerMonitor(ticker) {
+  monitorList = monitorList.filter(m => m.ticker !== ticker);
+  salvarMonitor();
+  renderMonitorSection();
+}
 let resultadosTravas = {};
 let indicadoresGuru = {};
 let quotesRadar = {}; // debug: cotacoes do radar, acessivel no console
@@ -2502,7 +2558,11 @@ function renderResult(d, quote, indicators) {
       '</div>';
   })() : "";
 
-  return btnAbrirPos + funRealCard + qBadge + reversaoBanner + hero + sis + trav + temp + indCard + tecFun + catRis + cen + prof + macro;
+  const btnMonitorar = d.ticker
+    ? '<button onclick="adicionarMonitor(\''+d.ticker+'\',\''+( d.preco||"")+'\')" style="width:100%;background:rgba(255,153,0,.08);border:1px solid rgba(255,153,0,.3);color:#ff9900;padding:10px;font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;margin-bottom:8px;">MONITORAR | AGUARDAR GATILHO</button>'
+    : "";
+
+  return btnAbrirPos + btnMonitorar + funRealCard + qBadge + reversaoBanner + hero + sis + trav + temp + indCard + tecFun + catRis + cen + prof + macro;
 }
 
 async function atualizarCotacoesCarteira() {
@@ -2757,7 +2817,49 @@ function renderRadar(d, quotes, indicators) {
       +'<span style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:var(--yellow)">'+o.ticker+'</span>'
       +'<span style="font-family:monospace;font-size:9px;color:var(--sub)">'+(o.motivo_pendente||o.quando_entrar||"")+'</span></div>').join("")+'</div>' : '';
   const evitar = (d.evitar||[]).filter(Boolean).length ? '<div style="margin-top:16px;font-family:monospace;font-size:9px;color:var(--red)">EVITAR: '+(d.evitar||[]).filter(Boolean).join(", ")+'</div>' : '';
-  return macro + (ops||'<div style="text-align:center;font-family:monospace;font-size:10px;color:var(--dim);padding:20px">Nenhuma oportunidade identificada hoje.</div>') + obs + evitar;
+  const monitorSection = renderMonitorSection();
+  return macro + (ops||'<div style="text-align:center;font-family:monospace;font-size:10px;color:var(--dim);padding:20px">Nenhuma oportunidade identificada hoje.</div>') + obs + evitar + monitorSection;
+}
+
+function renderMonitorSection() {
+  if (!monitorList.length) return "";
+  const hoje = new Date().toISOString().split("T")[0];
+  return '<div style="margin-top:20px;">'
+    +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:#ff9900;margin-bottom:10px;">AGUARDANDO GATILHO ('+monitorList.length+')</div>'
+    +monitorList.map(m => {
+      const q = quotesRadar[m.ticker];
+      const precoAtual = q?.price;
+      const distGatilho = precoAtual && m.gatilho
+        ? ((m.gatilho - precoAtual) / precoAtual * 100).toFixed(2)
+        : null;
+      const volAtual = indicadoresRadar[m.ticker]?.indicadores?.volume?.ratio;
+      const volOk = volAtual && volAtual >= m.vol_min;
+      const precoOk = precoAtual && precoAtual >= m.gatilho;
+      const gatilhoAtivo = precoOk && volOk;
+
+      return '<div style="background:var(--card);border:1px solid '+(gatilhoAtivo?"rgba(0,255,136,.5)":"rgba(255,153,0,.3)")+';padding:14px 16px;margin-bottom:6px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
+        +'<div style="display:flex;align-items:center;gap:10px;">'
+        +'<span style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:'+(gatilhoAtivo?"var(--green)":"#ff9900")+'">'+m.ticker+'</span>'
+        +(gatilhoAtivo?'<span style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;background:rgba(0,255,136,.2);border:1px solid var(--green);color:var(--green);padding:2px 8px;">GATILHO ATIVO</span>':"")
+        +'</div>'
+        +'<div style="text-align:right;">'
+        +(precoAtual?'<div style="font-family:monospace;font-size:11px;font-weight:700;">R$'+precoAtual.toFixed(2)+'</div>':"")
+        +(distGatilho!==null?'<div style="font-family:monospace;font-size:9px;color:'+(parseFloat(distGatilho)<=0?"var(--green)":"var(--yellow)")+';">'+(parseFloat(distGatilho)<=0?"acima":"falta ")+Math.abs(distGatilho)+"% do gatilho</div>":'')
+        +'</div></div>'
+        +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-bottom:6px;">'
+        +'Gatilho: R$'+m.gatilho+' | Vol min: '+m.vol_min+'x'
+        +(volAtual?' | Vol atual: '+volAtual+'x '+(volOk?'OK':'abaixo'):'')
+        +'</div>'
+        +(m.condicao?'<div style="font-family:monospace;font-size:8px;color:var(--sub);margin-bottom:8px;">'+m.condicao+'</div>':"")
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        +(gatilhoAtivo?'<button onclick="document.getElementById(\'tickerInput\').value=\''+m.ticker+'\';showTab(\'analisar\');setTimeout(()=>analyze(),100);" style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;color:var(--green);background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);padding:5px 10px;cursor:pointer;">ANALISAR AGORA</button>':"")
+        +'<button onclick="removerMonitor(\''+m.ticker+'\')" style="font-family:Rajdhani,sans-serif;font-size:10px;color:var(--dim);background:transparent;border:1px solid var(--border);padding:5px 10px;cursor:pointer;">REMOVER</button>'
+        +'</div>'
+        +'<div style="font-family:monospace;font-size:7px;color:var(--dim);margin-top:6px;">Adicionado: '+m.data_adicao+'</div>'
+        +'</div>';
+    }).join("")
+    +'</div>';
 }
 
 async function guruMontar() {
