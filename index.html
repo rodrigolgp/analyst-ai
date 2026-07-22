@@ -1833,13 +1833,17 @@ function buildIndicatorsContext(ind) {
   // Detector de reversao
   const reversao = detectarSetupReversao(ind);
   const reversaoCtx = reversao
-    ? "\n\n⚠ "+reversao.aviso+"\n"
-    + "IMPORTANTE: Este ativo esta em SETUP DE REVERSAO, nao de continuacao. "
-    + "As travas de tendencia (MACD negativo, preco abaixo das medias) sao ESPERADAS neste setup - nao reprove automaticamente por isso. "
-    + "Avalie se o risco/retorno justifica entrada contrarian com stop no suporte.\n"
+    ? "\n\n🔄 SETUP DE REVERSAO "+reversao.forca+" DETECTADO ("+reversao.pontos+" criterios):\n"
+    + reversao.aviso+"\n"
+    + "INSTRUCAO CRITICA: Este e um setup CONTRARIAN, nao de tendencia.\n"
+    + "- NAO reprove pelo MACD negativo, tendencia de baixa ou preco abaixo das medias - sao ESPERADOS neste padrao\n"
+    + "- O sinal de COMPRA aqui vem do RSI extremo + Bollinger + Volume, nao da tendencia\n"
+    + "- O campo 'res' (analise tecnica exibida na tela) DEVE mencionar explicitamente 'SETUP REVERSAO' e os criterios detectados\n"
+    + "- Stop obrigatorio no suporte ("+ind.suporte_resistencia?.suporte+"), nao no ATR que pode ser muito largo\n"
     : "";
 
-  return "=== INDICADORES MATEMATICOS (200 dias reais) ===\n"
+  return reversaoCtx  // aviso de reversao PRIMEIRO, antes de tudo
+    + "=== INDICADORES MATEMATICOS (200 dias reais) ===\n"
     + "PRECO: "+ind.preco_atual+" | HOJE: "+ind.variacao_hoje+"%\n"
     + "TENDENCIA: "+ind.tendencia+"\n"
     + "\nCONFLUENCIA: "+conf?.score+"/100 | "+conf?.direcao+"\n"
@@ -1860,7 +1864,6 @@ function buildIndicatorsContext(ind) {
     + "\nSMART MONEY: Score="+sm?.score+"/100 | "+sm?.sinal+" | MFI="+sm?.money_flow_index+"%\n"
     + (sm?.score>=70?"*** ACUMULACAO INSTITUCIONAL DETECTADA ***\n":"")
     + "\nKELLY: Half Kelly="+kelly?.half_kelly+"% | "+kelly?.explicacao+"\n"
-    + reversaoCtx
     + "\nUSE ESSES DADOS como base. Nao estime - use os numeros reais.";
 }
 
