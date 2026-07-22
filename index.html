@@ -2344,6 +2344,24 @@ function renderResult(d, quote, indicators) {
       +'</div></div>';
   }
 
+  // Banner de reversao — aparece se detectado pelo sistema matematico
+  const reversaoDetectada = indicators ? detectarSetupReversao(indicators) : null;
+  const reversaoBanner = reversaoDetectada
+    ? '<div style="background:linear-gradient(135deg,rgba(255,153,0,.15),rgba(255,100,0,.08));border:2px solid rgba(255,153,0,.6);padding:16px 20px;margin-bottom:14px;">'
+      +'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:#ff9900;">REVERSAO</div>'
+      +'<div style="background:rgba(255,153,0,.2);border:1px solid rgba(255,153,0,.5);padding:3px 10px;font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:#ff9900;">'+reversaoDetectada.forca+'</div>'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--sub);flex:1;min-width:200px;">'
+      +'RSI '+reversaoDetectada.rsi?.toFixed(1)+' sobrevendido'
+      +(reversaoDetectada.criterios.bollinger_extremo?' | Bollinger extremo (%B='+reversaoDetectada.pctB+')':'')
+      +(reversaoDetectada.criterios.volume_confirmando?' | Volume '+reversaoDetectada.volRatio?.toFixed(2)+'x confirmando':'')
+      +(reversaoDetectada.criterios.proximo_suporte?' | Proximo ao suporte':'')
+      +'</div>'
+      +'<div style="font-family:monospace;font-size:8px;color:rgba(255,153,0,.7);">Setup contrarian - score tecnico nao reflete potencial de reversao</div>'
+      +'</div>'
+      +'</div>'
+    : "";
+
   const macro = d.res ? '<div style="background:linear-gradient(135deg,rgba(0,255,136,.05),rgba(0,170,255,.05));border:1px solid rgba(0,255,136,.25);padding:20px;margin-bottom:14px;font-size:13px;color:var(--sub);line-height:1.8;font-style:italic;">'
     +'<div style="font-family:monospace;font-size:9px;color:var(--green);letter-spacing:2px;margin-bottom:10px;font-style:normal">RESUMO EXECUTIVO</div>'
     +'"'+String(d.res||"")+'"\n</div>' : "";
@@ -2484,7 +2502,7 @@ function renderResult(d, quote, indicators) {
       '</div>';
   })() : "";
 
-  return btnAbrirPos + funRealCard + qBadge + hero + sis + trav + temp + indCard + tecFun + catRis + cen + prof + macro;
+  return btnAbrirPos + funRealCard + qBadge + reversaoBanner + hero + sis + trav + temp + indCard + tecFun + catRis + cen + prof + macro;
 }
 
 async function atualizarCotacoesCarteira() {
