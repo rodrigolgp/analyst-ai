@@ -1764,6 +1764,53 @@ function steps(arr, current) {
   ).join("");
 }
 
+function detectarSetupReversao(ind) {
+  // Detecta setup classico de reversao de sobrevendido
+  // Diferente do setup de continuacao de tendencia — exige sinais especificos
+  if (!ind) return null;
+  const i = ind.indicadores;
+  const rsi = i.rsi?.rsi_ponderado;
+  const pctB = i.bollinger?.pctB;
+  const volRatio = i.volume?.ratio || 0;
+  const suporte = ind.suporte_resistencia?.suporte;
+  const preco = ind.preco_atual;
+  const distSuporteP = suporte && preco ? ((preco - suporte) / preco * 100) : null;
+
+  const criterios = {
+    rsi_sobrevendido: rsi !== null && rsi < 30,
+    rsi_extremo: rsi !== null && rsi < 25,
+    bollinger_abaixo: pctB !== null && pctB < 0,
+    bollinger_extremo: pctB !== null && pctB < -1,
+    volume_confirmando: volRatio >= 1.2,
+    proximo_suporte: distSuporteP !== null && distSuporteP < 5,
+  };
+
+  const pontos =
+    (criterios.rsi_sobrevendido ? 1 : 0) +
+    (criterios.rsi_extremo ? 1 : 0) +        // bonus por extremo
+    (criterios.bollinger_abaixo ? 1 : 0) +
+    (criterios.bollinger_extremo ? 1 : 0) +   // bonus por extremo
+    (criterios.volume_confirmando ? 2 : 0) +  // volume e decisivo
+    (criterios.proximo_suporte ? 1 : 0);
+
+  // Precisa de pelo menos 4 pontos para ser considerado setup de reversao valido
+  if (pontos < 4) return null;
+
+  const forca = pontos >= 6 ? "FORTE" : pontos >= 5 ? "MODERADA" : "FRACA";
+
+  return {
+    detectado: true,
+    forca,
+    pontos,
+    criterios,
+    rsi,
+    pctB,
+    volRatio,
+    distSuporteP: distSuporteP?.toFixed(2),
+    aviso: "SETUP REVERSAO "+forca+" DETECTADO: RSI="+(rsi?.toFixed(1)||"?")+" sobrevendido + Bollinger %B="+(pctB?.toFixed(2)||"?")+" abaixo da banda + Volume "+(volRatio?.toFixed(2)||"?")+"x media"+(criterios.proximo_suporte ? " + proximo ao suporte" : "")+". Nao confundir com continuacao de baixa - avaliar entrada contrarian com stop no suporte."
+  };
+}
+
 function buildIndicatorsContext(ind) {
   if (!ind) return "INDICADORES: nao disponivel";
   const i = ind.indicadores;
@@ -1782,6 +1829,15 @@ function buildIndicatorsContext(ind) {
   const macdH = ind.historico_macd?.histogram || [];
   const macdAcelerou = macdH.length >= 3 ? Math.abs(macdH[macdH.length-1]?.value) > Math.abs(macdH[macdH.length-3]?.value) : false;
   const macdCruzouRecente = macdH.length >= 5 ? (macdH[macdH.length-1]?.value > 0 && macdH[macdH.length-5]?.value < 0) : false;
+
+  // Detector de reversao
+  const reversao = detectarSetupReversao(ind);
+  const reversaoCtx = reversao
+    ? "\n\n⚠ "+reversao.aviso+"\n"
+    + "IMPORTANTE: Este ativo esta em SETUP DE REVERSAO, nao de continuacao. "
+    + "As travas de tendencia (MACD negativo, preco abaixo das medias) sao ESPERADAS neste setup - nao reprove automaticamente por isso. "
+    + "Avalie se o risco/retorno justifica entrada contrarian com stop no suporte.\n"
+    : "";
 
   return "=== INDICADORES MATEMATICOS (200 dias reais) ===\n"
     + "PRECO: "+ind.preco_atual+" | HOJE: "+ind.variacao_hoje+"%\n"
@@ -1804,6 +1860,7 @@ function buildIndicatorsContext(ind) {
     + "\nSMART MONEY: Score="+sm?.score+"/100 | "+sm?.sinal+" | MFI="+sm?.money_flow_index+"%\n"
     + (sm?.score>=70?"*** ACUMULACAO INSTITUCIONAL DETECTADA ***\n":"")
     + "\nKELLY: Half Kelly="+kelly?.half_kelly+"% | "+kelly?.explicacao+"\n"
+    + reversaoCtx
     + "\nUSE ESSES DADOS como base. Nao estime - use os numeros reais.";
 }
 
@@ -2538,12 +2595,21 @@ async function runRadar() {
     resultadosTravas[t] = trava;
     const score = ind?.confluencia?.score || 0;
 
+    // Detecta setup de reversao
+    const reversao = detectarSetupReversao(ind);
+    if (reversao) resultadosTravas[t].reversao = reversao;
+
     if (q) {
       quotes[t].confluencia = score;
       quotes[t].sinal_tecnico = ind.confluencia?.direcao;
+      if (reversao) quotes[t].reversao = reversao;
     }
 
     if (trava.passou && score >= 60) {
+      aprovadosTravas.push(t);
+    } else if (reversao && reversao.forca !== "FRACA") {
+      // Setup de reversao moderado/forte entra direto nos aprovados
+      // mesmo que travas de tendencia reprovem — e exatamente esse o ponto
       aprovadosTravas.push(t);
     } else if (score >= 50 || trava.aprovadas >= 3) {
       emObservacaoTravas.push(t);
@@ -2637,6 +2703,7 @@ function renderRadar(d, quotes, indicators) {
       +'<span style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;color:var(--dim)">#'+(op.rank||i+1)+'</span>'
       +'<span style="font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;color:var(--blue)">'+op.ticker+'</span>'
       +'<span style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--green);background:rgba(0,255,136,.1);padding:3px 8px;">'+op.score+' pts</span>'
+      +(quotesRadar[op.ticker]?.reversao ? '<span style="font-family:Rajdhani,sans-serif;font-size:10px;font-weight:700;color:#ff9900;background:rgba(255,153,0,.15);padding:3px 8px;border:1px solid rgba(255,153,0,.3);">REVERSAO '+quotesRadar[op.ticker].reversao.forca+'</span>' : '')
       +'</div>'
       +'<div style="font-family:monospace;font-size:9px;color:var(--sub);margin-bottom:6px;">'+op.nome+'</div>'
       +'<div style="display:flex;gap:12px;font-family:monospace;font-size:9px;flex-wrap:wrap;">'
