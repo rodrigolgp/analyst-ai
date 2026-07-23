@@ -800,9 +800,21 @@ function calcTravas(ind, quote, forcaRelativa) {
   const volRatio = i.volume?.ratio || 0;
   const volDia = quote?.volume || 0;
   const volMedia = i.volume?.media20 || 0;
+
+  // Projeta volume do dia completo quando estiver dentro do pregao
+  // O Yahoo retorna volume parcial (acumulado ate agora), entao comparar direto com media de dias fechados e injusto
+  // Pregao B3: 10h-17h = 7h = 420 minutos
+  const agora = new Date();
+  const horaAtual = agora.getHours() + agora.getMinutes()/60;
+  const dentroDosPregao = horaAtual >= 10 && horaAtual <= 17 && agora.getDay() >= 1 && agora.getDay() <= 5;
+  const fracaoDia = dentroDosPregao ? Math.min((horaAtual - 10) / 7, 1) : 1;
+  // Volume projetado: volume atual / fracao do dia decorrida (minimo 10% para evitar divisao pequena no inicio)
+  const fracaoMinima = Math.max(fracaoDia, 0.1);
+  const volProjetado = dentroDosPregao && volDia > 0 ? volDia / fracaoMinima : volDia;
+
   const secundarias = {};
-  secundarias.volume = volDia > 0 && volMedia > 0 ? (volDia/volMedia) >= 0.3 : volRatio >= 0.3;
-  secundarias.volume_forte = volDia > 0 && volMedia > 0 ? (volDia/volMedia) >= 1.2 : volRatio >= 1.0;
+  secundarias.volume = volProjetado > 0 && volMedia > 0 ? (volProjetado/volMedia) >= 0.3 : volRatio >= 0.3;
+  secundarias.volume_forte = volProjetado > 0 && volMedia > 0 ? (volProjetado/volMedia) >= 1.2 : volRatio >= 1.0;
   secundarias.rsi = (i.rsi?.rsi_ponderado || 50) >= 25 && (i.rsi?.rsi_ponderado || 50) <= 75;
   secundarias.macd = i.macd?.crossover !== "CRUZAMENTO_BAIXA";
   secundarias.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
@@ -1914,6 +1926,7 @@ function buildIndicatorsContext(ind) {
     + "\nBOLLINGER: "+i.bollinger?.position+" | %B="+i.bollinger?.pctB+" | Squeeze: "+i.bollinger?.squeeze+"\n"
     + "VWAP: "+i.vwap?.sinal+" | Dif: "+i.vwap?.diferenca_pct+"%\n"
     + "VOLUME: "+i.volume?.status+" ("+i.volume?.ratio+"x media) | ATR: "+i.atr+"\n"
+    + (i.volume?.dado_suspeito ? "[!] DADO DE VOLUME SUSPEITO: ratio "+i.volume?.ratio+"x e anormalmente baixo para este ativo. Provavel erro do Yahoo Finance. NAO reprove por volume - confirme na B3 antes de usar.\n" : "")
     + "\nCANDLE: "+candle?.pattern+" | Bias: "+candle?.bias+" | Conf: "+candle?.confianca+"%\n"
     + "\nSUP/RES: Sup="+ind.suporte_resistencia?.suporte+" Res="+ind.suporte_resistencia?.resistencia+" R/R=1:"+ind.suporte_resistencia?.rr_natural+"\n"
     + "STOP ATR: "+ind.gestao_risco?.stop_sugerido+" | ALVO ATR: "+ind.gestao_risco?.alvo_sugerido+"\n"
@@ -2482,6 +2495,14 @@ function renderResult(d, quote, indicators) {
     +'</div>';
 
   // Card de indicadores matematicos
+  // Banner de volume suspeito
+  const volumeSuspeitoBanner = indicators?.indicadores?.volume?.dado_suspeito
+    ? '<div style="background:rgba(255,204,0,.08);border:1px solid rgba(255,204,0,.4);padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;color:var(--yellow);">DADO DE VOLUME SUSPEITO</div>'
+      +'<div style="font-family:monospace;font-size:9px;color:var(--sub);">Volume '+indicators.indicadores.volume.ratio+'x da media - provavel erro do Yahoo Finance. Confirme o volume real na B3 ou BTG antes de usar esta analise.</div>'
+      +'</div>'
+    : "";
+
   const indCard = indicators ? sec("INDICADORES MATEMATICOS REAIS")
     +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px;">'
     +[
@@ -2562,7 +2583,7 @@ function renderResult(d, quote, indicators) {
     ? '<button onclick="adicionarMonitor(\''+d.ticker+'\',\''+( d.preco||"")+'\')" style="width:100%;background:rgba(255,153,0,.08);border:1px solid rgba(255,153,0,.3);color:#ff9900;padding:10px;font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;cursor:pointer;margin-bottom:8px;">MONITORAR | AGUARDAR GATILHO</button>'
     : "";
 
-  return btnAbrirPos + btnMonitorar + funRealCard + qBadge + reversaoBanner + hero + sis + trav + temp + indCard + tecFun + catRis + cen + prof + macro;
+  return btnAbrirPos + btnMonitorar + funRealCard + qBadge + reversaoBanner + volumeSuspeitoBanner + hero + sis + trav + temp + indCard + tecFun + catRis + cen + prof + macro;
 }
 
 async function atualizarCotacoesCarteira() {
