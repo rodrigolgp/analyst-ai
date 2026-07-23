@@ -310,7 +310,13 @@ export default async function handler(req, res) {
     const precoAtual=meta.regularMarketPrice||c[n-1];
     const prev=meta.chartPreviousClose||c[n-2];
     const avgVol=v.slice(-20).reduce((a,b)=>a+b,0)/20;
-    const volRatio=parseFloat((v[n-1]/avgVol).toFixed(2));
+    const volDiaAtual = v[n-1]; // volume do ultimo candle historico (dia fechado)
+
+    // Se o volume do dia atual (historico) for muito baixo vs media,
+    // pode ser que o candle mais recente seja parcial (pregao em andamento).
+    // Nao ajustamos aqui — o frontend usa q.volume (ao vivo) para comparar.
+    // O ratio aqui e baseado no historico fechado (mais confiavel).
+    const volRatio=parseFloat((volDiaAtual/avgVol).toFixed(2));
     const resistencia=parseFloat(Math.max(...h.slice(-20)).toFixed(4));
     const suporte=parseFloat(Math.min(...l.slice(-20)).toFixed(4));
     const distResist=parseFloat(((resistencia-precoAtual)/precoAtual*100).toFixed(2));
@@ -322,7 +328,15 @@ export default async function handler(req, res) {
     else if (acimaMM50&&mm9acimaMM21) tendencia="ALTA";
     else if (!acimaMM50&&!acimaMM200&&!mm9acimaMM21) tendencia="BAIXA_FORTE";
     else if (!acimaMM50&&!mm9acimaMM21) tendencia="BAIXA";
-    const volume={atual:v[n-1],media20:Math.round(avgVol),ratio:volRatio,status:volRatio>2?"EXPLOSIVO":volRatio>1.5?"MUITO_ACIMA":volRatio>1?"ACIMA":volRatio>0.7?"NORMAL":"ABAIXO"};
+    const volume={
+      atual:v[n-1],
+      media20:Math.round(avgVol),
+      ratio:volRatio,
+      status:volRatio>2?"EXPLOSIVO":volRatio>1.5?"MUITO_ACIMA":volRatio>1?"ACIMA":volRatio>0.7?"NORMAL":"ABAIXO",
+      // dado_suspeito: volume historico do dia fechado muito baixo vs media — indica dado real incorreto
+      // Nao marca como suspeito baseado no volume ao vivo (que e parcial durante o pregao)
+      dado_suspeito: volRatio < 0.01 && avgVol > 1000000 // threshold mais conservador: apenas casos extremos
+    };
     const confluencia=calcConfluencia(rsiPonderado,macd,bollinger,volume,vwap,tendencia,candle);
     const taxaAcerto=confluencia.score>60?60:confluencia.score>50?55:45;
     const rrEst=rrNatural>0?Math.min(rrNatural,3):1.5;
