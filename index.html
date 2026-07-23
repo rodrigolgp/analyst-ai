@@ -402,10 +402,35 @@ let mainChart = null;
 let rsiChart = null;
 let macdChart = null;
 let indicadoresRadar = {};
-let monitorList = JSON.parse(localStorage.getItem("atlas_monitor_v1")||"[]");
+let monitorList = [];
+const MONITOR_KEY = "monitor_v1";
 
-function salvarMonitor() {
-  localStorage.setItem("atlas_monitor_v1", JSON.stringify(monitorList));
+async function loadMonitor() {
+  try {
+    // Tenta carregar do Redis primeiro
+    const d = await apiOperacoes("POST", { acao: "GET", key: MONITOR_KEY });
+    if (d?.data && Array.isArray(d.data)) {
+      monitorList = d.data;
+    } else {
+      // Fallback: localStorage (migra dados antigos para Redis)
+      const local = JSON.parse(localStorage.getItem("atlas_monitor_v1")||"[]");
+      if (local.length > 0) {
+        monitorList = local;
+        await salvarMonitor(); // migra para Redis
+        localStorage.removeItem("atlas_monitor_v1");
+      }
+    }
+  } catch(e) {
+    monitorList = JSON.parse(localStorage.getItem("atlas_monitor_v1")||"[]");
+  }
+}
+
+async function salvarMonitor() {
+  try {
+    await apiOperacoes("POST", { acao: "SET_RAW", key: MONITOR_KEY, data: monitorList });
+  } catch(e) {
+    localStorage.setItem("atlas_monitor_v1", JSON.stringify(monitorList));
+  }
 }
 
 function adicionarMonitor(ticker, preco) {
@@ -1413,6 +1438,7 @@ function showTab(name) {
   }
   if (name === "mapa") renderMapa();
   if (name === "historico") renderHistorico();
+  if (name === "radar") loadMonitor().then(() => renderMonitorSection && document.getElementById("resR") && (document.getElementById("resR").innerHTML += ""));
   if (name === "relatorio") {
     loadOperacoes().then(() => renderRelatorioTab());
   }
@@ -2630,6 +2656,7 @@ async function runRadar() {
   document.getElementById("loadR").style.display = "flex";
   document.getElementById("btnRadar").disabled = true;
   document.getElementById("stepsR").innerHTML = steps(STEPS_R, 0);
+  await loadMonitor(); // garante que o monitor esta carregado do Redis
 
   // Busca IBOV em paralelo
   fetchIbov();
