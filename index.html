@@ -2714,6 +2714,7 @@ async function runRadar() {
 
   resultadosTravas = {};
   const aprovadosTravas = [];
+  const quaseAprovadosTravas = [];
   const emObservacaoTravas = [];
 
   Object.keys(indicadoresRadar).forEach(t => {
@@ -2734,12 +2735,26 @@ async function runRadar() {
       if (reversao) quotes[t].reversao = reversao;
     }
 
+    // QUASE APROVADO: falhou em apenas 1 trava critica por margem pequena
+    const criticasFalhas = trava.criticasFalhas || [];
+    const rrReal = parseFloat(trava.rrReal || 0);
+    const margemRR = rrReal > 0 ? (rrReal / 1.5) : 0;
+    const quaseRR = criticasFalhas.length === 1 && criticasFalhas[0] === "rr" && margemRR >= 0.75;
+    const quaseOutro = criticasFalhas.length === 1 && criticasFalhas[0] !== "rr" && trava.secundariasAprovadas >= 3;
+    const isQuase = (quaseRR || quaseOutro) && score >= 55;
+    if (isQuase) {
+      resultadosTravas[t].quaseAprovado = true;
+      resultadosTravas[t].motivoQuase = quaseRR
+        ? "R/R "+rrReal.toFixed(2)+" (minimo 1.5 - falta "+(1.5-rrReal).toFixed(2)+")"
+        : "Trava "+criticasFalhas[0]+" por margem pequena";
+    }
+
     if (trava.passou && score >= 60) {
       aprovadosTravas.push(t);
     } else if (reversao && reversao.forca !== "FRACA") {
-      // Setup de reversao moderado/forte entra direto nos aprovados
-      // mesmo que travas de tendencia reprovem — e exatamente esse o ponto
       aprovadosTravas.push(t);
+    } else if (isQuase) {
+      quaseAprovadosTravas.push(t);
     } else if (score >= 50 || trava.aprovadas >= 3) {
       emObservacaoTravas.push(t);
     }
@@ -2748,11 +2763,14 @@ async function runRadar() {
   aprovadosTravas.sort((a,b) =>
     (indicadoresRadar[b]?.confluencia?.score||0) - (indicadoresRadar[a]?.confluencia?.score||0)
   );
+  quaseAprovadosTravas.sort((a,b) =>
+    (indicadoresRadar[b]?.confluencia?.score||0) - (indicadoresRadar[a]?.confluencia?.score||0)
+  );
   emObservacaoTravas.sort((a,b) =>
     (indicadoresRadar[b]?.confluencia?.score||0) - (indicadoresRadar[a]?.confluencia?.score||0)
   );
 
-  console.log(`Travas: ${aprovadosTravas.length} aprovados de ${Object.keys(indicadoresRadar).length}`);
+  console.log(`Travas: ${aprovadosTravas.length} aprovados | ${quaseAprovadosTravas.length} quase | de ${Object.keys(indicadoresRadar).length}`);
 
   // Calcula Indice Medo/Ganancia
   const mg = calcMedoGanancia(ibovCache, indicadoresRadar, aprovadosTravas.length, Object.keys(indicadoresRadar).length);
@@ -2780,7 +2798,8 @@ async function runRadar() {
       'Nenhum passou nos criterios minimos hoje.<br>' +
       '<span style="color:var(--yellow)">Melhor decisao: aguardar. Caixa tambem e posicao.</span>' +
       '</div>' +
-      (emObservacaoTravas.length ? '<div style="margin-top:14px;font-family:monospace;font-size:9px;color:var(--dim)">Em observacao: '+emObservacaoTravas.slice(0,8).join(", ")+'</div>' : '') +
+      (quaseAprovadosTravas.length ? '<div style="margin-top:14px;font-family:monospace;font-size:9px;color:var(--cyan)">Quase aprovados: '+quaseAprovadosTravas.slice(0,8).map(t=>{const m=resultadosTravas[t]?.motivoQuase||""; return t+(m?" ("+m+")":"");}).join(" | ")+'</div>' : '') +
+      (emObservacaoTravas.length ? '<div style="margin-top:8px;font-family:monospace;font-size:9px;color:var(--dim)">Em observacao: '+emObservacaoTravas.slice(0,8).join(", ")+'</div>' : '') +
       '</div>';
     document.getElementById("resR").style.display = "block";
     document.getElementById("btnRadar").disabled = false;
@@ -2790,7 +2809,7 @@ async function runRadar() {
   // PASSO 5: ATLAS analisa os aprovados
   document.getElementById("stepsR").innerHTML = steps(STEPS_R, 5);
   try {
-    const data = await callClaude(buildRadarPrompt(candidatosFinais, quotes, indicadoresRadar, emObservacaoTravas.slice(0,5), resultadosTravas));
+    const data = await callClaude(buildRadarPrompt(candidatosFinais, quotes, indicadoresRadar, [...quaseAprovadosTravas.slice(0,5), ...emObservacaoTravas.slice(0,3)], resultadosTravas));
     document.getElementById("loadR").style.display = "none";
     // Widget Medo/Ganancia
     const mgWidget = window._medoGanancia ? (() => {
@@ -2864,9 +2883,37 @@ function renderRadar(d, quotes, indicators) {
     +(d.observacao||[]).map(o=>'<div style="background:var(--card);border:1px solid rgba(255,204,0,.2);padding:12px 16px;margin-bottom:6px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">'
       +'<span style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:var(--yellow)">'+o.ticker+'</span>'
       +'<span style="font-family:monospace;font-size:9px;color:var(--sub)">'+(o.motivo_pendente||o.quando_entrar||"")+'</span></div>').join("")+'</div>' : '';
+
+  // Secao QUASE APROVADOS — matematica, nao depende da IA
+  const quaseSection = quaseAprovadosTravas.length > 0
+    ? '<div style="margin-top:20px;">'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">QUASE APROVADOS ('+quaseAprovadosTravas.length+') - 1 TRAVA POR MARGEM PEQUENA</div>'
+      +quaseAprovadosTravas.map(t => {
+        const q = quotesRadar[t];
+        const ind = indicadoresRadar[t];
+        const tr = resultadosTravas[t];
+        const score = ind?.confluencia?.score||0;
+        return '<div style="background:var(--card);border:1px solid rgba(0,200,255,.25);border-left:3px solid var(--cyan);padding:12px 16px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">'
+          +'<div>'
+          +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+          +'<span style="font-family:Rajdhani,sans-serif;font-size:18px;font-weight:700;color:var(--cyan)">'+t+'</span>'
+          +'<span style="font-family:monospace;font-size:9px;background:rgba(0,200,255,.1);padding:2px 6px;color:var(--cyan);">'+score+' pts</span>'
+          +'</div>'
+          +'<div style="font-family:monospace;font-size:8px;color:var(--red);">Reprovado por: '+( tr?.motivoQuase||"")+'</div>'
+          +'<div style="font-family:monospace;font-size:8px;color:var(--dim);margin-top:2px;">'+(tr?.aprovadas||0)+'/'+( tr?.total||9)+' travas OK</div>'
+          +'</div>'
+          +'<div style="display:flex;align-items:center;gap:12px;">'
+          +(q?'<div style="text-align:right;"><div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700">R$'+q.price.toFixed(2)+'</div><div style="font-family:monospace;font-size:9px;color:'+(parseFloat(q.change)>=0?"var(--green)":"var(--red)")+'">'+(parseFloat(q.change)>=0?"+":"")+q.change+'%</div></div>':"")
+          +'<button onclick="document.getElementById(\'tickerInput\').value=\''+t+'\';showTab(\'analisar\');setTimeout(()=>analyze(),100);" style="font-family:Rajdhani,sans-serif;font-size:9px;font-weight:700;color:var(--cyan);background:rgba(0,200,255,.1);border:1px solid rgba(0,200,255,.3);padding:5px 10px;cursor:pointer;">ANALISAR</button>'
+          +'</div>'
+          +'</div>';
+      }).join("")
+      +'</div>'
+    : "";
+
   const evitar = (d.evitar||[]).filter(Boolean).length ? '<div style="margin-top:16px;font-family:monospace;font-size:9px;color:var(--red)">EVITAR: '+(d.evitar||[]).filter(Boolean).join(", ")+'</div>' : '';
   const monitorSection = renderMonitorSection();
-  return macro + (ops||'<div style="text-align:center;font-family:monospace;font-size:10px;color:var(--dim);padding:20px">Nenhuma oportunidade identificada hoje.</div>') + obs + evitar + monitorSection;
+  return macro + (ops||'<div style="text-align:center;font-family:monospace;font-size:10px;color:var(--dim);padding:20px">Nenhuma oportunidade identificada hoje.</div>') + quaseSection + obs + evitar + monitorSection;
 }
 
 function renderMonitorSection() {
