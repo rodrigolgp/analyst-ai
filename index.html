@@ -486,6 +486,7 @@ function removerMonitor(ticker) {
 let resultadosTravas = {};
 let indicadoresGuru = {};
 let quotesRadar = {}; // debug: cotacoes do radar, acessivel no console
+let quaseAprovadosTravas = [];
 
 function buildFundamentalsContext(fun) {
   if (!fun) return "";
@@ -2627,7 +2628,7 @@ const RADAR_TICKERS = [
   "PETR4", "VALE3", "ITUB4", "BBDC4", "WEGE3", "BBAS3", "ABEV3", "SUZB3", "RENT3", "CSAN3",
   "PRIO3", "VBBR3", "EQTL3", "BPAC11", "ITSA4", "SANB11", "KLBN11", "RADL3", "BRSR6", "BBSE3",
   "IRBR3", "WIZC3", "PSSA3", "BMGB4", "SMFT3", "CMIG4", "CPFE3", "EGIE3", "ENGI11", "TAEE11",
-  "AURE3", "NEOE3", "RECV3", "UGPA3", "GGBR4", "USIM5", "CSNA3", "GOAU4", "CMIN3", "FESA4",
+  "AURE3", "RECV3", "UGPA3", "GGBR4", "USIM5", "CSNA3", "GOAU4", "CMIN3", "FESA4",
   "SLCE3", "SMTO3", "BEEF3", "AGRO3", "TTEN3", "JALL3", "CAML3", "MNPR3", "LREN3", "MGLU3",
   "ASAI3", "VIVA3", "ALPA4", "AMAR3", "TFCO4", "HAPV3", "RDOR3", "HYPE3", "FLRY3", "QUAL3",
   "DASA3", "SAUD3", "PNVL3", "ONCO3", "TIMS3", "VIVT3", "RAIL3", "ECOR3", "SIMH3", "CYRE3",
@@ -2714,7 +2715,7 @@ async function runRadar() {
 
   resultadosTravas = {};
   const aprovadosTravas = [];
-  const quaseAprovadosTravas = [];
+  quaseAprovadosTravas = [];
   const emObservacaoTravas = [];
 
   Object.keys(indicadoresRadar).forEach(t => {
