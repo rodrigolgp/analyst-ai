@@ -4388,6 +4388,8 @@ function renderHistorico() {
         const ultimoMotivo = op.saidas && op.saidas.length ? op.saidas[op.saidas.length-1].motivo : "--";
         const precoSaida = op.saidas && op.saidas.length ? "R$"+(parseFloat(op.saidas[op.saidas.length-1].preco)||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:4}) : "--";
         const journalCard = renderJournalCard(op);
+        const proventos = (op.dividendos||[]).reduce((a,d)=>a+(parseFloat(d.total)||0),0);
+        const lucroComProv = (op.lucro_total||0) + proventos;
         return '<tr>'+
           '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+dataSaida+'</td>'+
           '<td style="font-family:Rajdhani,sans-serif;font-size:15px;font-weight:700">'+op.ticker+'</td>'+
@@ -4395,11 +4397,15 @@ function renderHistorico() {
           '<td>'+precoSaida+'</td>'+
           '<td style="font-family:monospace;font-size:10px;color:var(--dim)">'+dias+'d</td>'+
           '<td style="font-weight:700;color:'+rc+'">'+( res>=0?"+":"")+res.toFixed(2)+'%</td>'+
-          '<td style="font-weight:600;color:'+rc+'">'+( op.lucro_total>=0?"+ R$ ":"- R$ ")+Math.abs(op.lucro_total).toFixed(2)+'</td>'+
+          '<td style="font-weight:600;color:'+(lucroComProv>=0?"var(--green)":"var(--red)")+'">'+
+            (lucroComProv>=0?"+ R$ ":"- R$ ")+Math.abs(lucroComProv).toFixed(2)+
+            (proventos>0?'<div style="font-size:8px;color:var(--yellow);">+R$'+proventos.toFixed(2)+' prov</div>':'')+
+          '</td>'+
           '<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+ultimoMotivo+'</td>'+
           '<td style="font-weight:700;color:'+gc+'">'+g+'</td>'+
-          '<td style="display:flex;gap:4px;">'+
+          '<td style="display:flex;gap:4px;flex-wrap:wrap;">'+
           (op.journal ? '<button onclick="toggleJournal('+op.id+')" class="btn-sm" style="background:rgba(0,170,255,.12);border:1px solid rgba(0,170,255,.3);color:var(--blue);">LOG</button>' : '<button onclick="gerarJournalBtn('+op.id+')" class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.3);color:var(--yellow);">JOURNAL</button>')+
+          '<button onclick="registrarProventoEncerrado('+op.id+')" class="btn-sm" style="background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.3);color:var(--green);font-size:8px;">+PROV</button>'+
           '<button onclick="deleteOperacao('+op.id+')" class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);">DEL</button>'+
           '</td></tr>'+
           (op.journal ? '<tr id="journal_'+op.id+'" style="display:none;"><td colspan="10">'+journalCard+'</td></tr>' : '');
@@ -4412,6 +4418,65 @@ function renderHistorico() {
   el.innerHTML = html;
 }
 
+
+function registrarProventoEncerrado(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+
+  document.querySelectorAll(".prov-modal").forEach(e => e.remove());
+  const modal = document.createElement("div");
+  modal.className = "prov-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;";
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid rgba(0,255,136,.3);padding:24px;width:360px;max-width:95vw;">
+    <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--green);margin-bottom:6px;">+PROVENTO  ${op.ticker}</div>
+    <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:16px;">Operacao encerrada - proventos recebidos apos a venda</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="form-field"><label>TIPO</label>
+        <select id="prov_tipo" style="width:100%;box-sizing:border-box;">
+          <option value="DIVIDENDO">Dividendo</option>
+          <option value="JCP">JCP</option>
+          <option value="RENDIMENTO">Rendimento</option>
+        </select>
+      </div>
+      <div class="form-field"><label>DATA PAGAMENTO</label><input type="date" id="prov_data" value="${new Date().toISOString().split('T')[0]}"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div class="form-field"><label>VALOR POR ACAO (R$)</label><input type="number" id="prov_valor" placeholder="0.10" step="0.01" oninput="atualizarTotalProv(${op.quantidade_total||op.quantidade_atual})"/></div>
+      <div class="form-field"><label>TOTAL</label><input type="number" id="prov_total" readonly style="background:rgba(0,255,136,.06);color:var(--green);font-weight:700;"/></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmarProventoEncerrado(${id})" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:rgba(0,255,136,.15);border:1px solid var(--green);color:var(--green);padding:10px 16px;cursor:pointer;">REGISTRAR</button>
+      <button onclick="document.querySelector('.prov-modal').remove()" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px 16px;cursor:pointer;">CANCELAR</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function atualizarTotalProv(qty) {
+  const valor = parseFloat(document.getElementById("prov_valor")?.value) || 0;
+  const total = document.getElementById("prov_total");
+  if (total) total.value = (valor * qty).toFixed(2);
+}
+
+async function confirmarProventoEncerrado(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+  const valor = parsePreco(document.getElementById("prov_valor")?.value);
+  const data = document.getElementById("prov_data")?.value;
+  const tipo = document.getElementById("prov_tipo")?.value || "DIVIDENDO";
+  if (!valor || isNaN(valor) || valor <= 0) { alert("Informe o valor por acao."); return; }
+
+  const qty = parseFloat(op.quantidade_total) || parseFloat(op.quantidade_atual) || 0;
+  const total = parseFloat((valor * qty).toFixed(2));
+
+  op.dividendos = op.dividendos || [];
+  op.dividendos.push({ data, tipo, valor_por_acao: valor, qty, total });
+
+  await apiOperacoes("POST", { acao: "EDITAR", id, dividendos: op.dividendos });
+  document.querySelector(".prov-modal")?.remove();
+  renderHistorico();
+  alert(`${tipo} registrado!\n${op.ticker}: ${qty} x R$${valor.toFixed(4)} = R$${total.toFixed(2)}`);
+}
 
 function toggleJournal(id) {
   const el = document.getElementById("journal_"+id);
