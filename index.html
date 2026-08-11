@@ -1001,7 +1001,11 @@ async function renderPatrimonioConsolidado() {
   const resGlobalC = resGlobalTotal >= 0 ? "var(--green)" : "var(--red)";
 
   // Divisao Realizado vs Nao Realizado
-  const totalRealizado = lucroRealizadoGlobalTrade;
+  // Inclui proventos de operacoes ENCERRADAS no ja realizado (dinheiro garantido recebido)
+  const dividendosEncerradas = todasOpsTrade
+    .filter(p => p.status === "ENCERRADA")
+    .reduce((a,p) => a + (p.dividendos||[]).reduce((s,d)=>s+(parseFloat(d.total)||0),0), 0);
+  const totalRealizado = lucroRealizadoGlobalTrade + dividendosEncerradas;
   const realizadoC = totalRealizado >= 0 ? "var(--green)" : "var(--red)";
 
   el.innerHTML = '<div style="background:linear-gradient(135deg,rgba(0,170,255,.06),rgba(0,255,136,.04));border:1px solid rgba(0,170,255,.2);padding:14px 18px;margin-bottom:4px;">'
@@ -1026,8 +1030,9 @@ async function renderPatrimonioConsolidado() {
     +'</div>'
     +'</div>'
     +'<div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(255,255,255,.08);">'
-    +'<div style="font-family:monospace;font-size:8px;color:var(--dim)">JA REALIZADO (vendas encerradas, garantido)</div>'
+    +'<div style="font-family:monospace;font-size:8px;color:var(--dim)">JA REALIZADO (vendas encerradas + proventos, garantido)</div>'
     +'<div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:'+realizadoC+'">'+(totalRealizado>=0?"+":"")+totalRealizado.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})+'</div>'
+    +(dividendosEncerradas>0?'<div style="font-family:monospace;font-size:8px;color:var(--yellow);margin-top:2px;">sendo +R$'+dividendosEncerradas.toFixed(2)+' de proventos pos-venda</div>':'')
     +'</div>'
     +'</div>';
 }
