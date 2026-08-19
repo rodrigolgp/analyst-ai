@@ -3167,6 +3167,96 @@ async function salvarRendaPos() {
   renderRenda();
 }
 
+function editarDividendoRenda(idx) {
+  const hist = [...rendaHistorico].sort((a,b) => new Date(b.data) - new Date(a.data));
+  const item = hist[idx];
+  if (!item) return;
+
+  document.querySelectorAll(".edit-div-modal").forEach(e => e.remove());
+  const modal = document.createElement("div");
+  modal.className = "edit-div-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;";
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid rgba(0,170,255,.3);padding:24px;width:360px;max-width:95vw;">
+    <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--blue);margin-bottom:16px;">EDITAR DIVIDENDO  ${item.ticker}</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="form-field"><label>DATA</label><input type="date" id="ediv_data" value="${item.data||''}"/></div>
+      <div class="form-field"><label>QUANTIDADE</label><input type="number" id="ediv_qty" value="${item.qty||0}" step="1"/></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+      <div class="form-field"><label>VALOR POR COTA (R$)</label><input type="number" id="ediv_valor" value="${parseFloat(item.valor_por_acao).toFixed(4)}" step="0.0001" oninput="atualizarTotalEditDiv()"/></div>
+      <div class="form-field"><label>TOTAL</label><input type="number" id="ediv_total" value="${parseFloat(item.total).toFixed(2)}" readonly style="background:rgba(0,255,136,.06);color:var(--green);font-weight:700;"/></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmarEditarDividendoRenda(${idx})" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:rgba(0,170,255,.15);border:1px solid var(--blue);color:var(--blue);padding:10px 16px;cursor:pointer;">SALVAR</button>
+      <button onclick="document.querySelector('.edit-div-modal').remove()" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px 16px;cursor:pointer;">CANCELAR</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+}
+
+function atualizarTotalEditDiv() {
+  const qty = parseFloat(document.getElementById("ediv_qty")?.value) || 0;
+  const valor = parseFloat(document.getElementById("ediv_valor")?.value) || 0;
+  const total = document.getElementById("ediv_total");
+  if (total) total.value = (qty * valor).toFixed(2);
+}
+
+async function confirmarEditarDividendoRenda(idx) {
+  const hist = [...rendaHistorico].sort((a,b) => new Date(b.data) - new Date(a.data));
+  const item = hist[idx];
+  if (!item) return;
+
+  const data = document.getElementById("ediv_data")?.value;
+  const qty = parseFloat(document.getElementById("ediv_qty")?.value) || 0;
+  const valor = parsePreco(document.getElementById("ediv_valor")?.value);
+  const total = parseFloat((qty * valor).toFixed(2));
+
+  // Atualiza no array global (busca pelo indice real no array nao ordenado)
+  const realIdx = rendaHistorico.findIndex(h =>
+    h.ticker === item.ticker && h.data === item.data && h.total === item.total
+  );
+  if (realIdx >= 0) {
+    rendaHistorico[realIdx] = { ...rendaHistorico[realIdx], data, qty, valor_por_acao: valor, total };
+  }
+
+  // Atualiza tambem o historico_div dentro da posicao correspondente
+  const pos = rendaPosicoes.find(p => p.ticker === item.ticker);
+  if (pos && pos.historico_div) {
+    const divIdx = pos.historico_div.findIndex(d => d.data === item.data && d.total === item.total);
+    if (divIdx >= 0) pos.historico_div[divIdx] = { data, valor_por_acao: valor, total, qty };
+    pos.dividendos_recebidos = pos.historico_div.reduce((a,d) => a + (parseFloat(d.total)||0), 0);
+  }
+
+  await saveRenda();
+  await saveRendaHistorico();
+  document.querySelector(".edit-div-modal")?.remove();
+  renderRenda();
+}
+
+async function removerDividendoRenda(idx) {
+  if (!confirm("Remover este dividendo?")) return;
+  const hist = [...rendaHistorico].sort((a,b) => new Date(b.data) - new Date(a.data));
+  const item = hist[idx];
+  if (!item) return;
+
+  const realIdx = rendaHistorico.findIndex(h =>
+    h.ticker === item.ticker && h.data === item.data && h.total === item.total
+  );
+  if (realIdx >= 0) rendaHistorico.splice(realIdx, 1);
+
+  // Remove tambem do historico_div da posicao
+  const pos = rendaPosicoes.find(p => p.ticker === item.ticker);
+  if (pos && pos.historico_div) {
+    const divIdx = pos.historico_div.findIndex(d => d.data === item.data && d.total === item.total);
+    if (divIdx >= 0) pos.historico_div.splice(divIdx, 1);
+    pos.dividendos_recebidos = pos.historico_div.reduce((a,d) => a + (parseFloat(d.total)||0), 0);
+  }
+
+  await saveRenda();
+  await saveRendaHistorico();
+  renderRenda();
+}
+
 async function registrarDividendo(id) {
   const pos = rendaPosicoes.find(p => p.id === id);
   if (!pos) return;
@@ -3342,15 +3432,19 @@ async function renderRenda() {
     document.getElementById("renda-historico-div").innerHTML =
       '<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--dim);margin-bottom:10px;margin-top:20px;">HISTORICO DE DIVIDENDOS</div>'
       +'<div style="overflow-x:auto;"><table class="portfolio-table"><thead><tr>'
-      +["DATA","TICKER","R$/COTA","QUANTIDADE","TOTAL"].map(h=>'<th>'+h+'</th>').join("")
+      +["DATA","TICKER","R$/COTA","QUANTIDADE","TOTAL",""].map(h=>'<th>'+h+'</th>').join("")
       +'</tr></thead><tbody>'
-      +hist.slice(0,20).map(h =>
+      +hist.slice(0,20).map((h,idx) =>
         '<tr>'
         +'<td style="font-family:monospace;font-size:9px;color:var(--dim)">'+h.data+'</td>'
         +'<td style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;color:var(--blue)">'+h.ticker+'</td>'
         +'<td style="color:var(--yellow)">R$ '+parseFloat(h.valor_por_acao).toFixed(4)+'</td>'
         +'<td style="font-family:monospace">'+h.qty+'</td>'
         +'<td style="font-weight:700;color:var(--green)">+R$ '+parseFloat(h.total).toFixed(2)+'</td>'
+        +'<td><div style="display:flex;gap:4px;">'
+        +'<button class="btn-sm" style="background:rgba(0,170,255,.1);border:1px solid rgba(0,170,255,.3);color:var(--blue);" onclick="editarDividendoRenda('+idx+')">EDITAR</button>'
+        +'<button class="btn-sm" style="background:rgba(255,51,85,.1);border:1px solid rgba(255,51,85,.3);color:var(--red);" onclick="removerDividendoRenda('+idx+')">X</button>'
+        +'</div></td>'
         +'</tr>'
       ).join("")+'</tbody></table></div>';
   }
