@@ -806,11 +806,12 @@ function calcTravas(ind, quote, forcaRelativa) {
   const resistencia = ind.suporte_resistencia?.resistencia;
   const precoAtual = quote?.price || 0;
 
-  // Alvo efetivo: menor entre ATR e resistencia (mesmo criterio da analise individual)
-  // Evita aprovar ativos com R/R "teorico" que nao se materializa por causa da resistencia
-  const alvoEfetivo = (alvoSug && resistencia)
+  // Alvo efetivo: respeita resistencia — MAS se preco ja passou ou esta muito proximo
+  // da resistencia (< 2%), usa alvo ATR pois resistencia foi rompida ou superada
+  const distParaResist = resistencia && precoAtual ? (resistencia - precoAtual) / precoAtual : 1;
+  const alvoEfetivo = (alvoSug && resistencia && distParaResist >= 0.02)
     ? Math.min(alvoSug, resistencia * 0.997)
-    : alvoSug;
+    : alvoSug; // preco acima ou colado na resist: usa ATR diretamente
 
   const rrReal = (alvoEfetivo && stopSug && precoAtual && precoAtual > stopSug)
     ? (alvoEfetivo - precoAtual) / (precoAtual - stopSug)
@@ -2022,11 +2023,12 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
     const stop = ind?.gestao_risco?.stop_sugerido;
     const alvoATR = ind?.gestao_risco?.alvo_sugerido;
     const resistRadar = ind?.suporte_resistencia?.resistencia;
-    // Alvo efetivo: respeita resistencia (mesmo criterio da analise individual)
-    const alvo = (alvoATR && resistRadar)
+    const preco = q?.price || 0;
+    // Alvo efetivo: respeita resistencia, exceto quando preco ja esta acima ou colado (< 2%)
+    const distResistRadar = resistRadar && preco ? (resistRadar - preco) / preco : 1;
+    const alvo = (alvoATR && resistRadar && distResistRadar >= 0.02)
       ? Math.min(parseFloat(alvoATR), parseFloat(resistRadar) * 0.997).toFixed(2)
       : alvoATR;
-    const preco = q?.price || 0;
     // Calcula R/R real: (alvo-preco)/(preco-stop)
     const rrReal = (stop && alvo && preco)
       ? ((parseFloat(alvo)-preco)/(preco-parseFloat(stop))).toFixed(2)
