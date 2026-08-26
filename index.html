@@ -2020,7 +2020,12 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
     const conf = ind?.confluencia?.score;
     const sm = ind?.smart_money?.score;
     const stop = ind?.gestao_risco?.stop_sugerido;
-    const alvo = ind?.gestao_risco?.alvo_sugerido;
+    const alvoATR = ind?.gestao_risco?.alvo_sugerido;
+    const resistRadar = ind?.suporte_resistencia?.resistencia;
+    // Alvo efetivo: respeita resistencia (mesmo criterio da analise individual)
+    const alvo = (alvoATR && resistRadar)
+      ? Math.min(parseFloat(alvoATR), parseFloat(resistRadar) * 0.997).toFixed(2)
+      : alvoATR;
     const preco = q?.price || 0;
     // Calcula R/R real: (alvo-preco)/(preco-stop)
     const rrReal = (stop && alvo && preco)
