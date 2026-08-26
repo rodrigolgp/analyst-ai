@@ -806,12 +806,11 @@ function calcTravas(ind, quote, forcaRelativa) {
   const resistencia = ind.suporte_resistencia?.resistencia;
   const precoAtual = quote?.price || 0;
 
-  // Alvo efetivo: respeita resistencia — MAS se preco ja passou ou esta muito proximo
-  // da resistencia (< 2%), usa alvo ATR pois resistencia foi rompida ou superada
-  const distParaResist = resistencia && precoAtual ? (resistencia - precoAtual) / precoAtual : 1;
-  const alvoEfetivo = (alvoSug && resistencia && distParaResist >= 0.02)
+  // Alvo efetivo: sempre respeita a resistencia quando preco esta abaixo dela
+  // So usa ATR diretamente quando preco JA PASSOU a resistencia (rompimento confirmado)
+  const alvoEfetivo = (alvoSug && resistencia && precoAtual < resistencia)
     ? Math.min(alvoSug, resistencia * 0.997)
-    : alvoSug; // preco acima ou colado na resist: usa ATR diretamente
+    : alvoSug;
 
   const rrReal = (alvoEfetivo && stopSug && precoAtual && precoAtual > stopSug)
     ? (alvoEfetivo - precoAtual) / (precoAtual - stopSug)
@@ -828,6 +827,11 @@ function calcTravas(ind, quote, forcaRelativa) {
   // CRITICA 4: Upside real ate resistencia >= 3%
   const distResist = ind.suporte_resistencia?.distResist || 0;
   travas.upside = distResist >= 3;
+
+  // CRITICA 5: Nao sobrecomprado duplo (RSI > 70 E %B > 100 simultaneamente = risco alto de correcao)
+  const rsiCrit = ind.indicadores?.rsi?.rsi_ponderado || 50;
+  const pctBCrit = ind.indicadores?.bollinger?.pctB || 50;
+  travas.nao_sobrecomprado = !(rsiCrit > 70 && pctBCrit > 100);
 
   // ─── TRAVAS SECUNDARIAS (precisa de pelo menos 2 de 5) ───
   // Volume movido para secundaria: filtro de liquidez (R$5M/dia) ja protege contra iliquidez real
@@ -850,20 +854,21 @@ function calcTravas(ind, quote, forcaRelativa) {
   const secundarias = {};
   secundarias.volume = volProjetado > 0 && volMedia > 0 ? (volProjetado/volMedia) >= 0.3 : volRatio >= 0.3;
   secundarias.volume_forte = volProjetado > 0 && volMedia > 0 ? (volProjetado/volMedia) >= 1.2 : volRatio >= 1.0;
-  secundarias.rsi = (i.rsi?.rsi_ponderado || 50) >= 25 && (i.rsi?.rsi_ponderado || 50) <= 75;
+  const rsiVal = i.rsi?.rsi_ponderado || 50;
+  const pctB = i.bollinger?.pctB || 50;
+  secundarias.rsi = rsiVal >= 25 && rsiVal <= 75;
   secundarias.macd = i.macd?.crossover !== "CRUZAMENTO_BAIXA";
-  secundarias.bollinger = i.bollinger?.position !== "ACIMA_BANDA_SUPERIOR";
+  secundarias.bollinger = pctB <= 100; // reprova se preco acima da banda superior (%B>100)
 
   Object.assign(travas, secundarias);
 
-  const criticas = ["rr","stop_viavel","tendencia","upside"];
+  const criticas = ["rr","stop_viavel","tendencia","upside","nao_sobrecomprado"];
   const criticasFalhas = criticas.filter(k => !travas[k]);
   const secundariasAprovadas = Object.keys(secundarias).filter(k => secundarias[k]).length;
 
-  // R/R e sempre obrigatorio. Das outras 3 criticas permite 1 falha.
-  // Secundarias: precisa de pelo menos 2 de 5 (volume agora conta aqui).
+  // R/R e sempre obrigatorio. Das outras 4 criticas permite 1 falha.
   const rrOk = travas.rr;
-  const outrasCriticas = ["stop_viavel","tendencia","upside"];
+  const outrasCriticas = ["stop_viavel","tendencia","upside","nao_sobrecomprado"];
   const outrasFalhas = outrasCriticas.filter(k => !travas[k]);
   const passouCriticas = rrOk && outrasFalhas.length <= 1;
   const passouSecundarias = secundariasAprovadas >= 2;
@@ -2024,9 +2029,8 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
     const alvoATR = ind?.gestao_risco?.alvo_sugerido;
     const resistRadar = ind?.suporte_resistencia?.resistencia;
     const preco = q?.price || 0;
-    // Alvo efetivo: respeita resistencia, exceto quando preco ja esta acima ou colado (< 2%)
-    const distResistRadar = resistRadar && preco ? (resistRadar - preco) / preco : 1;
-    const alvo = (alvoATR && resistRadar && distResistRadar >= 0.02)
+    // Alvo efetivo: respeita resistencia quando preco esta abaixo dela
+    const alvo = (alvoATR && resistRadar && preco < parseFloat(resistRadar))
       ? Math.min(parseFloat(alvoATR), parseFloat(resistRadar) * 0.997).toFixed(2)
       : alvoATR;
     // Calcula R/R real: (alvo-preco)/(preco-stop)
