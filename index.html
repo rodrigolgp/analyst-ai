@@ -803,9 +803,17 @@ function calcTravas(ind, quote, forcaRelativa) {
   // CRITICA 1: R/R real >= 1.5
   const stopSug = ind.gestao_risco?.stop_sugerido;
   const alvoSug = ind.gestao_risco?.alvo_sugerido;
+  const resistencia = ind.suporte_resistencia?.resistencia;
   const precoAtual = quote?.price || 0;
-  const rrReal = (stopSug && alvoSug && precoAtual && precoAtual > stopSug)
-    ? (alvoSug - precoAtual) / (precoAtual - stopSug)
+
+  // Alvo efetivo: menor entre ATR e resistencia (mesmo criterio da analise individual)
+  // Evita aprovar ativos com R/R "teorico" que nao se materializa por causa da resistencia
+  const alvoEfetivo = (alvoSug && resistencia)
+    ? Math.min(alvoSug, resistencia * 0.997)
+    : alvoSug;
+
+  const rrReal = (alvoEfetivo && stopSug && precoAtual && precoAtual > stopSug)
+    ? (alvoEfetivo - precoAtual) / (precoAtual - stopSug)
     : (ind.suporte_resistencia?.rr_natural || 0);
   travas.rr = rrReal >= 1.5;
 
