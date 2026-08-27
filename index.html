@@ -1055,7 +1055,7 @@ async function renderPatrimonioConsolidado() {
 }
 
 // ─── BENCHMARK ────────────────────────────────────────────────
-// Data de inicio do teste — primeira operacao real
+// Data de inicio do teste - primeira operacao real
 const DATA_INICIO_TESTE = "2026-05-15";
 let ibovInicioTeste = null;
 let ibovInicioAno = null;
@@ -1084,7 +1084,7 @@ async function fetchIbovInicioAno() {
 }
 
 async function updateBenchmarkCard() {
-  // ─── RESULTADO GLOBAL (abertas + encerradas) — para cards do topo ───
+  // ─── RESULTADO GLOBAL (abertas + encerradas) - para cards do topo ───
   const todasOperacoes = operacoes; // todas, sem filtro de status
   const investidoGlobal = todasOperacoes.reduce((a,p) => {
     const qtdTotal = parseFloat(p.quantidade_total) || parseFloat(p.quantidade_atual) || 0;
@@ -1145,7 +1145,7 @@ async function updateBenchmarkCard() {
   const investidoMesTotal = investidoAbertasMes + investidoVendidoMes;
   const cartVarMes = investidoMesTotal > 0 ? ((plMesTotal / investidoMesTotal) * 100).toFixed(2) : "0.00";
 
-  // Calcula resultado do dia (vs fechamento de ontem) — posicoes abertas + vendas feitas hoje
+  // Calcula resultado do dia (vs fechamento de ontem) - posicoes abertas + vendas feitas hoje
   const totalOntem = getCarteira().reduce((a,p)=>{
     const q = portfolioQuotes[p.ticker];
     const prevClose = q && q.prevClose ? q.prevClose : (q ? q.price : parseFloat(p.preco_medio)||0);
@@ -1185,7 +1185,7 @@ async function updateBenchmarkCard() {
   const varDia = baseDiaTotal > 0 ? ((plDiaTotal / baseDiaTotal) * 100).toFixed(2) : "0.00";
   const plDia = plDiaTotal.toFixed(2);
 
-  // Atualiza barra de perfil (header) — usa GLOBAL
+  // Atualiza barra de perfil (header) - usa GLOBAL
   const barEl = document.getElementById("benchCarteiraBar");
   if (barEl && investidoGlobal > 0) {
     const cTotal = parseFloat(varGlobal) >= 0 ? "var(--green)" : "var(--red)";
@@ -1568,7 +1568,7 @@ async function loadOperacoes() {
         operacoes = d.operacoes;
 
         // Corrige dupla contagem: para posicoes ABERTAS sem saidas,
-        // lucro_total so pode vir de saidas parciais — nao de dividendos
+        // lucro_total so pode vir de saidas parciais - nao de dividendos
         let precisaSalvar = false;
         operacoes.forEach(op => {
           if ((op.status === "ABERTA") && op.dividendos?.length > 0 && !(op.saidas?.length > 0)) {
@@ -1855,10 +1855,23 @@ CRITERIOS INEGOCIAVEIS (valem para QUALQUER recomendacao):
 1. Score confluencia matematica >= 65
 2. R/R minimo 2:1 (retorno:risco), preferir 3:1
 3. Upside minimo 4% em 15 dias (operacoes acima de 6% sao PRIORIDADE ALTA)
-4. Stop maximo 5% abaixo da entrada
+4. Stop maximo 8% abaixo da entrada (ampliado para ativos volateis)
 5. Volume nao zerado no dia (exceto fora do pregao: use volume historico dos indicadores)
 6. RSI ponderado entre 25 e 75
 7. MACD sem cruzamento baixista recente
+
+INTERPRETACAO DE MEDIAS MOVEIS (horizonte 15-30 dias):
+- MM9 e MM21 sao as referencias primarias para swing trade curto prazo
+- Preco acima de MM9 e MM21 = estrutura de curto prazo POSITIVA (peso alto)
+- MM50 e MM200 sao referencias de medio/longo prazo = peso SECUNDARIO para horizonte 15-30d
+- NAO reprove um setup apenas porque preco esta abaixo de MM50/MM200 se MM9/MM21 estao alinhadas
+
+INTERPRETACAO DO SMART MONEY:
+- Smart Money Score e um indicador auxiliar, NAO criterio inegociavel
+- Score baixo (< 30) em ativos em RECUPERACAO TECNICA e esperado - o movimento ainda esta comecando
+- Score baixo e relevante apenas quando combinado com: tendencia baixista + MACD negativo + volume caindo
+- NAO use Smart Money baixo como razao principal para reprovar - use como fator de atencao
+- Score alto (>= 70) e confirmador positivo e pode elevar a confianca da recomendacao
 
 ESCALA DE PRIORIDADE POR UPSIDE:
 >= 6% em 15 dias = PRIORIDADE MAXIMA
@@ -1883,7 +1896,7 @@ function steps(arr, current) {
 
 function detectarSetupReversao(ind) {
   // Detecta setup classico de reversao de sobrevendido
-  // Diferente do setup de continuacao de tendencia — exige sinais especificos
+  // Diferente do setup de continuacao de tendencia - exige sinais especificos
   if (!ind) return null;
   const i = ind.indicadores;
   const rsi = i.rsi?.rsi_ponderado;
@@ -1980,7 +1993,8 @@ function buildIndicatorsContext(ind) {
     + "\nSUP/RES: Sup="+ind.suporte_resistencia?.suporte+" Res="+ind.suporte_resistencia?.resistencia+" R/R=1:"+ind.suporte_resistencia?.rr_natural+"\n"
     + "STOP ATR: "+ind.gestao_risco?.stop_sugerido+" | ALVO ATR: "+ind.gestao_risco?.alvo_sugerido+"\n"
     + "\nSMART MONEY: Score="+sm?.score+"/100 | "+sm?.sinal+" | MFI="+sm?.money_flow_index+"%\n"
-    + (sm?.score>=70?"*** ACUMULACAO INSTITUCIONAL DETECTADA ***\n":"")
+    + (sm?.score>=70?"*** ACUMULACAO INSTITUCIONAL DETECTADA - confirmador positivo forte ***\n":"")
+    + (sm?.score<30?"[ATENCAO] Smart Money baixo - pode indicar saida institucional OU inicio de recuperacao (comum em reversoes). Avalie em conjunto com MACD e volume antes de reprovar.\n":"")
     + "\nKELLY: Half Kelly="+kelly?.half_kelly+"% | "+kelly?.explicacao+"\n"
     + "\nUSE ESSES DADOS como base. Nao estime - use os numeros reais.";
 }
@@ -2467,7 +2481,7 @@ function renderResult(d, quote, indicators) {
       +'</div></div>';
   }
 
-  // Banner de reversao — aparece se detectado pelo sistema matematico
+  // Banner de reversao - aparece se detectado pelo sistema matematico
   const reversaoDetectada = indicators ? detectarSetupReversao(indicators) : null;
   const reversaoBanner = reversaoDetectada
     ? '<div style="background:linear-gradient(135deg,rgba(255,153,0,.15),rgba(255,100,0,.08));border:2px solid rgba(255,153,0,.6);padding:16px 20px;margin-bottom:14px;">'
@@ -2913,7 +2927,7 @@ function renderRadar(d, quotes, indicators) {
       +'<span style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:var(--yellow)">'+o.ticker+'</span>'
       +'<span style="font-family:monospace;font-size:9px;color:var(--sub)">'+(o.motivo_pendente||o.quando_entrar||"")+'</span></div>').join("")+'</div>' : '';
 
-  // Secao QUASE APROVADOS — matematica, nao depende da IA
+  // Secao QUASE APROVADOS - matematica, nao depende da IA
   const quaseSection = quaseAprovadosTravas.length > 0
     ? '<div style="margin-top:20px;">'
       +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:10px;">QUASE APROVADOS ('+quaseAprovadosTravas.length+') - 1 TRAVA POR MARGEM PEQUENA</div>'
@@ -4021,7 +4035,7 @@ async function confirmarDivCarteira(id) {
   // Registra no historico de dividendos da operacao
   op.dividendos = op.dividendos || [];
   op.dividendos.push({ data, valor_por_acao: valor, qty, total });
-  // NAO soma ao lucro_total — dividendos ficam apenas em dividendos[]
+  // NAO soma ao lucro_total - dividendos ficam apenas em dividendos[]
   // para evitar dupla contagem no patrimonio consolidado
 
   await apiOperacoes("POST", { acao: "EDITAR", id, lucro_total: op.lucro_total, dividendos: op.dividendos });
@@ -5074,7 +5088,7 @@ function renderJournalCard(operacao) {
       <button class="btn" onclick="indicarCompraRenda()" style="background:rgba(255,204,0,.15);border-color:var(--yellow);color:var(--yellow);">* QUAL COMPRAR ESTE MES?</button>
       <button class="btn" onclick="addRendaPos()" style="background:rgba(0,170,255,.12);border-color:var(--blue);color:var(--blue);">+ ADICIONAR POSICAO</button>
     </div>
-    <!-- Formulario fixo — nao e sobrescrito pelo renderRenda -->
+    <!-- Formulario fixo - nao e sobrescrito pelo renderRenda -->
     <div id="rendaFormDiv" style="display:none;background:var(--card);border:1px solid rgba(255,204,0,.3);padding:20px;margin-bottom:14px;">
       <div style="font-family:Rajdhani,sans-serif;font-size:13px;font-weight:700;letter-spacing:2px;color:var(--yellow);margin-bottom:14px;">ADICIONAR POSICAO DE RENDA</div>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-bottom:10px;">
