@@ -889,14 +889,16 @@ function calcTravas(ind, quote, forcaRelativa) {
 
 // ─── FORCA RELATIVA VS IBOVESPA ────────────────────────────────
 function calcForcaRelativa(ind, ibovHistRecente) {
-  // Compara variacao do ativo nos ultimos 5 dias vs variacao do Ibov no mesmo periodo
+  // Compara variacao do ativo nos ultimos dias vs variacao do Ibov no mesmo periodo
   const hist = ind?.historico_recente || [];
-  if (hist.length < 6 || !ibovHistRecente || ibovHistRecente.length < 6) return null;
+  if (hist.length < 2 || !ibovHistRecente || ibovHistRecente.length < 2) return null;
 
-  const precoAtivoAtras = hist[hist.length-6]?.close;
-  const precoAtivoHoje = hist[hist.length-1]?.close;
-  const precoIbovAtras = ibovHistRecente[ibovHistRecente.length-6]?.close;
-  const precoIbovHoje = ibovHistRecente[ibovHistRecente.length-1]?.close;
+  // Usa o periodo disponivel (ate 5 dias, mas funciona com menos)
+  const periodos = Math.min(hist.length - 1, ibovHistRecente.length - 1, 5);
+  const precoAtivoAtras = hist[hist.length - 1 - periodos]?.close;
+  const precoAtivoHoje = hist[hist.length - 1]?.close;
+  const precoIbovAtras = ibovHistRecente[ibovHistRecente.length - 1 - periodos]?.close;
+  const precoIbovHoje = ibovHistRecente[ibovHistRecente.length - 1]?.close;
 
   if (!precoAtivoAtras || !precoAtivoHoje || !precoIbovAtras || !precoIbovHoje) return null;
 
@@ -905,7 +907,7 @@ function calcForcaRelativa(ind, ibovHistRecente) {
   const diff5d = varAtivo5d - varIbov5d;
   const status = diff5d > 2 ? "FORTE_VS_IBOV" : diff5d < -2 ? "FRACO_VS_IBOV" : "ALINHADO_IBOV";
 
-  return { varAtivo5d: varAtivo5d.toFixed(2), varIbov5d: varIbov5d.toFixed(2), diff5d: diff5d.toFixed(2), status };
+  return { varAtivo5d: varAtivo5d.toFixed(2), varIbov5d: varIbov5d.toFixed(2), diff5d: diff5d.toFixed(2), status, periodos };
 }
 // ─── PRE-FILTRO QUANTITATIVO ──────────────────────────────────
 // ─── ALERTA MENSAL DE COMPRA DE RENDA ──────────────────────────
