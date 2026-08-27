@@ -1853,7 +1853,7 @@ PERFIL DO INVESTIDOR:
 
 CRITERIOS INEGOCIAVEIS (valem para QUALQUER recomendacao):
 1. Score confluencia matematica >= 65
-2. R/R minimo 1:2, preferir 1:3
+2. R/R minimo 2:1 (retorno:risco), preferir 3:1
 3. Upside minimo 4% em 15 dias (operacoes acima de 6% sao PRIORIDADE ALTA)
 4. Stop maximo 5% abaixo da entrada
 5. Volume nao zerado no dia (exceto fora do pregao: use volume historico dos indicadores)
@@ -2052,7 +2052,7 @@ function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, re
       +",RSI="+(rsi||"?")
       +",MACD="+(macd||"?")
       +",VOL="+(vol||"?")
-      +",RR=1:"+rrReal
+      +",RR="+rrReal+":1"
       +",STOP="+(stop||"?")
       +",ALVO="+(alvo||"?")
       +(sm?",SM="+sm:"")
