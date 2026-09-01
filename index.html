@@ -2740,6 +2740,70 @@ const RADAR_TICKERS = [
   "TRXF11", "RBRY11", "DEVA11", "RECT11", "VGIP11", "HCTR11", "VCJR11", "URPR11"
 ];
 
+const SETORES = {
+  "Energia": ["EGIE3","TAEE11","CPFE3","ENGI11","CMIG4","AURE3","ALUP11","GEPA4","CPLE6"],
+  "Petroleo": ["PETR4","PRIO3","RECV3","VBBR3","RRRP3"],
+  "Financeiro": ["ITUB4","BBDC4","BBAS3","ITSA4","SANB11","BPAC11","BRSR6","BMGB4","PINE4","IRBR3"],
+  "Seguro": ["BBSE3","PSSA3","WIZC3","SULA11"],
+  "Siderurgia": ["GGBR4","USIM5","CSNA3","GOAU4","CMIN3","FESA4"],
+  "Mineracao": ["VALE3","CMIN3"],
+  "Agro": ["SLCE3","SMTO3","BEEF3","AGRO3","CAML3","TTEN3","JALL3","MNPR3"],
+  "Varejo": ["LREN3","MGLU3","ASAI3","VIVA3","ALPA4","CEAB3"],
+  "Saude": ["HAPV3","RDOR3","HYPE3","FLRY3","QUAL3","DASA3","SAUD3","PNVL3","ONCO3","BLAU3"],
+  "Telecom": ["TIMS3","VIVT3"],
+  "Logistica": ["RAIL3","ECOR3","SIMH3","VAMO3","TGMA3"],
+  "Construcao": ["CYRE3","MRVE3","EZTC3","TEND3","DIRR3","EVEN3","TRIS3","JHSF3","LAVV3","HBOR3","MTRE3"],
+  "Tech": ["LWSA3","FIQE3","MLAS3","CASH3"],
+  "Papel": ["SUZB3","KLBN11","RANI3"],
+  "Quimico": ["UNIP6"],
+  "Automotivo": ["RAPT4","FRAS3"],
+  "FII-Logistica": ["HGLG11","BTLG11","VILG11","BRCO11","TRXF11"],
+  "FII-Shoppings": ["XPML11","VISC11","HSML11","HGBS11","MULT3"],
+  "FII-Lajes": ["HGRE11","GTWR11","RECT11"],
+  "FII-CRI": ["MXRF11","KNCR11","RBRF11","IRDM11","RBRR11","RBRY11","DEVA11","VGIP11","HCTR11","VCJR11","URPR11","RZTR11"],
+  "Combustivel": ["UGPA3","CSAN3"],
+  "Diversificado": ["WEGE3","ABEV3","RENT3","GRND3","AZZA3","CBAV3","GMAT3","AMBP3","MOVI3","MATD3","PLPL3"]
+};
+
+function analisarSetores(resultadosTravas, indicadoresRadar, quotesRadar) {
+  // Para cada setor, verifica se ha concentracao de ativos com score alto mas bloqueados por R/R
+  const alertas = [];
+
+  Object.entries(SETORES).forEach(([setor, tickers]) => {
+    const ativos = tickers.filter(t => indicadoresRadar[t]);
+    if (ativos.length < 2) return;
+
+    const scoreAlto = ativos.filter(t => (indicadoresRadar[t]?.confluencia?.score||0) >= 65);
+    const bloqueadosPorRR = scoreAlto.filter(t => {
+      const tr = resultadosTravas[t];
+      return tr && !tr.passou && tr.criticasFalhas?.includes("rr") && parseFloat(tr.rrReal||0) > 0.3;
+    });
+
+    // Alerta quando 2+ ativos do mesmo setor com score alto bloqueados por R/R
+    if (bloqueadosPorRR.length >= 2) {
+      const detalhes = bloqueadosPorRR.map(t => {
+        const q = quotesRadar[t];
+        const score = indicadoresRadar[t]?.confluencia?.score||0;
+        const rr = parseFloat(resultadosTravas[t]?.rrReal||0);
+        return { ticker: t, score, rr, variacao: q?.change };
+      });
+      const scoreMedio = Math.round(detalhes.reduce((a,d)=>a+d.score,0)/detalhes.length);
+
+      alertas.push({
+        setor,
+        count: bloqueadosPorRR.length,
+        scoreTotal: scoreAlto.length,
+        ativos: bloqueadosPorRR,
+        detalhes,
+        scoreMedia: scoreMedio,
+        mensagem: setor.toUpperCase()+": "+bloqueadosPorRR.length+" ativos com score alto (media "+scoreMedio+") bloqueados por R/R insuficiente - possivel acumulacao setorial antes de rompimento"
+      });
+    }
+  });
+
+  return alertas.sort((a,b) => b.count - a.count || b.scoreMedia - a.scoreMedia);
+}
+
 const GURU_TICKERS = [
   "PETR4", "VALE3", "ITUB4", "BBDC4", "WEGE3", "BBAS3", "ABEV3", "SUZB3", "RENT3", "PRIO3",
   "VBBR3", "EQTL3", "BPAC11", "ITSA4", "SANB11", "KLBN11", "RADL3", "CSAN3", "CMIG4", "EGIE3",
@@ -3015,7 +3079,35 @@ function renderRadar(d, quotes, indicators) {
 
   const evitar = (d.evitar||[]).filter(Boolean).length ? '<div style="margin-top:16px;font-family:monospace;font-size:9px;color:var(--red)">EVITAR: '+(d.evitar||[]).filter(Boolean).join(", ")+'</div>' : '';
   const monitorSection = renderMonitorSection();
-  return macro + (ops||'<div style="text-align:center;font-family:monospace;font-size:10px;color:var(--dim);padding:20px">Nenhuma oportunidade identificada hoje.</div>') + quaseSection + obs + evitar + monitorSection;
+
+  // Analise setorial — detecta concentracao de ativos fortes bloqueados no mesmo setor
+  const alertasSetoriais = analisarSetores(resultadosTravas, indicadoresRadar, quotesRadar);
+  const setorSection = alertasSetoriais.length > 0
+    ? '<div style="margin-top:20px;">'
+      +'<div style="font-family:Rajdhani,sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;color:#ff9900;margin-bottom:10px;">RADAR SETORIAL - ACUMULACAO POTENCIAL</div>'
+      +alertasSetoriais.map(al =>
+        '<div style="background:rgba(255,153,0,.06);border:1px solid rgba(255,153,0,.25);border-left:3px solid #ff9900;padding:12px 16px;margin-bottom:8px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">'
+        +'<div style="font-family:Rajdhani,sans-serif;font-size:16px;font-weight:700;color:#ff9900;">'+al.setor+'</div>'
+        +'<div style="font-family:monospace;font-size:9px;color:var(--dim);">'+al.count+' ativos bloqueados | score medio: '+al.scoreMedia+'</div>'
+        +'</div>'
+        +'<div style="font-family:monospace;font-size:9px;color:var(--sub);margin-bottom:8px;">'+al.mensagem+'</div>'
+        +'<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+        +al.detalhes.map(d =>
+          '<div style="background:rgba(0,0,0,.3);padding:6px 10px;font-family:monospace;font-size:9px;">'
+          +'<span style="color:#ff9900;font-weight:700;">'+d.ticker+'</span>'
+          +' score:'+d.score
+          +' R/R:'+d.rr.toFixed(2)
+          +(d.variacao?' hoje:'+(parseFloat(d.variacao)>=0?'+':'')+d.variacao+'%':'')
+          +'</div>'
+        ).join("")
+        +'</div>'
+        +'</div>'
+      ).join("")
+      +'</div>'
+    : "";
+
+  return macro + (ops||'<div style="text-align:center;font-family:monospace;font-size:10px;color:var(--dim);padding:20px">Nenhuma oportunidade identificada hoje.</div>') + quaseSection + setorSection + obs + evitar + monitorSection;
 }
 
 function renderMonitorSection() {
