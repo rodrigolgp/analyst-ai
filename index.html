@@ -4398,6 +4398,95 @@ async function encerrarOperacao(id) {
   renderHistorico();
 }
 
+function editarPrecoVenda(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op || !op.saidas || !op.saidas.length) return;
+
+  const ultimaSaida = op.saidas[op.saidas.length - 1];
+
+  document.querySelectorAll(".edit-venda-modal").forEach(e => e.remove());
+  const modal = document.createElement("div");
+  modal.className = "edit-venda-modal";
+  modal.style.cssText = "position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;";
+  modal.innerHTML = `<div style="background:var(--card);border:1px solid rgba(0,200,255,.3);padding:24px;width:380px;max-width:95vw;">
+    <div style="font-family:Rajdhani,sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;color:var(--cyan);margin-bottom:6px;">EDITAR VENDA  ${op.ticker}</div>
+    <div style="font-family:monospace;font-size:9px;color:var(--dim);margin-bottom:16px;">
+      Entrada: R$${parseFloat(op.preco_medio).toFixed(2)} | Qtd: ${op.quantidade_total||op.quantidade_atual} acoes
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+      <div class="form-field"><label>PRECO DE SAIDA (R$)</label>
+        <input type="number" id="ev_preco" value="${parseFloat(ultimaSaida.preco).toFixed(2)}" step="0.01"
+          oninput="atualizarResultadoVenda(${op.id})"/>
+      </div>
+      <div class="form-field"><label>DATA DE SAIDA</label>
+        <input type="date" id="ev_data" value="${ultimaSaida.data||''}"/>
+      </div>
+    </div>
+    <div style="margin-bottom:10px;">
+      <div class="form-field"><label>MOTIVO</label>
+        <select id="ev_motivo">
+          <option value="ALVO ATINGIDO" ${ultimaSaida.motivo==='ALVO ATINGIDO'?'selected':''}>ALVO ATINGIDO</option>
+          <option value="STOP ATINGIDO" ${ultimaSaida.motivo==='STOP ATINGIDO'?'selected':''}>STOP ATINGIDO</option>
+          <option value="SAIDA MANUAL" ${ultimaSaida.motivo==='SAIDA MANUAL'?'selected':''}>SAIDA MANUAL</option>
+        </select>
+      </div>
+    </div>
+    <div style="background:rgba(0,0,0,.3);padding:10px;margin-bottom:16px;font-family:monospace;font-size:10px;" id="ev_preview">
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmarEditarVenda(${id})" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:rgba(0,200,255,.15);border:1px solid var(--cyan);color:var(--cyan);padding:10px 16px;cursor:pointer;">SALVAR</button>
+      <button onclick="document.querySelector('.edit-venda-modal').remove()" style="font-family:Rajdhani,sans-serif;font-size:12px;font-weight:700;background:transparent;border:1px solid var(--border);color:var(--dim);padding:10px 16px;cursor:pointer;">CANCELAR</button>
+    </div>
+  </div>`;
+  document.body.appendChild(modal);
+  atualizarResultadoVenda(id);
+}
+
+function atualizarResultadoVenda(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op) return;
+  const preco = parseFloat(document.getElementById("ev_preco")?.value) || 0;
+  const qty = parseFloat(op.quantidade_total) || parseFloat(op.quantidade_atual) || 0;
+  const pm = parseFloat(op.preco_medio) || 0;
+  const resultado = (preco - pm) * qty;
+  const pct = pm > 0 ? ((preco - pm) / pm * 100).toFixed(2) : 0;
+  const cor = resultado >= 0 ? "#00ff88" : "#ff3355";
+  const prev = document.getElementById("ev_preview");
+  if (prev) prev.innerHTML = `<span style="color:${cor}">Resultado: ${resultado>=0?"+":""}R$${resultado.toFixed(2)} (${pct}%)</span>`;
+}
+
+async function confirmarEditarVenda(id) {
+  const op = operacoes.find(o => o.id === id);
+  if (!op || !op.saidas || !op.saidas.length) return;
+
+  const preco = parsePreco(document.getElementById("ev_preco")?.value);
+  const data = document.getElementById("ev_data")?.value;
+  const motivo = document.getElementById("ev_motivo")?.value || "SAIDA MANUAL";
+
+  if (!preco || isNaN(preco) || preco <= 0) { alert("Informe o preco de saida."); return; }
+
+  const qty = parseFloat(op.quantidade_total) || parseFloat(op.quantidade_atual) || 0;
+  const pm = parseFloat(op.preco_medio) || 0;
+
+  // Atualiza a ultima saida
+  op.saidas[op.saidas.length - 1] = { ...op.saidas[op.saidas.length-1], preco, data, motivo };
+
+  // Recalcula lucro_total (soma de todas as saidas)
+  op.lucro_total = parseFloat(op.saidas.reduce((a, s) => {
+    return a + (parseFloat(s.preco) - pm) * parseFloat(s.qtd || qty);
+  }, 0).toFixed(2));
+
+  // Recalcula resultado_pct
+  const investido = pm * qty;
+  op.resultado_pct = investido > 0 ? parseFloat(((op.lucro_total / investido) * 100).toFixed(2)) : 0;
+
+  await apiOperacoes("POST", { acao: "EDITAR", id, saidas: op.saidas, lucro_total: op.lucro_total, resultado_pct: op.resultado_pct });
+  document.querySelector(".edit-venda-modal")?.remove();
+  renderHistorico();
+  renderPatrimonioConsolidado();
+  alert(`Venda atualizada!\n${op.ticker}: ${qty} acoes a R$${preco.toFixed(2)}\nResultado: ${op.lucro_total>=0?"+":""}R$${op.lucro_total.toFixed(2)}`);
+}
+
 async function deleteOperacao(id) {
   await deletarOperacao(id);
 }
@@ -4541,6 +4630,7 @@ function renderHistorico() {
           '<td style="font-weight:700;color:'+gc+'">'+g+'</td>'+
           '<td style="display:flex;gap:4px;flex-wrap:wrap;">'+
           (op.journal ? '<button onclick="toggleJournal('+op.id+')" class="btn-sm" style="background:rgba(0,170,255,.12);border:1px solid rgba(0,170,255,.3);color:var(--blue);">LOG</button>' : '<button onclick="gerarJournalBtn('+op.id+')" class="btn-sm" style="background:rgba(255,204,0,.12);border:1px solid rgba(255,204,0,.3);color:var(--yellow);">JOURNAL</button>')+
+          '<button onclick="editarPrecoVenda('+op.id+')" class="btn-sm" style="background:rgba(0,200,255,.08);border:1px solid rgba(0,200,255,.3);color:var(--cyan);font-size:8px;">EDITAR VENDA</button>'+
           '<button onclick="registrarProventoEncerrado('+op.id+')" class="btn-sm" style="background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.3);color:var(--green);font-size:8px;">+PROV</button>'+
           '<button onclick="deleteOperacao('+op.id+')" class="btn-sm" style="background:rgba(255,51,85,.12);border:1px solid rgba(255,51,85,.35);color:var(--red);">DEL</button>'+
           '</td></tr>'+
