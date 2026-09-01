@@ -1485,7 +1485,14 @@ async function fetchQuote(ticker) {
     const r = await fetch("/api/quote?ticker="+ticker, { signal: controller.signal });
     clearTimeout(timeout);
     if (!r.ok) return null;
-    return await r.json();
+    const q = await r.json();
+    // Valida variacao diaria — acima de 15% e provavelmente dado incorreto do Yahoo
+    if (q && Math.abs(parseFloat(q.change||0)) > 15) {
+      q.change_suspeito = true;
+      q.change_original = q.change;
+      console.warn(`[DADO SUSPEITO] ${ticker}: variacao de ${q.change}% em 1 dia - pode ser erro do Yahoo Finance`);
+    }
+    return q;
   } catch(e) { return null; }
 }
 
@@ -1974,7 +1981,9 @@ function buildIndicatorsContext(ind) {
 
   return reversaoCtx  // aviso de reversao PRIMEIRO, antes de tudo
     + "=== INDICADORES MATEMATICOS (200 dias reais) ===\n"
-    + "PRECO: "+ind.preco_atual+" | HOJE: "+ind.variacao_hoje+"%\n"
+    + "PRECO: "+ind.preco_atual+" | HOJE: "+ind.variacao_hoje+"%"
+    + (Math.abs(parseFloat(ind.variacao_hoje||0)) > 15 ? " [DADO SUSPEITO - ignore esta variacao, provavel erro do Yahoo Finance]" : "")
+    + "\n"
     + "TENDENCIA: "+ind.tendencia+"\n"
     + "\nCONFLUENCIA: "+conf?.score+"/100 | "+conf?.direcao+"\n"
     + "Confirmadores: "+conf?.sinais_confirmadores?.join(", ")+"\n"
@@ -2509,7 +2518,7 @@ function renderResult(d, quote, indicators) {
     +'<div style="font-size:12px;color:var(--sub);margin-bottom:14px">'+(d.nome||"")+" - "+(d.setor||"")+" - "+(d.mercado||"")+'</div>'
     +'<div style="display:inline-flex;align-items:center;gap:10px;padding:10px 18px;font-family:Rajdhani,sans-serif;font-size:22px;font-weight:700;letter-spacing:3px;color:'+sigC+';background:'+sigC+'22;border:1px solid '+sigC+'55">'+sig+'</div>'
     +'<div style="margin-top:10px;font-family:monospace;font-size:9px;color:var(--dim)">CONSENSO '+cons+'/5 | '+travOk+'/7 TRAVAS OK</div>'
-    +(d.variacao_hoje?'<div style="margin-top:6px;font-family:monospace;font-size:9px;color:'+(String(d.variacao_hoje).startsWith("-")?"var(--red)":"var(--green)")+'">HOJE: '+d.variacao_hoje+'</div>':"")
+    +(d.variacao_hoje?'<div style="margin-top:6px;font-family:monospace;font-size:9px;color:'+(String(d.variacao_hoje).startsWith("-")?"var(--red)":"var(--green)")+'">HOJE: '+d.variacao_hoje+(Math.abs(parseFloat(d.variacao_hoje))>15?' ⚠ DADO SUSPEITO':'')+'</div>':"")
     +'</div>'
     +'<div style="background:var(--card);border:1px solid var(--hi);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:18px;">'
     +'<div style="font-family:monospace;font-size:9px;color:var(--dim);letter-spacing:2px">SCORE TECNICO</div>'
