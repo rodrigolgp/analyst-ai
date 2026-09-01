@@ -1836,10 +1836,13 @@ function buildUSDContext(usd) {
   if (!usd) return "";
   const v = parseFloat(usd.change||0);
   const tendencia = v>0.5?"DOLAR EM ALTA":v<-0.5?"DOLAR EM QUEDA":"DOLAR ESTAVEL";
-  const impacto = v>0.5?"favorece exportadoras (VALE3,SUZB3,PRIO3,JBSS3) - pressiona importadoras":
-                  v<-0.5?"pressiona exportadoras - favorece importadoras e empresas com divida em dolar":
-                  "impacto cambial neutro no momento";
-  return "\nUSD/BRL: R$"+usd.price.toFixed(2)+" | "+(v>=0?"+":"")+usd.change+"% | "+tendencia+" | "+impacto+"\n";
+  // ATENCAO: impacto cambial depende da exposicao especifica da empresa
+  // Dolar em queda NAO e automaticamente negativo para exportadoras — depende de hedge, custos locais e composicao de receitas
+  // Dolar em alta NAO e automaticamente positivo para exportadoras — pode elevar custos de insumos importados
+  const impacto = v>0.5?"Dolar em alta: POTENCIALMENTE favoravel a exportadoras com receita em USD (VALE3,SUZB3,PRIO3,JBSS3,WEG), MAS analise exposicao cambial, hedge e custos da empresa especifica. Pressiona importadoras e empresas com divida em USD.":
+                  v<-0.5?"Dolar em queda: POTENCIALMENTE desfavoravel a exportadoras puras, MAS WEG e outras com custos locais e receitas globais podem ter impacto misto. Favorece importadoras e empresas com divida em USD.":
+                  "Dolar estavel: impacto cambial neutro no momento";
+  return "\nUSD/BRL: R$"+usd.price.toFixed(2)+" | "+(v>=0?"+":"")+usd.change+"% | "+tendencia+"\nImpacto cambial (analise caso a caso): "+impacto+"\n";
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────
@@ -1860,12 +1863,31 @@ PERFIL DO INVESTIDOR:
 
 CRITERIOS INEGOCIAVEIS (valem para QUALQUER recomendacao):
 1. Score confluencia matematica >= 65
-2. R/R minimo 2:1 (retorno:risco), preferir 3:1
+2. R/R minimo 1:2 (risco:retorno), preferir 1:3. NOTACAO OBRIGATORIA: sempre "1:X" onde X e o retorno por unidade de risco. Ex: risco R$1, retorno R$2 = R/R "1:2". NUNCA inverter.
 3. Upside minimo 4% em 15 dias (operacoes acima de 6% sao PRIORIDADE ALTA)
 4. Stop maximo 8% abaixo da entrada (ampliado para ativos volateis)
 5. Volume nao zerado no dia (exceto fora do pregao: use volume historico dos indicadores)
 6. RSI ponderado entre 25 e 75
 7. MACD sem cruzamento baixista recente
+
+INTERPRETACAO DO RSI (obrigatoria):
+- RSI 25-50: zona neutra-baixa, espaco amplo para alta
+- RSI 50-60: momentum moderado, zona confortavel
+- RSI 60-67: momentum forte, zona saudavel para swing trade
+- RSI 67-70: PROXIMO DA SOBRECOMPRA - descrever como "momentum forte mas proximo do limite"
+- RSI > 70: SOBRECOMPRADO - sinal de alerta, risco de correcao
+- NUNCA descrever RSI 67-70 como simplesmente "neutro com espaco para subir"
+
+INTERPRETACAO DE ALVO vs RESISTENCIA (obrigatoria):
+- Se alvo 15D ACIMA da resistencia tecnica: OBRIGATORIO informar "alvo exige rompimento previo da resistencia em R$X"
+- NUNCA dizer que um alvo acima da resistencia "respeita" ou "nao rompe" a resistencia - isso e factualmente incorreto
+- Alvo abaixo da resistencia: ok, informar distancia ate a resistencia
+
+INTERPRETACAO DE FUNDAMENTOS COM DADOS INCOMPLETOS:
+- Se houver dados fundamentalistas disponiveis (P/L, ROE, DY, margem, etc): usar o que existe e reduzir confianca proporcionalmente
+- NUNCA atribuir score 50 automaticamente apenas porque alguns campos estao indisponiveis
+- Se dados insuficientes: informar "dados fundamentalistas incompletos - analise baseada em [campos disponíveis]" e reduzir confianca
+- Score 50 neutro so e valido se NENHUM dado estiver disponivel
 
 INTERPRETACAO DE MEDIAS MOVEIS (horizonte 15-30 dias):
 - MM9 e MM21 sao as referencias primarias para swing trade curto prazo
@@ -1880,9 +1902,14 @@ INTERPRETACAO DO SMART MONEY:
 - NAO use Smart Money baixo como razao principal para reprovar - use como fator de atencao
 - Score alto (>= 70) e confirmador positivo e pode elevar a confianca da recomendacao
 
+INTERPRETACAO CAMBIAL (obrigatoria):
+- Dolar em alta ou queda NAO implica automaticamente beneficio ou prejuizo para exportadoras
+- Impacto cambial depende de: exposicao cambial da empresa, politica de hedge, custos em reais vs receitas em USD, composicao de receitas por moeda
+- Empresas como WEG tem operacoes globais com custos e receitas em multiplas moedas - impacto cambial e complexo e nao linear
+- Sempre qualificar o impacto cambial com "potencialmente" e recomendar analise da exposicao especifica
+
 ESCALA DE PRIORIDADE POR UPSIDE:
 >= 6% em 15 dias = PRIORIDADE MAXIMA
->= 6% em 15 dias = PRIORIDADE ALTA
 >= 4% em 15 dias = APROVADO
 < 4% em 15 dias = REPROVADO
 
@@ -2001,6 +2028,14 @@ function buildIndicatorsContext(ind) {
     + "\nCANDLE: "+candle?.pattern+" | Bias: "+candle?.bias+" | Conf: "+candle?.confianca+"%\n"
     + "\nSUP/RES: Sup="+ind.suporte_resistencia?.suporte+" Res="+ind.suporte_resistencia?.resistencia+" R/R=1:"+ind.suporte_resistencia?.rr_natural+"\n"
     + "STOP ATR: "+ind.gestao_risco?.stop_sugerido+" | ALVO ATR: "+ind.gestao_risco?.alvo_sugerido+"\n"
+    + (()=>{
+        const alvoATR = parseFloat(ind.gestao_risco?.alvo_sugerido||0);
+        const resist = parseFloat(ind.suporte_resistencia?.resistencia||0);
+        if (alvoATR > 0 && resist > 0 && alvoATR > resist) {
+          return "[ATENCAO] ALVO ATR ("+alvoATR.toFixed(2)+") esta ACIMA da resistencia ("+resist.toFixed(2)+"). O alvo so e alcancavel com rompimento confirmado acima de R$"+resist.toFixed(2)+". NAO diga que o alvo 'respeita' a resistencia.\n";
+        }
+        return "";
+      })()
     + "\nSMART MONEY: Score="+sm?.score+"/100 | "+sm?.sinal+" | MFI="+sm?.money_flow_index+"%\n"
     + (sm?.score>=70?"*** ACUMULACAO INSTITUCIONAL DETECTADA - confirmador positivo forte ***\n":"")
     + (sm?.score<30?"[ATENCAO] Smart Money baixo - pode indicar saida institucional OU inicio de recuperacao (comum em reversoes). Avalie em conjunto com MACD e volume antes de reprovar.\n":"")
@@ -2534,13 +2569,14 @@ function renderResult(d, quote, indicators) {
     +kv("DOWNSIDE",d.downside,"var(--red)")
     +(()=>{
       // Calcula R/R diretamente dos valores exibidos (stop e alvo) para garantir consistencia
+      // Notacao padrao: 1:X onde X = retorno por unidade de risco
       const preco = parseFloat(d.preco)||0;
       const stop = parseFloat(d.stop)||0;
       const a15 = parseFloat(d.alvo_preco_15d||d.alvo30)||0;
       const a30 = parseFloat(d.alvo_preco_30d||d.alvo60)||0;
       const risco = preco > stop ? preco - stop : 0;
-      const rr15 = (risco > 0 && a15 > preco) ? ((a15-preco)/risco).toFixed(2)+":1" : null;
-      const rr30 = (risco > 0 && a30 > preco) ? ((a30-preco)/risco).toFixed(2)+":1" : null;
+      const rr15 = (risco > 0 && a15 > preco) ? "1:"+(( a15-preco)/risco).toFixed(2) : null;
+      const rr30 = (risco > 0 && a30 > preco) ? "1:"+((a30-preco)/risco).toFixed(2) : null;
       const rrStr = rr15 && rr30 ? rr15+" (15d) | "+rr30+" (30d)"
                   : rr15 ? rr15
                   : rr30 ? rr30
