@@ -2523,7 +2523,21 @@ function renderResult(d, quote, indicators) {
     +kv("PRECO REAL",d.preco,"var(--blue)")
     +kv("STOP LOSS",d.stop,"var(--red)")
     +kv("DOWNSIDE",d.downside,"var(--red)")
-    +kv("RISCO/RETORNO",d.rr,"var(--yellow)")
+    +(()=>{
+      // Calcula R/R diretamente dos valores exibidos (stop e alvo) para garantir consistencia
+      const preco = parseFloat(d.preco)||0;
+      const stop = parseFloat(d.stop)||0;
+      const a15 = parseFloat(d.alvo_preco_15d||d.alvo30)||0;
+      const a30 = parseFloat(d.alvo_preco_30d||d.alvo60)||0;
+      const risco = preco > stop ? preco - stop : 0;
+      const rr15 = (risco > 0 && a15 > preco) ? ((a15-preco)/risco).toFixed(2)+":1" : null;
+      const rr30 = (risco > 0 && a30 > preco) ? ((a30-preco)/risco).toFixed(2)+":1" : null;
+      const rrStr = rr15 && rr30 ? rr15+" (15d) | "+rr30+" (30d)"
+                  : rr15 ? rr15
+                  : rr30 ? rr30
+                  : d.rr || "--";
+      return kv("RISCO/RETORNO", rrStr, "var(--yellow)");
+    })()
     +(()=>{
       const preco = parseFloat(d.preco)||0;
       const a15 = (d.prev&&d.prev[1])?d.prev[1].a:(d.alvo_preco_15d||d.alvo30);
