@@ -2053,15 +2053,19 @@ function buildIndicatorsContext(ind) {
     if (!media || !precoNum) return "";
     const m = parseFloat(media);
     const dist = ((precoNum/m)-1)*100;
-    const pos = dist > 0.75 ? "ACIMA" : dist < -0.75 ? "ABAIXO" : Math.abs(dist) < 0.30 ? "TESTANDO" : dist > 0 ? "MARGINALMENTE_ACIMA" : "MARGINALMENTE_ABAIXO";
-    return nome+"="+m.toFixed(2)+"("+pos+" "+dist.toFixed(2)+"%) ";
+    const absLabel = dist > 0.75 ? "ACIMA" : dist < -0.75 ? "ABAIXO" : Math.abs(dist) < 0.30 ? "TESTANDO" : dist > 0 ? "MARGINALMENTE_ACIMA" : "MARGINALMENTE_ABAIXO";
+    const sinal = dist >= 0 ? "+" : "";
+    return nome+"="+m.toFixed(2)+" | preco "+absLabel+" | distancia="+sinal+dist.toFixed(2)+"%\n";
   }
-  const mediasCtx = "\nPOSICAO_VS_MEDIAS (deterministico, use APENAS estes valores):\n"
+  const mediasCtx = "\n\n=== POSICAO_VS_MEDIAS (OBRIGATORIO - NAO CONTRADIGA ESTES VALORES) ===\n"
+    + "Preco base: "+precoNum.toFixed(2)+"\n"
     + posVsMedia(i.medias?.mm9, "MM9")
     + posVsMedia(i.medias?.mm21, "MM21")
     + posVsMedia(i.medias?.mm50, "MM50")
     + posVsMedia(i.medias?.mm200, "MM200")
-    + "\n";
+    + "Confirmacao backend: acimaMM50="+i.medias?.acimaMM50+" | acimaMM200="+i.medias?.acimaMM200+"\n"
+    + "\nVIOLACAO CRITICA: Se acimaMM50=true, NUNCA escreva 'abaixo da MM50'. Se acimaMM50=false, NUNCA escreva 'acima da MM50'. Mesma regra para MM200.\n"
+    + "=== FIM POSICAO_VS_MEDIAS ===\n";
 
   return reversaoCtx  // aviso de reversao PRIMEIRO, antes de tudo
     + mediasCtx        // posicao vs medias ANTES dos indicadores
@@ -2076,7 +2080,19 @@ function buildIndicatorsContext(ind) {
     + "\nRSI PONDERADO: "+rsiAtual+" ("+i.rsi?.zona+") | 5d atras: "+(rsi5d||"?")+rsiTend+"\n"
     + (rsiAtual<35&&rsiTend.includes("SUBINDO")?"*** RSI SAINDO DE SOBREVENDIDO ***\n":"")
     + "\nMACD: "+i.macd?.macd+" | Signal: "+i.macd?.signal+" | Hist: "+i.macd?.histogram+"\n"
-    + "Trend: "+i.macd?.trend+" | Cross: "+i.macd?.crossover+(macdCruzouRecente?" ***CRUZOU POSITIVO RECENTEMENTE***":"")+(macdAcelerou?" ACELERANDO":"")+"\n"
+    + "Trend: "+i.macd?.trend+" | Cross: "+i.macd?.crossover
+    + (macdCruzouRecente?" ***CRUZOU POSITIVO RECENTEMENTE***":"")
+    + (macdAcelerou?" ACELERANDO":"")
+    + "\nCLASSIFICACAO_MACD (obrigatoria - use APENAS esta):\n"
+    + (()=>{
+        const macdV = parseFloat(i.macd?.macd||0);
+        const sigV = parseFloat(i.macd?.signal||0);
+        if (macdV > sigV && macdV > 0 && sigV > 0) return "ESTADO_A: ALTA_CONFIRMADA - MACD e Signal ambos acima de zero, MACD acima do Signal. Momentum altista consolidado.\n";
+        if (macdV > sigV && macdV < 0) return "ESTADO_B: RECUPERACAO_ALTISTA - MACD cruzou acima do Signal mas ainda abaixo da linha zero. Inicio de recuperacao, nao alta confirmada.\n";
+        if (macdV < sigV && macdV > 0 && sigV > 0) return "ESTADO_C: PERDA_DE_MOMENTUM - MACD abaixo do Signal, ambos positivos. Desaceleracao possivel.\n";
+        if (macdV < sigV && macdV < 0) return "ESTADO_D: MOMENTUM_BAIXISTA - MACD e Signal abaixo de zero, MACD abaixo do Signal.\n";
+        return "ESTADO_INDEFINIDO\n";
+      })()
     + "\nMEDIAS: MM9="+i.medias?.mm9+" MM21="+i.medias?.mm21+" MM50="+i.medias?.mm50+" MM200="+i.medias?.mm200+"\n"
     + "Acima MM50: "+i.medias?.acimaMM50+" | Acima MM200: "+i.medias?.acimaMM200+"\n"
     + "\nBOLLINGER: "+i.bollinger?.position+" | %B="+i.bollinger?.pctB+" | Squeeze: "+i.bollinger?.squeeze+"\n"
@@ -2133,7 +2149,13 @@ function buildAnalyzePrompt(ticker, quote, manualPrice, indicators, fundamentals
       + "- Mantenha consistencia: se sinal=COMPRA ou COMPRA_FORTE, justifique no campo 'just' qual horizonte (15D ou 30D) sustenta a decisao.\n"
     : "";
 
-  return buildAtlasContext()+ibovCtxAnalise+usdCtxAnalise+"\n\nMODO: ANALISE\nATIVO: "+ticker+"\n"+pi+avisoH+"\n\n"+indCtx+funCtx+regraAlvo+"\n\nCAMPOS DO JSON  DEFINICOES CLARAS:\n- alvo_preco_15d: preco alvo para daqui a 15 dias\n- alvo_preco_30d: preco alvo para daqui a 30 dias\n- upside_15d: percentual de upside em 15 dias\n- upside_30d: percentual de upside em 30 dias\n- prev[].d: numero de dias | prev[].a: preco alvo naquele dia | prev[].u: upside% naquele dia\n\nRetorne APENAS JSON:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"prazo_recomendado\":15,\"alvo_preco_15d\":\"\",\"alvo_preco_30d\":\"\",\"stop\":\"\",\"upside_15d\":\"\",\"upside_30d\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"dy\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"ok\":true,\"just\":\"\",\"res\":\"\"}";
+  return buildAtlasContext()+ibovCtxAnalise+usdCtxAnalise+"\n\nMODO: ANALISE\nATIVO: "+ticker+"\n"+pi+avisoH+"\n\n"+indCtx+funCtx+regraAlvo+"\n\nREGRAS DOS 5 SISTEMAS (obrigatorio):\n"
+    + "- TECNICO: indicadores tecnicos (tendencia, medias, RSI, MACD, Bollinger, volume)\n"
+    + "- PRICE ACTION: padroes de preco, VWAP, Smart Money (com ressalva de ser indireto), candles\n"
+    + "- FUNDAMENTOS: P/L, ROE, ROA, DY, margens, divida, crescimento\n"
+    + "- MACRO: contexto macro (juros, cambio, Ibovespa, setor)\n"
+    + "- NOTICIAS: EXCLUSIVAMENTE fatos externos reais - resultados, dividendos, guidance, aquisicoes, mudanca de CEO, regulacao, rating. SE NAO HOUVER NOTICIAS REAIS: retornar v='SEM_CATALISADOR' e r='Sem noticias relevantes identificadas'. PROIBIDO usar RSI, MFI, Smart Money, MACD ou qualquer indicador tecnico neste campo.\n"
+    + "\nCAMPOS DO JSON DEFINICOES CLARAS:\n- alvo_preco_15d: preco alvo para daqui a 15 dias\n- alvo_preco_30d: preco alvo para daqui a 30 dias\n- upside_15d: percentual de upside em 15 dias\n- upside_30d: percentual de upside em 30 dias\n- prev[].d: numero de dias | prev[].a: preco alvo naquele dia | prev[].u: upside% naquele dia\n\nRetorne APENAS JSON:\n{\"ticker\":\""+ticker+"\",\"nome\":\"\",\"setor\":\"\",\"mercado\":\"\",\"preco\":\"\",\"variacao_hoje\":\"\",\"sinal\":\"COMPRA\",\"forca\":8,\"score\":75,\"confianca\":78,\"prazo_recomendado\":15,\"alvo_preco_15d\":\"\",\"alvo_preco_30d\":\"\",\"stop\":\"\",\"upside_15d\":\"\",\"upside_30d\":\"\",\"downside\":\"\",\"rr\":\"1:2\",\"prev\":[{\"d\":7,\"a\":\"\",\"u\":\"\",\"c\":70},{\"d\":15,\"a\":\"\",\"u\":\"\",\"c\":62},{\"d\":30,\"a\":\"\",\"u\":\"\",\"c\":54}],\"sis\":{\"tec\":{\"v\":\"COMPRA\",\"s\":78,\"r\":\"\"},\"pa\":{\"v\":\"COMPRA\",\"s\":72,\"r\":\"\"},\"fun\":{\"v\":\"COMPRA\",\"s\":80,\"r\":\"\"},\"mac\":{\"v\":\"COMPRA\",\"s\":65,\"r\":\"\"},\"not\":{\"v\":\"COMPRA\",\"s\":70,\"r\":\"\"}},\"trav\":{\"rr\":true,\"vol\":true,\"rsi\":true,\"idx\":true,\"evt\":true,\"conc\":true,\"atr\":true},\"tec\":{\"tend\":\"\",\"rsi\":\"\",\"macd\":\"\",\"mm\":\"\",\"bol\":\"\",\"volume\":\"\",\"sup\":\"\",\"res\":\"\",\"candle\":\"\"},\"fun\":{\"pl\":\"\",\"roe\":\"\",\"mg\":\"\",\"dy\":\"\"},\"cen\":{\"oti\":{\"d\":\"\",\"p\":30},\"bas\":{\"d\":\"\",\"p\":50},\"pes\":{\"d\":\"\",\"p\":20}},\"cat\":[],\"ris\":[],\"ok\":true,\"just\":\"\",\"res\":\"\"}";
 }
 
 function buildRadarPrompt(candidatos, quotes, indicadoresRadar, emObservacao, resultadosTravas) {
