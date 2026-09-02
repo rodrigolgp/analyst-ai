@@ -1918,7 +1918,48 @@ score <40 = VENDA | 40-59 = AGUARDA | 60-74 = COMPRA MODERADA | 75-89 = COMPRA F
 
 INSTRUCAO DEVIL'S ADVOCATE:
 Antes de recomendar COMPRA, liste os 3 principais motivos pelos quais essa operacao pode dar errado.
-Isso nao impede a recomendacao - apenas garante que os riscos foram considerados.`;
+Isso nao impede a recomendacao - apenas garante que os riscos foram considerados.
+
+REGRAS DE VALIDACAO OBRIGATORIAS (violar qualquer uma invalida o relatorio):
+
+REGRA 1 - MEDIAS MOVEIS (comparacao deterministica):
+Os valores numericos de preco e medias sao fornecidos nos indicadores.
+Use APENAS comparacao direta: preco > MM = "acima", preco < MM = "abaixo".
+Calcule a distancia percentual: dist = ((preco/MM)-1)*100
+- abs(dist) < 0.30% -> "testando a media"
+- 0.30% a 0.75% -> "marginalmente acima/abaixo"
+- acima de 0.75% -> "acima/abaixo"
+NUNCA contradiga os numeros. Se preco=78.65 e MM200=78.37, preco esta ACIMA da MM200, nao abaixo.
+
+REGRA 2 - VWAP (interpretacao correta):
+VWAP = preco medio ponderado por volume. NAO e prova de fluxo institucional.
+- Preco > VWAP -> "negociando acima do preco medio ponderado por volume"
+- Preco < VWAP -> "negociando abaixo do preco medio ponderado por volume"
+NUNCA escrever "institucional comprando/vendendo" apenas com base na posicao vs VWAP.
+
+REGRA 3 - SMART MONEY (limitacao explicita):
+Smart Money Score e um indicador INDIRETO e proprietario.
+NUNCA escrever "saida institucional confirmada" ou "institucional comprando" baseado apenas nesse score.
+Use: "indicador sugere fluxo fraco/forte - nao e confirmacao direta de fluxo institucional".
+
+REGRA 4 - ALVO vs RESISTENCIA (validacao obrigatoria):
+Se alvo > resistencia -> OBRIGATORIO escrever "alvo exige rompimento confirmado acima de R$X"
+NUNCA dizer que alvo acima da resistencia "respeita" ou "esta dentro" da resistencia.
+
+REGRA 5 - FUNDAMENTOS COM DADOS INCOMPLETOS:
+Se dados fundamentalistas estiverem parcialmente indisponiveis:
+- Calcule score apenas com dados validos
+- Informe quais campos estao faltando
+- Reduza a confianca proporcionalmente
+- NUNCA atribua 50 automaticamente por falta de dados
+
+REGRA 6 - CONSISTENCY CHECK FINAL:
+Antes de gerar o JSON final, verifique:
+- Se preco > MM200: texto NAO pode conter "abaixo da MM200"
+- Se preco < VWAP: texto NAO pode conter "acima da VWAP"
+- Se alvo > resistencia: texto NAO pode conter "alvo respeita resistencia"
+- Se Smart Money for indireto: texto NAO pode conter "fluxo institucional confirmado"
+Se qualquer inconsistencia for detectada, corrija antes de retornar o JSON.`;
 }
 
 function steps(arr, current) {
@@ -2006,7 +2047,24 @@ function buildIndicatorsContext(ind) {
     + "- Stop obrigatorio no suporte ("+ind.suporte_resistencia?.suporte+"), nao no ATR que pode ser muito largo\n"
     : "";
 
+  // Calculo deterministico: posicao do preco vs cada media movel
+  const precoNum = parseFloat(ind.preco_atual||0);
+  function posVsMedia(media, nome) {
+    if (!media || !precoNum) return "";
+    const m = parseFloat(media);
+    const dist = ((precoNum/m)-1)*100;
+    const pos = dist > 0.75 ? "ACIMA" : dist < -0.75 ? "ABAIXO" : Math.abs(dist) < 0.30 ? "TESTANDO" : dist > 0 ? "MARGINALMENTE_ACIMA" : "MARGINALMENTE_ABAIXO";
+    return nome+"="+m.toFixed(2)+"("+pos+" "+dist.toFixed(2)+"%) ";
+  }
+  const mediasCtx = "\nPOSICAO_VS_MEDIAS (deterministico, use APENAS estes valores):\n"
+    + posVsMedia(i.medias?.mm9, "MM9")
+    + posVsMedia(i.medias?.mm21, "MM21")
+    + posVsMedia(i.medias?.mm50, "MM50")
+    + posVsMedia(i.medias?.mm200, "MM200")
+    + "\n";
+
   return reversaoCtx  // aviso de reversao PRIMEIRO, antes de tudo
+    + mediasCtx        // posicao vs medias ANTES dos indicadores
     + "=== INDICADORES MATEMATICOS (200 dias reais) ===\n"
     + "PRECO: "+ind.preco_atual+" | HOJE: "+ind.variacao_hoje+"%"
     + (Math.abs(parseFloat(ind.variacao_hoje||0)) > 15 ? " [DADO SUSPEITO - ignore esta variacao, provavel erro do Yahoo Finance]" : "")
@@ -2025,6 +2083,9 @@ function buildIndicatorsContext(ind) {
     + "VWAP: "+i.vwap?.sinal+" | Dif: "+i.vwap?.diferenca_pct+"%\n"
     + "VOLUME: "+i.volume?.status+" ("+i.volume?.ratio+"x media) | ATR: "+i.atr+"\n"
     + (i.volume?.dado_suspeito ? "[!] DADO DE VOLUME SUSPEITO: ratio "+i.volume?.ratio+"x e anormalmente baixo para este ativo. Provavel erro do Yahoo Finance. NAO reprove por volume - confirme na B3 antes de usar.\n" : "")
+    + (i.vwap ? "\nVWAP: "+i.vwap?.sinal+" | Dif: "+i.vwap?.diferenca_pct+"%\n"
+      + "INTERPRETACAO_VWAP (obrigatoria): preco esta "+(parseFloat(i.vwap?.diferenca_pct||0)>=0?"ACIMA":"ABAIXO")+" da VWAP em "+Math.abs(parseFloat(i.vwap?.diferenca_pct||0)).toFixed(2)+"%. "
+      + "VWAP indica preco medio ponderado por volume - NAO prova fluxo institucional.\n" : "")
     + "\nCANDLE: "+candle?.pattern+" | Bias: "+candle?.bias+" | Conf: "+candle?.confianca+"%\n"
     + "\nSUP/RES: Sup="+ind.suporte_resistencia?.suporte+" Res="+ind.suporte_resistencia?.resistencia+" R/R=1:"+ind.suporte_resistencia?.rr_natural+"\n"
     + "STOP ATR: "+ind.gestao_risco?.stop_sugerido+" | ALVO ATR: "+ind.gestao_risco?.alvo_sugerido+"\n"
