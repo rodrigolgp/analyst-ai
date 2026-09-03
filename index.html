@@ -965,11 +965,10 @@ async function renderPatrimonioConsolidado() {
   const el = document.getElementById("patrimonioConsolidado");
   if (!el) return;
 
-  // Garante que as cotacoes das posicoes de trade estao carregadas antes de calcular
+  // Sempre atualiza cotacoes antes de calcular — evita usar cache desatualizado
   const carteiraCheck = getCarteira();
-  const faltam = carteiraCheck.filter(p => !portfolioQuotes[p.ticker]);
-  if (faltam.length > 0) {
-    await Promise.all(faltam.map(async p => {
+  if (carteiraCheck.length > 0) {
+    await Promise.all(carteiraCheck.map(async p => {
       const q = await fetchQuote(p.ticker);
       if (q) portfolioQuotes[p.ticker] = q;
     }));
@@ -1012,7 +1011,13 @@ async function renderPatrimonioConsolidado() {
   const plGlobalTrade = lucroRealizadoGlobalTrade + resTradeR + dividendosCarteira;
 
   // Consolidado GLOBAL (trade global + renda atual + dividendos renda)
+  // totalDividendos ja esta em dividendosCarteira (trade) e em resRendaR nao — soma separado so os da renda
   const resGlobalTotal = plGlobalTrade + resRendaR + totalDividendos;
+  // CORRECAO: resGlobalTotal deve ser: lucro encerradas + ganho nao realizado abertas + divCarteira + resRenda + divRenda
+  // plGlobalTrade = lucroRealizadoGlobalTrade + resTradeR + dividendosCarteira (correto)
+  // totalDividendos = dividendos da aba RENDA (correto somar uma vez)
+  // resRendaR = ganho/perda de mercado da renda (correto)
+  // Verificar: totalDividendos nao deve ser o mesmo que dividendosCarteira
   const investidoGlobalTotal = investidoGlobalTrade + totalRendaInv;
   const resGlobalTotalPct = investidoGlobalTotal > 0 ? (resGlobalTotal/investidoGlobalTotal*100).toFixed(2) : "0.00";
   const resGlobalC = resGlobalTotal >= 0 ? "var(--green)" : "var(--red)";
